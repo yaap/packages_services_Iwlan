@@ -16,6 +16,7 @@
 
 package com.google.android.iwlan.epdg;
 
+import static android.net.ipsec.ike.ike3gpp.Ike3gppInfo.INFO_TYPE_NOTIFY_BACKOFF_TIMER;
 import static android.net.ipsec.ike.ike3gpp.Ike3gppInfo.INFO_TYPE_NOTIFY_N1_MODE_INFORMATION;
 import static android.system.OsConstants.AF_INET;
 import static android.system.OsConstants.AF_INET6;
@@ -44,6 +45,7 @@ import android.net.ipsec.ike.IkeTrafficSelector;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
+import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
 import android.net.ipsec.ike.ike3gpp.Ike3gppInfo;
 import android.net.ipsec.ike.ike3gpp.Ike3gppN1ModeInformation;
@@ -133,6 +135,7 @@ public class EpdgTunnelManager {
     private Network mNetwork;
     private boolean mIsEpdgAddressSelected;
     private IkeSessionCreator mIkeSessionCreator;
+    private int mCurrentNumberOfRetries;
 
     private Map<String, TunnelConfig> mApnNameToTunnelConfig = new ConcurrentHashMap<>();
 
@@ -221,6 +224,8 @@ public class EpdgTunnelManager {
         private List<InetAddress> mDnsAddrList;
         private List<LinkAddress> mInternalAddrList;
         private byte[] mSnssai;
+        private boolean mIsBackoffTimeValid = false;
+        private long mBackoffTime;
 
         public byte[] getSnssai() {
             return mSnssai;
@@ -228,6 +233,19 @@ public class EpdgTunnelManager {
 
         public void setSnssai(byte[] snssai) {
             mSnssai = snssai;
+        }
+
+        public boolean isBackoffTimeValid() {
+            return mIsBackoffTimeValid;
+        }
+
+        public long getBackoffTime() {
+            return mBackoffTime;
+        }
+
+        public void setBackoffTime(long backoffTime) {
+            mIsBackoffTimeValid = true;
+            mBackoffTime = backoffTime;
         }
 
         @NonNull final IkeSession mIkeSession;
@@ -331,7 +349,8 @@ public class EpdgTunnelManager {
         }
     }
 
-    private class TmIke3gppCallback extends Ike3gppExtension.Ike3gppCallback {
+    @VisibleForTesting
+    class TmIke3gppCallback extends Ike3gppExtension.Ike3gppCallback {
         private final String mApnName;
 
         private TmIke3gppCallback(String apnName) {
@@ -345,6 +364,13 @@ public class EpdgTunnelManager {
                 for (Ike3gppInfo payload : payloads) {
                     if (payload.getInfoType() == INFO_TYPE_NOTIFY_N1_MODE_INFORMATION) {
                         tunnelConfig.setSnssai(((Ike3gppN1ModeInformation) payload).getSnssai());
+                    } else if (payload.getInfoType() == INFO_TYPE_NOTIFY_BACKOFF_TIMER) {
+                        long backoffTime =
+                                decodeBackoffTime(
+                                        ((Ike3gppBackoffTimer) payload).getBackoffTimer());
+                        if (backoffTime > 0) {
+                            tunnelConfig.setBackoffTime(backoffTime);
+                        }
                     }
                 }
             } else {
@@ -431,6 +457,7 @@ public class EpdgTunnelManager {
         mContext = context;
         mSlotId = slotId;
         mIkeSessionCreator = new IkeSessionCreator();
+        mCurrentNumberOfRetries = 0;
         TAG = EpdgTunnelManager.class.getSimpleName() + "[" + mSlotId + "]";
         initHandler();
     }
@@ -958,6 +985,26 @@ public class EpdgTunnelManager {
         mHandler.dispatchMessage(mHandler.obtainMessage(sessionType, apnName));
     }
 
+    private boolean shouldTryNextServerForError(IwlanError error) {
+        // TODO: we should do policy based configuration so this can be controlled.
+        // There are errors which are generic (like authentication or apn not allowed
+        // When these occur, it won't help trying the next epdg server
+        // For other errors (epdg specific), ex: server not responding, traffic selector issues
+        // we should try the next epdg server
+
+        // TODO: double check if this is sent for internal timeout
+        // and retry  for server timeouts. b/176539488
+
+        // As a first step, these would most likely be local epdg errors
+        // and trying the next server may help
+        // UNSUPPORTED_CRITICAL_PAYLOAD, INVALID_IKE_SPI, INVALID_MAJOR_VERSION
+        // INVALID_SYNTAX, INVALID_MESSAGE_ID, INVALID_SPI, NO_PROPOSAL_CHOSEN,
+        // SINGLE_PAIR_REQUIRED, NO_ADDITIONAL_SAS, INTERNAL_ADDRESS_FAILURE
+        // TS_UNACCEPTABLE, INVALID_SELECTORS, TEMPORARY_FAILURE, CHILD_SA_NOT_FOUND
+
+        return true;
+    }
+
     private final class TmHandler extends Handler {
         private final String TAG = TmHandler.class.getSimpleName();
 
@@ -1007,6 +1054,7 @@ public class EpdgTunnelManager {
                                 "mValidEpdgAddrList: "
                                         + Arrays.toString(mValidEpdgAddrList.toArray()));
                         tunnelRequestWrapper = mRequestQueue.peek();
+                        mCurrentNumberOfRetries++;
                         onBringUpTunnel(
                                 tunnelRequestWrapper.getSetupRequest(),
                                 tunnelRequestWrapper.getTunnelCallback());
@@ -1029,6 +1077,7 @@ public class EpdgTunnelManager {
                             .getTunnelCallback()
                             .onOpened(apnName, tunnelOpenedData.getLinkProperties());
                     setIsEpdgAddressSelected(true);
+                    mCurrentNumberOfRetries = 0;
                     mRequestQueue.poll();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
@@ -1042,28 +1091,60 @@ public class EpdgTunnelManager {
                     IwlanError iwlanError = tunnelConfig.getError();
 
                     if (!mIsEpdgAddressSelected) {
-                        // If all epdg addresses are exhausted, reset iterator and go to the next
-                        // request
-                        if ((mEpdgAddress = getNextValidEpdgAddress()) == null) {
-                            Log.d(TAG, "Reset mValidEpdgAddrListIter");
-                            mRequestQueue.poll();
-                            mValidEpdgAddrListIter = mValidEpdgAddrList.listIterator();
-                            mEpdgAddress = getNextValidEpdgAddress();
-                            reportIwlanError(apnName, iwlanError);
-                            tunnelConfig
-                                    .getTunnelCallback()
-                                    .onClosed(apnName, tunnelConfig.getError());
-                        }
-                        // Use the next request if present in queue to bring up tunnel
-                        if ((tunnelRequestWrapper = mRequestQueue.peek()) != null) {
-                            Log.d(TAG, "Use next request in the queue to bring up tunnel");
-                            onBringUpTunnel(
-                                    tunnelRequestWrapper.getSetupRequest(),
-                                    tunnelRequestWrapper.getTunnelCallback());
+                        // Retry only if it is an IKE_INTERNAL_IO_EXCEPTION
+                        // TODO: double check if this is sent for internal timeout
+                        // and retry only for server timeouts. b/176539488
+                        if (shouldTryNextServerForError(iwlanError)) {
+                            int maxRetries = IwlanHelper.getMaxRetries(mContext, mSlotId);
+                            // If all epdg addresses are exhausted or if the number of retries
+                            // exceeded
+                            // maximum retries:
+                            // reset the iterator, reset mCurrentNumberOfRetries and go to
+                            // the next request.
+                            if ((mEpdgAddress = getNextValidEpdgAddress()) == null
+                                    || mCurrentNumberOfRetries > maxRetries) {
+                                Log.d(TAG, "Reset mValidEpdgAddrListIter");
+                                mRequestQueue.poll();
+                                mValidEpdgAddrListIter = mValidEpdgAddrList.listIterator();
+                                mEpdgAddress = getNextValidEpdgAddress();
+                                if (tunnelConfig.isBackoffTimeValid()) {
+                                    reportIwlanError(
+                                            apnName, iwlanError, tunnelConfig.getBackoffTime());
+                                } else {
+                                    reportIwlanError(apnName, iwlanError);
+                                }
+                                tunnelConfig
+                                        .getTunnelCallback()
+                                        .onClosed(apnName, tunnelConfig.getError());
+                                mCurrentNumberOfRetries = 0;
+                            }
+                            // Use the next request if present in queue to bring up tunnel
+                            if ((tunnelRequestWrapper = mRequestQueue.peek()) != null) {
+                                Log.d(TAG, "Use next request in the queue to bring up tunnel");
+                                mCurrentNumberOfRetries++;
+                                onBringUpTunnel(
+                                        tunnelRequestWrapper.getSetupRequest(),
+                                        tunnelRequestWrapper.getTunnelCallback());
+                            }
+                        } else {
+                            // fail all the requests. report back off timer, if present, to the
+                            // current request.
+                            if (tunnelConfig.isBackoffTimeValid()) {
+                                mRequestQueue.poll();
+                                reportIwlanError(
+                                        apnName, iwlanError, tunnelConfig.getBackoffTime());
+                                tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
+                            }
+                            failAllPendingRequests(iwlanError);
                         }
                     } else {
+                        mRequestQueue.poll();
                         Log.d(TAG, "Tunnel Closed: " + iwlanError);
-                        reportIwlanError(apnName, iwlanError);
+                        if (tunnelConfig.isBackoffTimeValid()) {
+                            reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
+                        } else {
+                            reportIwlanError(apnName, iwlanError);
+                        }
                         tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
                     }
 
@@ -1235,6 +1316,7 @@ public class EpdgTunnelManager {
         mRequestQueue = new LinkedList<>();
         mApnNameToTunnelConfig = new ConcurrentHashMap<>();
         mLocalAddresses = null;
+        mCurrentNumberOfRetries = 0;
     }
 
     private void serviceAllPendingRequests() {
@@ -1384,6 +1466,42 @@ public class EpdgTunnelManager {
         return dpdDelay;
     }
 
+    /**
+     * Decodes backoff time as per TS 124 008 10.5.7.4a Bits 5 to 1 represent the binary coded timer
+     * value
+     *
+     * <p>Bits 6 to 8 defines the timer value unit for the GPRS timer as follows: Bits 8 7 6 0 0 0
+     * value is incremented in multiples of 10 minutes 0 0 1 value is incremented in multiples of 1
+     * hour 0 1 0 value is incremented in multiples of 10 hours 0 1 1 value is incremented in
+     * multiples of 2 seconds 1 0 0 value is incremented in multiples of 30 seconds 1 0 1 value is
+     * incremented in multiples of 1 minute 1 1 0 value is incremented in multiples of 1 hour 1 1 1
+     * value indicates that the timer is deactivated.
+     *
+     * @param backoffTimerByte Byte value obtained from ike
+     * @return long time value in seconds. -1 if the timer needs to be deactivated.
+     */
+    private static long decodeBackoffTime(byte backoffTimeByte) {
+        final int BACKOFF_TIME_VALUE_MASK = 0x1F;
+        final int BACKOFF_TIMER_UNIT_MASK = 0xE0;
+        final Long[] BACKOFF_TIMER_UNIT_INCREMENT_SECS = {
+            10L * 60L, // 10 mins
+            1L * 60L * 60L, // 1 hour
+            10L * 60L * 60L, // 10 hours
+            2L, // 2 seconds
+            30L, // 30 seconds
+            1L * 60L, // 1 minute
+            1L * 60L * 60L, // 1 hour
+        };
+
+        long time = backoffTimeByte & BACKOFF_TIME_VALUE_MASK;
+        int timerUnit = (backoffTimeByte & BACKOFF_TIMER_UNIT_MASK) >> 5;
+        if (timerUnit >= BACKOFF_TIMER_UNIT_INCREMENT_SECS.length) {
+            return -1;
+        }
+        time *= BACKOFF_TIMER_UNIT_INCREMENT_SECS[timerUnit];
+        return time;
+    }
+
     @VisibleForTesting
     String getTunnelSetupRequestApnName(TunnelSetupRequest setupRequest) {
         String apnName = setupRequest.apnName();
@@ -1445,6 +1563,12 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     long reportIwlanError(String apnName, IwlanError error) {
         return ErrorPolicyManager.getInstance(mContext, mSlotId).reportIwlanError(apnName, error);
+    }
+
+    @VisibleForTesting
+    long reportIwlanError(String apnName, IwlanError error, long backOffTime) {
+        return ErrorPolicyManager.getInstance(mContext, mSlotId)
+                .reportIwlanError(apnName, error, backOffTime);
     }
 
     @VisibleForTesting

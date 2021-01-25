@@ -115,6 +115,8 @@ public class EpdgTunnelManager {
     private static final int IKE_RETRANS_MAX_ATTEMPTS_MAX = 10;
     private static final int IKE_DPD_DELAY_SEC_MIN = 20;
     private static final int IKE_DPD_DELAY_SEC_MAX = 1800; // 30 minutes
+    private static final int NATT_KEEPALIVE_DELAY_SEC_MIN = 10;
+    private static final int NATT_KEEPALIVE_DELAY_SEC_MAX = 120;
 
     private static final int TRAFFIC_SELECTOR_START_PORT = 0;
     private static final int TRAFFIC_SELECTOR_END_PORT = 65535;
@@ -767,6 +769,18 @@ public class EpdgTunnelManager {
             builder.setIke3gppExtension(extension);
         }
 
+        int nattKeepAliveTimer =
+                (int) getConfig(CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT);
+        if (nattKeepAliveTimer < NATT_KEEPALIVE_DELAY_SEC_MIN
+                || nattKeepAliveTimer > NATT_KEEPALIVE_DELAY_SEC_MAX) {
+            Log.d(TAG, "Falling back to default natt keep alive timer");
+            nattKeepAliveTimer =
+                    (int)
+                            IwlanHelper.getDefaultConfig(
+                                    CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT);
+        }
+        builder.setNattKeepAliveDelaySeconds(nattKeepAliveTimer);
+
         return builder.build();
     }
 
@@ -1001,7 +1015,9 @@ public class EpdgTunnelManager {
         // INVALID_SYNTAX, INVALID_MESSAGE_ID, INVALID_SPI, NO_PROPOSAL_CHOSEN,
         // SINGLE_PAIR_REQUIRED, NO_ADDITIONAL_SAS, INTERNAL_ADDRESS_FAILURE
         // TS_UNACCEPTABLE, INVALID_SELECTORS, TEMPORARY_FAILURE, CHILD_SA_NOT_FOUND
-
+        if (error.getException() instanceof IkeProtocolException) {
+            return false;
+        }
         return true;
     }
 

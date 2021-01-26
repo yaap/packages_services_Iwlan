@@ -25,6 +25,7 @@ import android.os.Message;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.DataFailCause;
+import android.telephony.data.DataService;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -358,13 +359,13 @@ public class ErrorPolicyManager {
      * Returns the current retryTime based on the lastErrorForApn
      *
      * @param apn apn name for which curren retry time is needed
-     * @return long current retry time
+     * @return long current retry time in milliseconds
      */
-    public synchronized long getCurrentRetryTime(String apn) {
+    public synchronized long getCurrentRetryTimeMs(String apn) {
         if (!mLastErrorForApn.containsKey(apn)) {
             return -1;
         }
-        return mLastErrorForApn.get(apn).getCurrentRetryTime();
+        return TimeUnit.SECONDS.toMillis(mLastErrorForApn.get(apn).getCurrentRetryTime());
     }
 
     /**
@@ -717,10 +718,18 @@ public class ErrorPolicyManager {
             mLastErrorForApn.clear();
             return;
         }
+        String apn;
         for (Map.Entry<String, ErrorInfo> entry : mLastErrorForApn.entrySet()) {
             ErrorPolicy errorPolicy = entry.getValue().getErrorPolicy();
             if (errorPolicy.canUnthrottle(event)) {
-                mLastErrorForApn.remove(entry.getKey());
+                apn = entry.getKey();
+                mLastErrorForApn.remove(apn);
+                DataService.DataServiceProvider provider =
+                        IwlanDataService.getDataServiceProvider(mSlotId);
+                if (provider != null) {
+                    provider.notifyApnUnthrottled(apn);
+                }
+                Log.d(LOG_TAG, "unthrottled error for: " + apn);
             }
         }
     }
@@ -743,23 +752,26 @@ public class ErrorPolicyManager {
         }
 
         long getRetryTime(int index) {
-            if (index < 0 || index >= mRetryArray.size()) {
-                // if the last item in the retryArray is "-1" set the
-                // index to the last item so the retry time before
-                // it is repeated indefinitely.
-                if (mRetryArray.get(mRetryArray.size() - 1) == -1L) {
-                    index = mRetryArray.size() - 1;
-                } else {
-                    return -1;
+            long retryTime = -1;
+            if (mRetryArray.size() > 0) {
+                // If the index is greater than or equal to the last element's index
+                // and if the last item in the retryArray is "-1" use the retryTime
+                // of the element before the last element to repeat the element.
+                if (index >= mRetryArray.size() - 1
+                        && mRetryArray.get(mRetryArray.size() - 1) == -1L) {
+                    index = mRetryArray.size() - 2;
+                }
+                if (index >= 0 && index < mRetryArray.size()) {
+                    retryTime = mRetryArray.get(index);
                 }
             }
 
-            // if the index is the last element and the element there is "-1"
-            // then repeat the retry time before it indefinitely.
-            if (mRetryArray.get(index) == -1L && index == mRetryArray.size() - 1) {
-                return mRetryArray.get(index - 1);
+            // retryTime -1 represents indefinite failure. In that case
+            // return time that represents 1 day to not retry for that day.
+            if (retryTime == -1L) {
+                retryTime = TimeUnit.DAYS.toSeconds(1);
             }
-            return mRetryArray.get(index);
+            return retryTime;
         }
 
         @ErrorPolicyErrorType
@@ -936,6 +948,7 @@ public class ErrorPolicyManager {
                 case IwlanEventListener.APM_DISABLE_EVENT:
                 case IwlanEventListener.WIFI_DISABLE_EVENT:
                     unthrottleLastErrorOnEvent(msg.what);
+                    break;
                 default:
                     Log.d(TAG, "Unknown message received!");
                     break;

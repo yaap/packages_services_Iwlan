@@ -16,8 +16,8 @@
 
 package com.google.android.iwlan.epdg;
 
-import static android.net.ipsec.ike.ike3gpp.Ike3gppInfo.INFO_TYPE_NOTIFY_BACKOFF_TIMER;
-import static android.net.ipsec.ike.ike3gpp.Ike3gppInfo.INFO_TYPE_NOTIFY_N1_MODE_INFORMATION;
+import static android.net.ipsec.ike.ike3gpp.Ike3gppData.DATA_TYPE_NOTIFY_BACKOFF_TIMER;
+import static android.net.ipsec.ike.ike3gpp.Ike3gppData.DATA_TYPE_NOTIFY_N1_MODE_INFORMATION;
 import static android.system.OsConstants.AF_INET;
 import static android.system.OsConstants.AF_INET6;
 
@@ -46,8 +46,8 @@ import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
+import android.net.ipsec.ike.ike3gpp.Ike3gppData;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
-import android.net.ipsec.ike.ike3gpp.Ike3gppInfo;
 import android.net.ipsec.ike.ike3gpp.Ike3gppN1ModeInformation;
 import android.net.ipsec.ike.ike3gpp.Ike3gppParams;
 import android.os.Handler;
@@ -350,7 +350,7 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    class TmIke3gppCallback extends Ike3gppExtension.Ike3gppCallback {
+    class TmIke3gppCallback implements Ike3gppExtension.Ike3gppDataListener {
         private final String mApnName;
 
         private TmIke3gppCallback(String apnName) {
@@ -358,13 +358,13 @@ public class EpdgTunnelManager {
         }
 
         @Override
-        public void onIke3gppPayloadsReceived(List<Ike3gppInfo> payloads) {
+        public void onIke3gppDataReceived(List<Ike3gppData> payloads) {
             if (payloads != null && !payloads.isEmpty()) {
                 TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-                for (Ike3gppInfo payload : payloads) {
-                    if (payload.getInfoType() == INFO_TYPE_NOTIFY_N1_MODE_INFORMATION) {
+                for (Ike3gppData payload : payloads) {
+                    if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
                         tunnelConfig.setSnssai(((Ike3gppN1ModeInformation) payload).getSnssai());
-                    } else if (payload.getInfoType() == INFO_TYPE_NOTIFY_BACKOFF_TIMER) {
+                    } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
                         long backoffTime =
                                 decodeBackoffTime(
                                         ((Ike3gppBackoffTimer) payload).getBackoffTimer());
@@ -985,6 +985,26 @@ public class EpdgTunnelManager {
         mHandler.dispatchMessage(mHandler.obtainMessage(sessionType, apnName));
     }
 
+    private boolean shouldTryNextServerForError(IwlanError error) {
+        // TODO: we should do policy based configuration so this can be controlled.
+        // There are errors which are generic (like authentication or apn not allowed
+        // When these occur, it won't help trying the next epdg server
+        // For other errors (epdg specific), ex: server not responding, traffic selector issues
+        // we should try the next epdg server
+
+        // TODO: double check if this is sent for internal timeout
+        // and retry  for server timeouts. b/176539488
+
+        // As a first step, these would most likely be local epdg errors
+        // and trying the next server may help
+        // UNSUPPORTED_CRITICAL_PAYLOAD, INVALID_IKE_SPI, INVALID_MAJOR_VERSION
+        // INVALID_SYNTAX, INVALID_MESSAGE_ID, INVALID_SPI, NO_PROPOSAL_CHOSEN,
+        // SINGLE_PAIR_REQUIRED, NO_ADDITIONAL_SAS, INTERNAL_ADDRESS_FAILURE
+        // TS_UNACCEPTABLE, INVALID_SELECTORS, TEMPORARY_FAILURE, CHILD_SA_NOT_FOUND
+
+        return true;
+    }
+
     private final class TmHandler extends Handler {
         private final String TAG = TmHandler.class.getSimpleName();
 
@@ -1074,7 +1094,7 @@ public class EpdgTunnelManager {
                         // Retry only if it is an IKE_INTERNAL_IO_EXCEPTION
                         // TODO: double check if this is sent for internal timeout
                         // and retry only for server timeouts. b/176539488
-                        if (iwlanError.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
+                        if (shouldTryNextServerForError(iwlanError)) {
                             int maxRetries = IwlanHelper.getMaxRetries(mContext, mSlotId);
                             // If all epdg addresses are exhausted or if the number of retries
                             // exceeded
@@ -1447,20 +1467,15 @@ public class EpdgTunnelManager {
     }
 
     /**
-     * Decodes backoff time as per TS 124 008 10.5.7.4a
-     * Bits 5 to 1 represent the binary coded timer value
+     * Decodes backoff time as per TS 124 008 10.5.7.4a Bits 5 to 1 represent the binary coded timer
+     * value
      *
-     * Bits 6 to 8 defines the timer value unit for the GPRS timer as follows:
-     * Bits
-     * 8 7 6
-     * 0 0 0 value is incremented in multiples of 10 minutes
-     * 0 0 1 value is incremented in multiples of 1 hour
-     * 0 1 0 value is incremented in multiples of 10 hours
-     * 0 1 1 value is incremented in multiples of 2 seconds
-     * 1 0 0 value is incremented in multiples of 30 seconds
-     * 1 0 1 value is incremented in multiples of 1 minute
-     * 1 1 0 value is incremented in multiples of 1 hour
-     * 1 1 1 value indicates that the timer is deactivated.
+     * <p>Bits 6 to 8 defines the timer value unit for the GPRS timer as follows: Bits 8 7 6 0 0 0
+     * value is incremented in multiples of 10 minutes 0 0 1 value is incremented in multiples of 1
+     * hour 0 1 0 value is incremented in multiples of 10 hours 0 1 1 value is incremented in
+     * multiples of 2 seconds 1 0 0 value is incremented in multiples of 30 seconds 1 0 1 value is
+     * incremented in multiples of 1 minute 1 1 0 value is incremented in multiples of 1 hour 1 1 1
+     * value indicates that the timer is deactivated.
      *
      * @param backoffTimerByte Byte value obtained from ike
      * @return long time value in seconds. -1 if the timer needs to be deactivated.

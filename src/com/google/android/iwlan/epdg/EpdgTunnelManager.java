@@ -115,6 +115,8 @@ public class EpdgTunnelManager {
     private static final int IKE_RETRANS_MAX_ATTEMPTS_MAX = 10;
     private static final int IKE_DPD_DELAY_SEC_MIN = 20;
     private static final int IKE_DPD_DELAY_SEC_MAX = 1800; // 30 minutes
+    private static final int NATT_KEEPALIVE_DELAY_SEC_MIN = 10;
+    private static final int NATT_KEEPALIVE_DELAY_SEC_MAX = 120;
 
     private static final int TRAFFIC_SELECTOR_START_PORT = 0;
     private static final int TRAFFIC_SELECTOR_END_PORT = 65535;
@@ -767,6 +769,18 @@ public class EpdgTunnelManager {
             builder.setIke3gppExtension(extension);
         }
 
+        int nattKeepAliveTimer =
+                (int) getConfig(CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT);
+        if (nattKeepAliveTimer < NATT_KEEPALIVE_DELAY_SEC_MIN
+                || nattKeepAliveTimer > NATT_KEEPALIVE_DELAY_SEC_MAX) {
+            Log.d(TAG, "Falling back to default natt keep alive timer");
+            nattKeepAliveTimer =
+                    (int)
+                            IwlanHelper.getDefaultConfig(
+                                    CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT);
+        }
+        builder.setNattKeepAliveDelaySeconds(nattKeepAliveTimer);
+
         return builder.build();
     }
 
@@ -884,29 +898,37 @@ public class EpdgTunnelManager {
                         CarrierConfigManager.Iwlan
                                 .KEY_SUPPORTED_CHILD_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY);
         for (int encryptionAlgo : encryptionAlgos) {
-            validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO);
-
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
-                int[] aesCbcKeyLens =
-                        getConfig(
-                                CarrierConfigManager.Iwlan
-                                        .KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
-                for (int aesCbcKeyLen : aesCbcKeyLens) {
-                    if (validateConfig(aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCbcKeyLen);
+            if (validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
+                if (ChildSaProposal.getSupportedEncryptionAlgorithms().contains(encryptionAlgo)) {
+                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
+                        int[] aesCbcKeyLens =
+                                getConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
+                        for (int aesCbcKeyLen : aesCbcKeyLens) {
+                            if (validateConfig(
+                                    aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
+                                saProposalBuilder.addEncryptionAlgorithm(
+                                        encryptionAlgo, aesCbcKeyLen);
+                            }
+                        }
                     }
-                }
-            }
 
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
-                int[] aesCtrKeyLens =
-                        getConfig(
-                                CarrierConfigManager.Iwlan
-                                        .KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
-                for (int aesCtrKeyLen : aesCtrKeyLens) {
-                    if (validateConfig(aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCtrKeyLen);
+                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
+                        int[] aesCtrKeyLens =
+                                getConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
+                        for (int aesCtrKeyLen : aesCtrKeyLens) {
+                            if (validateConfig(
+                                    aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
+                                saProposalBuilder.addEncryptionAlgorithm(
+                                        encryptionAlgo, aesCtrKeyLen);
+                            }
+                        }
                     }
+                } else {
+                    Log.w(TAG, "Device does not support encryption alog:  " + encryptionAlgo);
                 }
             }
         }
@@ -915,7 +937,11 @@ public class EpdgTunnelManager {
                 getConfig(CarrierConfigManager.Iwlan.KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY);
         for (int integrityAlgo : integrityAlgos) {
             if (validateConfig(integrityAlgo, VALID_INTEGRITY_ALGOS, CONFIG_TYPE_INTEGRITY_ALGO)) {
-                saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
+                if (ChildSaProposal.getSupportedIntegrityAlgorithms().contains(integrityAlgo)) {
+                    saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
+                } else {
+                    Log.w(TAG, "Device does not support integrity alog:  " + integrityAlgo);
+                }
             }
         }
 
@@ -986,23 +1012,18 @@ public class EpdgTunnelManager {
     }
 
     private boolean shouldTryNextServerForError(IwlanError error) {
-        // TODO: we should do policy based configuration so this can be controlled.
-        // There are errors which are generic (like authentication or apn not allowed
-        // When these occur, it won't help trying the next epdg server
-        // For other errors (epdg specific), ex: server not responding, traffic selector issues
-        // we should try the next epdg server
-
-        // TODO: double check if this is sent for internal timeout
-        // and retry  for server timeouts. b/176539488
-
-        // As a first step, these would most likely be local epdg errors
-        // and trying the next server may help
-        // UNSUPPORTED_CRITICAL_PAYLOAD, INVALID_IKE_SPI, INVALID_MAJOR_VERSION
-        // INVALID_SYNTAX, INVALID_MESSAGE_ID, INVALID_SPI, NO_PROPOSAL_CHOSEN,
-        // SINGLE_PAIR_REQUIRED, NO_ADDITIONAL_SAS, INTERNAL_ADDRESS_FAILURE
-        // TS_UNACCEPTABLE, INVALID_SELECTORS, TEMPORARY_FAILURE, CHILD_SA_NOT_FOUND
-
-        return true;
+        // Retry only for server timeout errors.
+        if (error.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
+            if (error.getException().getCause() != null) {
+                String message = error.getException().getCause().getMessage();
+                if (message != null
+                        && (message.equals("Retransmitting IKE INIT request failure")
+                        || message.equals("Retransmitting failure"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private final class TmHandler extends Handler {
@@ -1192,7 +1213,7 @@ public class EpdgTunnelManager {
                                     ipSecManager.createIpSecTunnelInterface(
                                             localAddress, mEpdgAddress, mNetwork));
                         } catch (IpSecManager.ResourceUnavailableException | IOException e) {
-                            Log.e(TAG, "Failed to create tunnel interface.");
+                            Log.e(TAG, "Failed to create tunnel interface. " + e);
                             closeIkeSession(
                                     apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
                             return;

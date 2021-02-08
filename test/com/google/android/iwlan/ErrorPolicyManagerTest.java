@@ -25,6 +25,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.net.ipsec.ike.exceptions.AuthenticationFailedException;
@@ -63,6 +64,7 @@ public class ErrorPolicyManagerTest {
     @Mock SubscriptionManager mMockSubscriptionManager;
     @Mock SubscriptionInfo mMockSubscriptionInfo;
     @Mock DataService.DataServiceProvider mMockDataServiceProvider;
+    @Mock private ContentResolver mMockContentResolver;
     MockitoSession mStaticMockSession;
 
     @Before
@@ -101,7 +103,7 @@ public class ErrorPolicyManagerTest {
                         + "\"ErrorTypes\": [{"
                         + getErrorTypeInJSON(
                                 "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
+                                new String[] {"24", "34", "9000-9050"},
                                 new String[] {"4", "8", "16"},
                                 new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
                         + "}, {"
@@ -126,6 +128,18 @@ public class ErrorPolicyManagerTest {
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(4, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(8, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(16, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(86400, time);
+
+        // Validate the range error detail.
+        iwlanError =
+                new IwlanError(new UnrecognizedIkeProtocolException(9030, new byte[] {0x00, 0x01}));
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(8, time);
@@ -401,6 +415,57 @@ public class ErrorPolicyManagerTest {
     }
 
     @Test
+    public void testWFCDisableUnthrottle() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + getErrorTypeInJSON(
+                                "IKE_PROTOCOL_ERROR_TYPE",
+                                new String[] {"24", "34"},
+                                new String[] {"6", "12", "24"},
+                                new String[] {"WIFI_CALLING_DISABLE_EVENT", "WIFI_DISABLE_EVENT"})
+                        + "}, {"
+                        + getErrorTypeInJSON(
+                                "GENERIC_ERROR_TYPE",
+                                new String[] {"SERVER_SELECTION_FAILED"},
+                                new String[] {"0"},
+                                new String[] {"APM_DISABLE_EVENT"})
+                        + "}]"
+                        + "}]";
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        sleep(1000);
+
+        // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 6, 12, 24
+        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(6, time);
+
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT)
+                .sendToTarget();
+        sleep(500);
+        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
+
+        boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
+        assertTrue(bringUpTunnel);
+
+        iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(6, time);
+    }
+
+    @Test
     public void testAPMUnthrottle() throws Exception {
         String apn = "ims";
         String config =
@@ -611,5 +676,6 @@ public class ErrorPolicyManagerTest {
                 .getActiveSubscriptionInfoForSimSlotIndex(DEFAULT_SLOT_INDEX);
         doReturn(DEFAULT_SUBID).when(mockSubInfo).getSubscriptionId();
         doReturn(bundle).when(mMockCarrierConfigManager).getConfigForSubId(DEFAULT_SLOT_INDEX);
+        when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
     }
 }

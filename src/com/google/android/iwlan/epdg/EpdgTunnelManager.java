@@ -949,9 +949,12 @@ public class EpdgTunnelManager {
     }
 
     private IkeIdentification getLocalIdentification() {
-        boolean addWifiMac =
-                getConfig(CarrierConfigManager.Iwlan.KEY_ADD_WIFI_MAC_ADDR_TO_NAI_BOOL);
-        String nai = IwlanHelper.getNai(mContext, mSlotId, addWifiMac);
+        String nai = IwlanHelper.getNai(mContext, mSlotId);
+
+        if (nai == null) {
+            throw new IllegalArgumentException("Nai is null.");
+        }
+
         Log.d(TAG, "getLocalIdentification: Nai: " + nai);
         return getId(nai, true);
     }
@@ -976,7 +979,12 @@ public class EpdgTunnelManager {
 
     private EapSessionConfig getEapConfig() {
         int subId = IwlanHelper.getSubId(mContext, mSlotId);
-        String nai = IwlanHelper.getNai(mContext, mSlotId, false);
+        String nai = IwlanHelper.getNai(mContext, mSlotId);
+
+        if (nai == null) {
+            throw new IllegalArgumentException("Nai is null.");
+        }
+
         Log.d(TAG, "getEapConfig: Nai: " + nai);
         return new EapSessionConfig.Builder()
                 .setEapAkaConfig(subId, TelephonyManager.APPTYPE_USIM)
@@ -1110,6 +1118,10 @@ public class EpdgTunnelManager {
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     mApnNameToTunnelConfig.remove(apnName);
                     IwlanError iwlanError = tunnelConfig.getError();
+                    IpSecManager.IpSecTunnelInterface iface = tunnelConfig.getIface();
+                    if (iface != null) {
+                        iface.close();
+                    }
 
                     if (!mIsEpdgAddressSelected) {
                         // Retry only if it is an IKE_INTERNAL_IO_EXCEPTION

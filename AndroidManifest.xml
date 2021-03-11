@@ -20,21 +20,21 @@
   <protected-broadcast android:name="IkeAlarmReceiver.ACTION_DPD" />
   <protected-broadcast android:name="IkeAlarmReceiver.ACTION_KEEPALIVE" />
 
-  <application>
+  <application
+      android:directBootAware="true"
+      android:defaultToDeviceProtectedStorage="true">
     <service android:name=".IwlanDataService"
+         android:exported="true"
          android:permission="android.permission.BIND_TELEPHONY_DATA_SERVICE"
-         android:enabled="true"
-         android:directBootAware="true"
-         android:exported="true" >
+         android:enabled="true" >
          <intent-filter>
                <action android:name="android.telephony.data.DataService" />
          </intent-filter>
       </service>
       <service android:name=".IwlanNetworkService"
+               android:exported="true"
                android:permission="android.permission.BIND_TELEPHONY_NETWORK_SERVICE"
-               android:enabled="true"
-               android:directBootAware="true"
-               android:exported="true" >
+               android:enabled="true" >
           <intent-filter>
               <action android:name="android.telephony.NetworkService" />
           </intent-filter>

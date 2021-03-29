@@ -42,6 +42,7 @@ import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
 import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.IkeTrafficSelector;
+import android.net.ipsec.ike.SaProposal;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
@@ -58,6 +59,7 @@ import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
+import android.telephony.data.NetworkSliceInfo;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -162,48 +164,43 @@ public class EpdgTunnelManager {
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.DH_GROUP_1024_BIT_MODP,
-                                        CarrierConfigManager.Iwlan.DH_GROUP_1536_BIT_MODP,
-                                        CarrierConfigManager.Iwlan.DH_GROUP_2048_BIT_MODP)));
+                                        SaProposal.DH_GROUP_1024_BIT_MODP,
+                                        SaProposal.DH_GROUP_1536_BIT_MODP,
+                                        SaProposal.DH_GROUP_2048_BIT_MODP)));
         VALID_KEY_LENGTHS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.KEY_LEN_AES_128,
-                                        CarrierConfigManager.Iwlan.KEY_LEN_AES_192,
-                                        CarrierConfigManager.Iwlan.KEY_LEN_AES_256)));
+                                        SaProposal.KEY_LEN_AES_128,
+                                        SaProposal.KEY_LEN_AES_192,
+                                        SaProposal.KEY_LEN_AES_256)));
 
         VALID_ENCRYPTION_ALGOS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC,
-                                        CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR)));
+                                        SaProposal.ENCRYPTION_ALGORITHM_AES_CBC,
+                                        SaProposal.ENCRYPTION_ALGORITHM_AES_CTR)));
 
         VALID_INTEGRITY_ALGOS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.INTEGRITY_ALGORITHM_HMAC_SHA1_96,
-                                        CarrierConfigManager.Iwlan.INTEGRITY_ALGORITHM_AES_XCBC_96,
-                                        CarrierConfigManager.Iwlan
-                                                .INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
-                                        CarrierConfigManager.Iwlan
-                                                .INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
-                                        CarrierConfigManager.Iwlan
-                                                .INTEGRITY_ALGORITHM_HMAC_SHA2_512_256)));
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA1_96,
+                                        SaProposal.INTEGRITY_ALGORITHM_AES_XCBC_96,
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_512_256)));
 
         VALID_PRF_ALGOS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.PSEUDORANDOM_FUNCTION_HMAC_SHA1,
-                                        CarrierConfigManager.Iwlan
-                                                .PSEUDORANDOM_FUNCTION_AES128_XCBC,
-                                        CarrierConfigManager.Iwlan.PSEUDORANDOM_FUNCTION_SHA2_256,
-                                        CarrierConfigManager.Iwlan.PSEUDORANDOM_FUNCTION_SHA2_384,
-                                        CarrierConfigManager.Iwlan
-                                                .PSEUDORANDOM_FUNCTION_SHA2_512)));
+                                        SaProposal.PSEUDORANDOM_FUNCTION_HMAC_SHA1,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_AES128_XCBC,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_256,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_384,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_512)));
     }
 
     private final EpdgSelector.EpdgSelectorCallback mSelectorCallback =
@@ -225,16 +222,16 @@ public class EpdgTunnelManager {
         private List<InetAddress> mPcscfAddrList;
         private List<InetAddress> mDnsAddrList;
         private List<LinkAddress> mInternalAddrList;
-        private byte[] mSnssai;
+        private NetworkSliceInfo mSliceInfo;
         private boolean mIsBackoffTimeValid = false;
         private long mBackoffTime;
 
-        public byte[] getSnssai() {
-            return mSnssai;
+        public NetworkSliceInfo getSliceInfo() {
+            return mSliceInfo;
         }
 
-        public void setSnssai(byte[] snssai) {
-            mSnssai = snssai;
+        public void setSliceInfo(NetworkSliceInfo si) {
+            mSliceInfo = si;
         }
 
         public boolean isBackoffTimeValid() {
@@ -365,13 +362,22 @@ public class EpdgTunnelManager {
                 TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
                 for (Ike3gppData payload : payloads) {
                     if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
-                        tunnelConfig.setSnssai(((Ike3gppN1ModeInformation) payload).getSnssai());
+                        Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
+                        NetworkSliceInfo si =
+                                NetworkSliceSelectionAssistanceInformation.getSliceInfo(
+                                        ((Ike3gppN1ModeInformation) payload).getSnssai());
+                        if (si != null) {
+                            tunnelConfig.setSliceInfo(si);
+                            Log.d(TAG, "SliceInfo: " + si);
+                        }
                     } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
+                        Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_BACKOFF_TIMER");
                         long backoffTime =
                                 decodeBackoffTime(
                                         ((Ike3gppBackoffTimer) payload).getBackoffTimer());
                         if (backoffTime > 0) {
                             tunnelConfig.setBackoffTime(backoffTime);
+                            Log.d(TAG, "Backoff Timer: " + backoffTime);
                         }
                     }
                 }
@@ -412,7 +418,7 @@ public class EpdgTunnelManager {
                             .setDnsAddresses(tunnelConfig.getDnsAddrList())
                             .setPcscfAddresses(tunnelConfig.getPcscfAddrList())
                             .setIfaceName(tunnelConfig.getIface().getInterfaceName())
-                            .setSNssai(tunnelConfig.getSnssai())
+                            .setSliceInfo(tunnelConfig.getSliceInfo())
                             .build();
             mHandler.dispatchMessage(
                     mHandler.obtainMessage(
@@ -825,7 +831,7 @@ public class EpdgTunnelManager {
         for (int encryptionAlgo : encryptionAlgos) {
             validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO);
 
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
+            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
                 int[] aesCbcKeyLens =
                         getConfig(
                                 CarrierConfigManager.Iwlan
@@ -837,7 +843,7 @@ public class EpdgTunnelManager {
                 }
             }
 
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
+            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
                 int[] aesCtrKeyLens =
                         getConfig(
                                 CarrierConfigManager.Iwlan
@@ -900,7 +906,7 @@ public class EpdgTunnelManager {
         for (int encryptionAlgo : encryptionAlgos) {
             if (validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
                 if (ChildSaProposal.getSupportedEncryptionAlgorithms().contains(encryptionAlgo)) {
-                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
+                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
                         int[] aesCbcKeyLens =
                                 getConfig(
                                         CarrierConfigManager.Iwlan
@@ -914,7 +920,7 @@ public class EpdgTunnelManager {
                         }
                     }
 
-                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
+                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
                         int[] aesCtrKeyLens =
                                 getConfig(
                                         CarrierConfigManager.Iwlan
@@ -1026,7 +1032,7 @@ public class EpdgTunnelManager {
                 String message = error.getException().getCause().getMessage();
                 if (message != null
                         && (message.equals("Retransmitting IKE INIT request failure")
-                        || message.equals("Retransmitting failure"))) {
+                                || message.equals("Retransmitting failure"))) {
                     return true;
                 }
             }

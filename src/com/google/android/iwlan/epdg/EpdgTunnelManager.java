@@ -69,7 +69,9 @@ import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -686,23 +688,28 @@ public class EpdgTunnelManager {
         int softTimeSeconds =
                 (int) getConfig(CarrierConfigManager.Iwlan.KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT);
         if (!isValidChildSessionLifetime(hardTimeSeconds, softTimeSeconds)) {
+            if (hardTimeSeconds > CHILD_HARD_LIFETIME_SEC_MAXIMUM
+                    && softTimeSeconds > CHILD_SOFT_LIFETIME_SEC_MINIMUM) {
+                hardTimeSeconds = CHILD_HARD_LIFETIME_SEC_MAXIMUM;
+                softTimeSeconds = CHILD_HARD_LIFETIME_SEC_MAXIMUM - LIFETIME_MARGIN_SEC_MINIMUM;
+            } else {
+                hardTimeSeconds =
+                        (int)
+                                IwlanHelper.getDefaultConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT);
+                softTimeSeconds =
+                        (int)
+                                IwlanHelper.getDefaultConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT);
+            }
             Log.d(
                     TAG,
-                    "Invalid child session Lifetime values - hard: "
+                    "Invalid child session lifetime values, set hard: "
                             + hardTimeSeconds
-                            + "soft: "
-                            + softTimeSeconds
-                            + ". Falling back to config");
-            hardTimeSeconds =
-                    (int)
-                            IwlanHelper.getDefaultConfig(
-                                    CarrierConfigManager.Iwlan
-                                            .KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT);
-            softTimeSeconds =
-                    (int)
-                            IwlanHelper.getDefaultConfig(
-                                    CarrierConfigManager.Iwlan
-                                            .KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT);
+                            + ", soft: "
+                            + softTimeSeconds);
         }
 
         TunnelModeChildSessionParams.Builder childSessionParamsBuilder =
@@ -779,28 +786,35 @@ public class EpdgTunnelManager {
         int softTimeSeconds =
                 (int) getConfig(CarrierConfigManager.Iwlan.KEY_IKE_REKEY_SOFT_TIMER_SEC_INT);
         if (!isValidIkeSessionLifetime(hardTimeSeconds, softTimeSeconds)) {
+            if (hardTimeSeconds > IKE_HARD_LIFETIME_SEC_MAXIMUM
+                    && softTimeSeconds > IKE_SOFT_LIFETIME_SEC_MINIMUM) {
+                hardTimeSeconds = IKE_HARD_LIFETIME_SEC_MAXIMUM;
+                softTimeSeconds = IKE_HARD_LIFETIME_SEC_MAXIMUM - LIFETIME_MARGIN_SEC_MINIMUM;
+            } else {
+                hardTimeSeconds =
+                        (int)
+                                IwlanHelper.getDefaultConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_IKE_REKEY_HARD_TIMER_SEC_INT);
+                softTimeSeconds =
+                        (int)
+                                IwlanHelper.getDefaultConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_IKE_REKEY_SOFT_TIMER_SEC_INT);
+            }
             Log.d(
                     TAG,
-                    "Invalid ike session Lifetime values - hard: "
+                    "Invalid ike session lifetime values, set hard: "
                             + hardTimeSeconds
-                            + "soft: "
-                            + softTimeSeconds
-                            + ". Falling back to config");
-            hardTimeSeconds =
-                    (int)
-                            IwlanHelper.getDefaultConfig(
-                                    CarrierConfigManager.Iwlan.KEY_IKE_REKEY_HARD_TIMER_SEC_INT);
-            softTimeSeconds =
-                    (int)
-                            IwlanHelper.getDefaultConfig(
-                                    CarrierConfigManager.Iwlan.KEY_IKE_REKEY_SOFT_TIMER_SEC_INT);
+                            + ", soft: "
+                            + softTimeSeconds);
         }
 
         IkeSessionParams.Builder builder =
                 new IkeSessionParams.Builder(mContext)
-                        //permanently hardcode DSCP to 46 (Expedited Forwarding class)
-                        //See https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml
-                        //This will make WiFi prioritize IKE signallig under WMM AC_VO
+                        // permanently hardcode DSCP to 46 (Expedited Forwarding class)
+                        // See https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml
+                        // This will make WiFi prioritize IKE signallig under WMM AC_VO
                         .setDscp(46)
                         .setServerHostname(mEpdgAddress.getHostName())
                         .setLocalIdentification(getLocalIdentification())
@@ -1687,5 +1701,11 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     boolean canBringUpTunnel(String apnName) {
         return ErrorPolicyManager.getInstance(mContext, mSlotId).canBringUpTunnel(apnName);
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("---- EpdgTunnelManager ----");
+        pw.println("mIsEpdgAddressSelected: " + mIsEpdgAddressSelected);
+        pw.println("---------------------------");
     }
 }

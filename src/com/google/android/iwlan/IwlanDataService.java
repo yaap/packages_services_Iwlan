@@ -205,6 +205,7 @@ public class IwlanDataService extends DataService {
             static final int TUNNEL_IN_BRINGUP = 2;
             static final int TUNNEL_UP = 3;
             static final int TUNNEL_IN_BRINGDOWN = 4;
+            static final int TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP = 5;
             private DataServiceCallback dataServiceCallback;
             private int mState;
             private int mPduSessionId;
@@ -304,6 +305,9 @@ public class IwlanDataService extends DataService {
                     case TUNNEL_IN_BRINGDOWN:
                         tunnelState = "IN BRINGDOWN";
                         break;
+                    case TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP:
+                        tunnelState = "IN FORCE CLEAN WAS IN BRINGUP";
+                        break;
                 }
                 sb.append("\tCurrent State of this tunnel: " + mState + " " + tunnelState);
                 sb.append("\n\tTunnel state is in Handover: " + mIsHandover);
@@ -363,7 +367,9 @@ public class IwlanDataService extends DataService {
                     mTunnelStats.reportTunnelDown(apnName, tunnelState);
                     mTunnelStateForApn.remove(apnName);
 
-                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP
+                            || tunnelState.getState()
+                                    == TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
                         DataCallResponse.Builder respBuilder = new DataCallResponse.Builder();
                         respBuilder
                                 .setId(apnName.hashCode())
@@ -379,12 +385,18 @@ public class IwlanDataService extends DataService {
                                             .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL);
                         }
 
-                        respBuilder.setCause(
-                                ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                        .getDataFailCause(apnName));
-                        respBuilder.setRetryDurationMillis(
-                                ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                        .getCurrentRetryTimeMs(apnName));
+                        if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                            respBuilder.setCause(
+                                    ErrorPolicyManager.getInstance(mContext, getSlotIndex())
+                                            .getDataFailCause(apnName));
+                            respBuilder.setRetryDurationMillis(
+                                    ErrorPolicyManager.getInstance(mContext, getSlotIndex())
+                                            .getCurrentRetryTimeMs(apnName));
+                        } else if (tunnelState.getState()
+                                == TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
+                            respBuilder.setCause(DataFailCause.IWLAN_NETWORK_FAILURE);
+                            respBuilder.setRetryDurationMillis(5000);
+                        }
 
                         deliverCallback(
                                 CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -1022,6 +1034,7 @@ public class IwlanDataService extends DataService {
                             // updating network for tunnels that are already up.
                             // This may not result in actual closing of Ike Session since
                             // epdg selection may not be complete yet.
+                            tunnelState.setState(TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP);
                             getTunnelManager().closeTunnel(entry.getKey(), true);
                         } else {
                             if (mIwlanDataService.isNetworkConnected(
@@ -1117,20 +1130,35 @@ public class IwlanDataService extends DataService {
 
     @VisibleForTesting
     /* Note: this api should have valid transport if networkConnected==true */
-    static synchronized void setNetworkConnected(
+    // Only synchronize on IwlanDataService.class for changes being made to static variables
+    // Calls to DataServiceProvider object methods (or any objects in the future) should
+    // not be made within synchronized block protected by IwlanDataService.class
+    static void setNetworkConnected(
             boolean networkConnected, Network network, Transport transport) {
+
         boolean hasNetworkChanged = false;
-        sNetworkConnected = networkConnected;
-        if (!network.equals(sNetwork)) {
-            Log.e(TAG, "setNetworkConnected NW changed from: " + sNetwork + " TO: " + network);
-            sNetwork = network;
-            hasNetworkChanged = true;
-        }
-        if (networkConnected) {
-            if (transport == Transport.UNSPECIFIED_NETWORK) {
+        boolean hasTransportChanged = false;
+        boolean hasNetworkConnectedChanged = false;
+
+        synchronized (IwlanDataService.class) {
+            if (sNetworkConnected == networkConnected
+                    && network.equals(sNetwork)
+                    && sDefaultDataTransport == transport) {
+                // Nothing changed
+                return;
+            }
+
+            // safety check
+            if (networkConnected && transport == Transport.UNSPECIFIED_NETWORK) {
                 Log.e(TAG, "setNetworkConnected: Network connected but transport unspecified");
                 return;
             }
+
+            if (!network.equals(sNetwork)) {
+                Log.e(TAG, "setNetworkConnected NW changed from: " + sNetwork + " TO: " + network);
+                hasNetworkChanged = true;
+            }
+
             if (transport != sDefaultDataTransport) {
                 Log.d(
                         TAG,
@@ -1138,36 +1166,54 @@ public class IwlanDataService extends DataService {
                                 + sDefaultDataTransport.name()
                                 + " to "
                                 + transport.name());
+                hasTransportChanged = true;
+            }
+
+            if (sNetworkConnected != networkConnected) {
+                Log.d(
+                        TAG,
+                        "Network connected state change from "
+                                + sNetworkConnected
+                                + " to "
+                                + networkConnected);
+                hasNetworkConnectedChanged = true;
+            }
+
+            sNetworkConnected = networkConnected;
+            sDefaultDataTransport = transport;
+            sNetwork = network;
+            if (!networkConnected) {
+                // reset link protocol type
+                sLinkProtocolType = LinkProtocolType.UNKNOWN;
+            }
+        }
+
+        if (networkConnected) {
+            if (hasTransportChanged) {
                 // Perform forceClose for tunnels in bringdown.
                 // let framework handle explicit teardown
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
                     dp.forceCloseTunnelsInDeactivatingState();
                 }
             }
-        }
-        sDefaultDataTransport = transport;
 
-        if (!networkConnected) {
-            sLinkProtocolType = LinkProtocolType.UNKNOWN;
+            if (transport == Transport.WIFI && hasNetworkConnectedChanged) {
+                IwlanEventListener.onWifiConnected(mContext);
+            }
+            // only prefetch dns and updateNetwork if Network has changed
+            if (hasNetworkChanged) {
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                    dp.dnsPrefetchCheck();
+                    dp.updateNetwork(sNetwork);
+                }
+            }
+        } else {
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
-                // once network is disconnect, even NAT KA offload fails
+                // once network is disconnected, even NAT KA offload fails
                 // But we should still let framework do an explicit teardown
                 // so as to not affect an ongoing handover
                 // only force close tunnels in bring down state
                 dp.forceCloseTunnelsInDeactivatingState();
-            }
-        } else {
-            if (transport == Transport.WIFI) {
-                IwlanEventListener.onWifiConnected(mContext);
-            }
-            for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
-                dp.dnsPrefetchCheck();
-            }
-
-            if (hasNetworkChanged) {
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
-                    dp.updateNetwork(sNetwork);
-                }
             }
         }
     }

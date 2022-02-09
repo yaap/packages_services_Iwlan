@@ -147,6 +147,7 @@ public class EpdgTunnelManager {
     private InetAddress mEpdgAddress;
     private Network mNetwork;
     private int mTransactionId = 0;
+    private int mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
     private boolean mIsEpdgAddressSelected;
     private IkeSessionCreator mIkeSessionCreator;
 
@@ -440,10 +441,10 @@ public class EpdgTunnelManager {
                     (boolean)
                             getConfig(
                                     CarrierConfigManager.Iwlan
-                                            .KEY_ENABLE_SUPPORT_FOR_EAP_AKA_FAST_REAUTH_BOOL);
+                                            .KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL);
             Log.d(
                     TAG,
-                    "CarrierConfigManager.Iwlan.KEY_ENABLE_SUPPORT_FOR_EAP_AKA_FAST_REAUTH_BOOL "
+                    "CarrierConfigManager.Iwlan.KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL "
                             + enabledFastReauth);
             if (enabledFastReauth) {
                 EapInfo eapInfo = sessionConfiguration.getEapInfo();
@@ -1206,11 +1207,7 @@ public class EpdgTunnelManager {
     private IkeIdentification getLocalIdentification() {
         String nai;
 
-        if (mNextReauthId != null) {
-            nai = new String(mNextReauthId, StandardCharsets.UTF_8);
-        } else {
-            nai = IwlanHelper.getNai(mContext, mSlotId);
-        }
+        nai = IwlanHelper.getNai(mContext, mSlotId, mNextReauthId);
 
         if (nai == null) {
             throw new IllegalArgumentException("Nai is null.");
@@ -1240,17 +1237,14 @@ public class EpdgTunnelManager {
 
     private EapSessionConfig getEapConfig() {
         int subId = IwlanHelper.getSubId(mContext, mSlotId);
-        String nai = IwlanHelper.getNai(mContext, mSlotId);
+        String nai = IwlanHelper.getNai(mContext, mSlotId, null);
 
         if (nai == null) {
             throw new IllegalArgumentException("Nai is null.");
         }
 
         EapSessionConfig.EapAkaOption option = null;
-        if (mNextReauthId == null) {
-            Log.d(TAG, "getEapConfig: no next reauth ID");
-            option = null;
-        } else {
+        if (mNextReauthId != null) {
             option = new EapSessionConfig.EapAkaOption.Builder().setReauthId(mNextReauthId).build();
         }
 
@@ -1455,10 +1449,17 @@ public class EpdgTunnelManager {
                         }
 
                         try {
+                            if (mEpdgAddress instanceof Inet4Address
+                                    && mProtoFilter == EpdgSelector.PROTO_FILTER_IPV6) {
+                                mLocalAddresses =
+                                        IwlanHelper.getStackedAddressesForNetwork(
+                                                mNetwork, mContext);
+                            }
                             InetAddress localAddress =
                                     (mEpdgAddress instanceof Inet4Address)
                                             ? IwlanHelper.getIpv4Address(mLocalAddresses)
                                             : IwlanHelper.getIpv6Address(mLocalAddresses);
+                            Log.d(TAG, "Local address = " + localAddress);
                             tunnelConfig.setIface(
                                     ipSecManager.createIpSecTunnelInterface(
                                             localAddress, mEpdgAddress, mNetwork));
@@ -1516,19 +1517,19 @@ public class EpdgTunnelManager {
             return;
         }
 
-        int protoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
+        mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
         if (!IwlanHelper.hasIpv6Address(mLocalAddresses)) {
-            protoFilter = EpdgSelector.PROTO_FILTER_IPV4;
+            mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4;
         }
         if (!IwlanHelper.hasIpv4Address(mLocalAddresses)) {
-            protoFilter = EpdgSelector.PROTO_FILTER_IPV6;
+            mProtoFilter = EpdgSelector.PROTO_FILTER_IPV6;
         }
 
         EpdgSelector epdgSelector = getEpdgSelector();
         IwlanError epdgError =
                 epdgSelector.getValidatedServerList(
                         ++mTransactionId,
-                        protoFilter,
+                        mProtoFilter,
                         setupRequest.isRoaming(),
                         setupRequest.isEmergency(),
                         mNetwork,

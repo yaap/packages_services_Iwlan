@@ -146,7 +146,7 @@ public class EpdgTunnelManager {
     private static Map<Integer, EpdgTunnelManager> mTunnelManagerInstances =
             new ConcurrentHashMap<>();
 
-    private Queue<TunnelRequestWrapper> mRequestQueue = new LinkedList<>();
+    private Queue<TunnelRequestWrapper> mPendingBringUpRequests = new LinkedList<>();
 
     private EpdgInfo mValidEpdgInfo = new EpdgInfo();
     private InetAddress mEpdgAddress;
@@ -746,7 +746,6 @@ public class EpdgTunnelManager {
         try {
             ikeSessionParams = buildIkeSessionParams(setupRequest, apnName);
         } catch (IwlanSimNotReadyException e) {
-            mRequestQueue.poll();
             IwlanError iwlanError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
             reportIwlanError(apnName, iwlanError);
             tunnelCallback.onClosed(apnName, iwlanError);
@@ -1306,9 +1305,9 @@ public class EpdgTunnelManager {
                     // No tunnel bring up in progress and the epdg address is null
                     if (!mIsEpdgAddressSelected
                             && mApnNameToTunnelConfig.size() == 0
-                            && mRequestQueue.size() == 0) {
+                            && mPendingBringUpRequests.isEmpty()) {
                         mNetwork = setupRequest.network();
-                        mRequestQueue.add(tunnelRequestWrapper);
+                        mPendingBringUpRequests.add(tunnelRequestWrapper);
                         selectEpdgAddress(setupRequest);
                         break;
                     }
@@ -1317,7 +1316,7 @@ public class EpdgTunnelManager {
                     if (mIsEpdgAddressSelected) {
                         onBringUpTunnel(setupRequest, tunnelRequestWrapper.getTunnelCallback());
                     } else {
-                        mRequestQueue.add(tunnelRequestWrapper);
+                        mPendingBringUpRequests.add(tunnelRequestWrapper);
                     }
                     break;
 
@@ -1330,13 +1329,14 @@ public class EpdgTunnelManager {
                         break;
                     }
 
-                    if ((tunnelRequestWrapper = mRequestQueue.peek()) == null) {
+                    if (mPendingBringUpRequests.isEmpty()) {
                         Log.d(TAG, "Empty request queue");
                         break;
                     }
 
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
                             && selectorResult.getValidIpList() != null) {
+                        tunnelRequestWrapper = mPendingBringUpRequests.poll();
                         validateAndSetEpdgAddress(selectorResult.getValidIpList());
                         onBringUpTunnel(
                                 tunnelRequestWrapper.getSetupRequest(),
@@ -1383,7 +1383,6 @@ public class EpdgTunnelManager {
 
                     setIsEpdgAddressSelected(true);
                     mValidEpdgInfo.resetIndex();
-                    mRequestQueue.poll();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
                     break;
@@ -1422,28 +1421,21 @@ public class EpdgTunnelManager {
                         iface.close();
                     }
 
-                    if (!mIsEpdgAddressSelected) {
-                        // fail all the requests. report back off timer, if present, to the
-                        // current request.
-                        if (tunnelConfig.isBackoffTimeValid()) {
-                            mRequestQueue.poll();
-                            reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
-                            tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
-                        }
-                        failAllPendingRequests(iwlanError);
+                    if (tunnelConfig.isBackoffTimeValid()) {
+                        reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
                     } else {
-                        mRequestQueue.poll();
-                        Log.d(TAG, "Tunnel Closed: " + iwlanError);
-                        if (tunnelConfig.isBackoffTimeValid()) {
-                            reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
-                        } else {
-                            reportIwlanError(apnName, iwlanError);
-                        }
-                        tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
+                        reportIwlanError(apnName, iwlanError);
+                    }
+
+                    Log.d(TAG, "Tunnel Closed: " + iwlanError);
+                    tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
+
+                    if (!mIsEpdgAddressSelected) {
+                        failAllPendingRequests(iwlanError);
                     }
 
                     mApnNameToTunnelConfig.remove(apnName);
-                    if (mApnNameToTunnelConfig.size() == 0 && mRequestQueue.size() == 0) {
+                    if (mApnNameToTunnelConfig.size() == 0 && mPendingBringUpRequests.isEmpty()) {
                         resetTunnelManagerState();
                     }
                     break;
@@ -1676,24 +1668,21 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     int closePendingRequestsForApn(String apnName) {
         int numRequestsClosed = 0;
-        int queueSize = mRequestQueue.size();
+        int queueSize = mPendingBringUpRequests.size();
         if (queueSize == 0) {
             return numRequestsClosed;
         }
 
-        int count = 0;
-
-        while (count < queueSize) {
-            TunnelRequestWrapper requestWrapper = mRequestQueue.poll();
+        for (int count = 0; count < queueSize; count++) {
+            TunnelRequestWrapper requestWrapper = mPendingBringUpRequests.poll();
             if (requestWrapper.getSetupRequest().apnName() == apnName) {
                 requestWrapper
                         .getTunnelCallback()
                         .onClosed(apnName, new IwlanError(IwlanError.NO_ERROR));
                 numRequestsClosed++;
             } else {
-                mRequestQueue.add(requestWrapper);
+                mPendingBringUpRequests.add(requestWrapper);
             }
-            count++;
         }
         return numRequestsClosed;
     }
@@ -1724,33 +1713,35 @@ public class EpdgTunnelManager {
         mEpdgAddress = null;
         setIsEpdgAddressSelected(false);
         mNetwork = null;
-        mRequestQueue = new LinkedList<>();
+        mPendingBringUpRequests = new LinkedList<>();
         mApnNameToTunnelConfig = new ConcurrentHashMap<>();
         mLocalAddresses = null;
     }
 
     private void serviceAllPendingRequests() {
-        while (mRequestQueue.size() > 0) {
+        while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "serviceAllPendingRequests");
-            TunnelRequestWrapper request = mRequestQueue.poll();
+            TunnelRequestWrapper request = mPendingBringUpRequests.poll();
             onBringUpTunnel(request.getSetupRequest(), request.getTunnelCallback());
         }
     }
 
     private void failAllPendingRequests(IwlanError error) {
-        while (mRequestQueue.size() > 0) {
+        while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "failAllPendingRequests");
-            TunnelRequestWrapper request = mRequestQueue.poll();
+            TunnelRequestWrapper request = mPendingBringUpRequests.poll();
             TunnelSetupRequest setupRequest = request.getSetupRequest();
             reportIwlanError(setupRequest.apnName(), error);
             request.getTunnelCallback().onClosed(setupRequest.apnName(), error);
         }
     }
 
-    // Prints mRequestQueue
+    // Prints mPendingBringUpRequests
     private void printRequestQueue(String info) {
         Log.d(TAG, info);
-        Log.d(TAG, "mRequestQueue: " + Arrays.toString(mRequestQueue.toArray()));
+        Log.d(
+                TAG,
+                "mPendingBringUpRequests: " + Arrays.toString(mPendingBringUpRequests.toArray()));
     }
 
     // Update Network wrapper

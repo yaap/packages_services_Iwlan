@@ -1519,6 +1519,8 @@ public class EpdgTunnelManager {
                                     (int) mEpdgServerSelectionDuration,
                                     (int) mIkeTunnelEstablishmentDuration);
 
+                    reportIwlanError(apnName, new IwlanError(IwlanError.NO_ERROR));
+
                     setIsEpdgAddressSelected(true);
                     mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");

@@ -1290,6 +1290,9 @@ public class EpdgTunnelManagerTest {
     }
 
     private void verifyTunnelOnOpened(String apnName, ChildSessionCallback childSessionCallback) {
+        doReturn(0L)
+                .when(mEpdgTunnelManager)
+                .reportIwlanError(eq(apnName), eq(new IwlanError(IwlanError.NO_ERROR)));
         mEpdgTunnelManager
                 .getTmIkeSessionCallback(apnName, mEpdgTunnelManager.getCurrentTokenForApn(apnName))
                 .onOpened(mMockIkeSessionConfiguration);
@@ -1303,6 +1306,8 @@ public class EpdgTunnelManagerTest {
         childSessionCallback.onOpened(mMockChildSessionConfiguration);
         mTestLooper.dispatchAll();
 
+        verify(mEpdgTunnelManager, times(1))
+                .reportIwlanError(eq(apnName), eq(new IwlanError(IwlanError.NO_ERROR)));
         verify(mMockIwlanTunnelCallback, times(1)).onOpened(eq(apnName), any());
     }
 

@@ -695,7 +695,7 @@ public class IwlanDataService extends DataService {
 
             if (tunnelState.getState() != TunnelState.TUNNEL_UP) {
                 // no need to fill additional params
-                return responseBuilder.setLinkStatus(DataCallResponse.LINK_STATUS_UNKNOWN).build();
+                return responseBuilder.setLinkStatus(DataCallResponse.LINK_STATUS_INACTIVE).build();
             }
 
             // fill wildcard address for gatewayList (used by DataConnection to add routes)

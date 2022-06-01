@@ -115,6 +115,7 @@ public class EpdgTunnelManager {
     private static final int EVENT_UPDATE_NETWORK = 9;
     private static final int EVENT_IKE_SESSION_OPENED = 10;
     private static final int EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED = 11;
+    private static final int EVENT_IKE_3GPP_DATA_RECEIVED = 12;
     private static final int IKE_HARD_LIFETIME_SEC_MINIMUM = 300;
     private static final int IKE_HARD_LIFETIME_SEC_MAXIMUM = 86400;
     private static final int IKE_SOFT_LIFETIME_SEC_MINIMUM = 120;
@@ -507,34 +508,12 @@ public class EpdgTunnelManager {
 
         @Override
         public void onIke3gppDataReceived(List<Ike3gppData> payloads) {
-            if (payloads != null && !payloads.isEmpty()) {
-                TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-                for (Ike3gppData payload : payloads) {
-                    if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
-                        Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
-                        NetworkSliceInfo si =
-                                NetworkSliceSelectionAssistanceInformation.getSliceInfo(
-                                        ((Ike3gppN1ModeInformation) payload).getSnssai());
-                        if (si != null) {
-                            tunnelConfig.setSliceInfo(si);
-                            Log.d(TAG, "SliceInfo: " + si);
-                        }
-                    } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
-                        Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_BACKOFF_TIMER");
-                        long backoffTime =
-                                decodeBackoffTime(
-                                        ((Ike3gppBackoffTimer) payload).getBackoffTimer());
-                        if (backoffTime > 0) {
-                            tunnelConfig.setBackoffTime(backoffTime);
-                            Log.d(TAG, "Backoff Timer: " + backoffTime);
-                        }
-                    }
-                }
-            } else {
-                Log.e(TAG, "Null or empty payloads received:");
+            mHandler.sendMessage(
+                    mHandler.obtainMessage(
+                            EVENT_IKE_3GPP_DATA_RECEIVED,
+                            new Ike3gppDataReceived(mApnName, payloads)));
             }
         }
-    }
 
     @VisibleForTesting
     class TmChildSessionCallback implements ChildSessionCallback {
@@ -1610,6 +1589,38 @@ public class EpdgTunnelManager {
                     }
                     break;
 
+                case EVENT_IKE_3GPP_DATA_RECEIVED:
+                    Ike3gppDataReceived ike3gppDataReceived = (Ike3gppDataReceived) msg.obj;
+                    apnName = ike3gppDataReceived.mApnName;
+                    List<Ike3gppData> ike3gppData = ike3gppDataReceived.mIke3gppData;
+                    if (ike3gppData != null && !ike3gppData.isEmpty()) {
+                        tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                        for (Ike3gppData payload : ike3gppData) {
+                            if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
+                                Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
+                                NetworkSliceInfo si =
+                                        NetworkSliceSelectionAssistanceInformation.getSliceInfo(
+                                                ((Ike3gppN1ModeInformation) payload).getSnssai());
+                                if (si != null) {
+                                    tunnelConfig.setSliceInfo(si);
+                                    Log.d(TAG, "SliceInfo: " + si);
+                                }
+                            } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
+                                Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_BACKOFF_TIMER");
+                                long backoffTime =
+                                        decodeBackoffTime(
+                                                ((Ike3gppBackoffTimer) payload).getBackoffTimer());
+                                if (backoffTime > 0) {
+                                    tunnelConfig.setBackoffTime(backoffTime);
+                                    Log.d(TAG, "Backoff Timer: " + backoffTime);
+                                }
+                            }
+                        }
+                    } else {
+                        Log.e(TAG, "Null or empty payloads received:");
+                    }
+                    break;
+
                 default:
                     throw new IllegalStateException("Unexpected value: " + msg.what);
             }
@@ -1845,6 +1856,16 @@ public class EpdgTunnelManager {
                 String apnName, IkeSessionConnectionInfo ikeSessionConnectionInfo) {
             mApnName = apnName;
             mIkeSessionConnectionInfo = ikeSessionConnectionInfo;
+        }
+    }
+
+    private static final class Ike3gppDataReceived {
+        final String mApnName;
+        final List<Ike3gppData> mIke3gppData;
+
+        private Ike3gppDataReceived(String apnName, List<Ike3gppData> ike3gppData) {
+            mApnName = apnName;
+            mIke3gppData = ike3gppData;
         }
     }
 

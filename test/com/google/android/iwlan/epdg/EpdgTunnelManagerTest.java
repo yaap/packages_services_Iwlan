@@ -478,7 +478,7 @@ public class EpdgTunnelManagerTest {
         final String secondApnName = "mms";
 
         IkeSessionArgumentCaptors firstTunnelArgumentCaptors =
-                verifyBringUpTunnelWithDnsQuery(firstApnName, null);
+                verifyBringUpTunnelWithDnsQuery(firstApnName);
         ChildSessionCallback firstCallback =
                 firstTunnelArgumentCaptors.mChildSessionCallbackCaptor.getValue();
 
@@ -1128,6 +1128,10 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.setHasConnectedToEpdg(true);
     }
 
+    private IkeSessionArgumentCaptors verifyBringUpTunnelWithDnsQuery(String apnName) {
+        return verifyBringUpTunnelWithDnsQuery(apnName, null);
+    }
+
     private IkeSessionArgumentCaptors verifyBringUpTunnelWithDnsQuery(
             String apnName, IkeSession ikeSession) {
         reset(mMockIwlanTunnelCallback);
@@ -1232,7 +1236,7 @@ public class EpdgTunnelManagerTest {
         final String secondApnName = "mms";
 
         IkeSessionArgumentCaptors firstTunnelArgumentCaptors =
-                verifyBringUpTunnelWithDnsQuery(firstApnName, null);
+                verifyBringUpTunnelWithDnsQuery(firstApnName);
         ChildSessionCallback firstCallback =
                 firstTunnelArgumentCaptors.mChildSessionCallbackCaptor.getValue();
 
@@ -1586,6 +1590,29 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.setHasConnectedToEpdg(false);
 
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
+    }
+
+    @Test
+    public void testNeverReportIwlanErrorWhenCloseAnOpenedTunnel() throws Exception {
+        IkeInternalException ikeException =
+                new IkeInternalException(new IOException("Retransmitting failure"));
+
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(TEST_APN_NAME);
+
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        verifyTunnelOnOpened(TEST_APN_NAME, childSessionCallback);
+
+        reset(mEpdgTunnelManager); // reset number of times of reportIwlanError()
+
+        mEpdgTunnelManager
+                .getTmIkeSessionCallback(TEST_APN_NAME)
+                .onClosedExceptionally(ikeException);
+        mTestLooper.dispatchAll();
+        verify(mEpdgTunnelManager, never()).reportIwlanError(eq(TEST_APN_NAME), any());
+        verify(mMockIwlanTunnelCallback, times(1))
+                .onClosed(eq(TEST_APN_NAME), eq(new IwlanError(ikeException)));
     }
 
     @Test

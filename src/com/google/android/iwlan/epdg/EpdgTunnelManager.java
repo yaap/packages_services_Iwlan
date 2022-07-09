@@ -1358,6 +1358,8 @@ public class EpdgTunnelManager {
                                     .build();
                     tunnelConfig.getTunnelCallback().onOpened(apnName, linkProperties);
 
+                    reportIwlanError(apnName, new IwlanError(IwlanError.NO_ERROR));
+
                     setHasConnectedToEpdg(true);
                     mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");

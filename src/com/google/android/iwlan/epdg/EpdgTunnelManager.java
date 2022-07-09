@@ -1306,7 +1306,7 @@ public class EpdgTunnelManager {
 
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
                             && selectorResult.getValidIpList() != null) {
-                        tunnelRequestWrapper = mPendingBringUpRequests.poll();
+                        tunnelRequestWrapper = mPendingBringUpRequests.remove();
                         validateAndSetEpdgAddress(selectorResult.getValidIpList());
                         onBringUpTunnel(
                                 tunnelRequestWrapper.getSetupRequest(),
@@ -1676,7 +1676,7 @@ public class EpdgTunnelManager {
         }
 
         for (int count = 0; count < queueSize; count++) {
-            TunnelRequestWrapper requestWrapper = mPendingBringUpRequests.poll();
+            TunnelRequestWrapper requestWrapper = mPendingBringUpRequests.remove();
             if (requestWrapper.getSetupRequest().apnName() == apnName) {
                 requestWrapper
                         .getTunnelCallback()
@@ -1723,7 +1723,7 @@ public class EpdgTunnelManager {
     private void serviceAllPendingRequests() {
         while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "serviceAllPendingRequests");
-            TunnelRequestWrapper request = mPendingBringUpRequests.poll();
+            TunnelRequestWrapper request = mPendingBringUpRequests.remove();
             onBringUpTunnel(request.getSetupRequest(), request.getTunnelCallback());
         }
     }
@@ -1731,7 +1731,7 @@ public class EpdgTunnelManager {
     private void failAllPendingRequests(IwlanError error) {
         while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "failAllPendingRequests");
-            TunnelRequestWrapper request = mPendingBringUpRequests.poll();
+            TunnelRequestWrapper request = mPendingBringUpRequests.remove();
             TunnelSetupRequest setupRequest = request.getSetupRequest();
             reportIwlanError(setupRequest.apnName(), error);
             request.getTunnelCallback().onClosed(setupRequest.apnName(), error);

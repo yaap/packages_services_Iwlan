@@ -27,6 +27,7 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.os.PersistableBundle;
+import android.os.SystemClock;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
@@ -312,5 +313,10 @@ public class IwlanHelper {
                 updateLastKnownCountryCode(newCountryCode);
             }
         }
+    }
+
+    static long elapsedRealtime() {
+      /*Returns milliseconds since boot, including time spent in sleep.*/
+      return SystemClock.elapsedRealtime();
     }
 }

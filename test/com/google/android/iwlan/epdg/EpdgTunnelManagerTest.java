@@ -79,7 +79,9 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.Executor;
 
 @RunWith(JUnit4.class)
@@ -150,6 +152,8 @@ public class EpdgTunnelManagerTest {
     @Mock IpSecTransform mMockedIpSecTransformOut;
     @Mock LinkProperties mMockLinkProperties;
 
+    Queue<Object> mSpyPendingBringUpRequests;
+
     class IkeSessionArgumentCaptors {
         ArgumentCaptor<IkeSessionParams> mIkeSessionParamsCaptor =
                 ArgumentCaptor.forClass(IkeSessionParams.class);
@@ -173,6 +177,10 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.resetTunnelManagerState();
         when(mEpdgTunnelManager.getEpdgSelector()).thenReturn(mMockEpdgSelector);
         when(mEpdgTunnelManager.getIkeSessionCreator()).thenReturn(mMockIkeSessionCreator);
+
+        mSpyPendingBringUpRequests = spy(new LinkedList<>());
+        setVariable(mEpdgTunnelManager, "mPendingBringUpRequests", mSpyPendingBringUpRequests);
+        doAnswer(i -> mSpyPendingBringUpRequests.remove()).when(mSpyPendingBringUpRequests).poll();
 
         when(mMockEpdgSelector.getValidatedServerList(
                         anyInt(),

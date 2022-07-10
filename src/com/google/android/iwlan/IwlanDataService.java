@@ -1245,39 +1245,42 @@ public class IwlanDataService extends DataService {
                 case EVENT_DEACTIVATE_DATA_CALL:
                     DeactivateDataCallData deactivateDataCallData =
                             (DeactivateDataCallData) msg.obj;
-                    int cid = deactivateDataCallData.mCid;
-                    reason = deactivateDataCallData.mReason;
-                    callback = deactivateDataCallData.mCallback;
                     iwlanDataServiceProvider = deactivateDataCallData.mIwlanDataServiceProvider;
+                    callback = deactivateDataCallData.mCallback;
+                    reason = deactivateDataCallData.mReason;
 
-                    for (String tunnelApnName :
-                            iwlanDataServiceProvider.mTunnelStateForApn.keySet()) {
-                        if (tunnelApnName.hashCode() == cid) {
-                            /*
-                            No need to check state since dataconnection in framework serializes
-                            setup and deactivate calls using callId/cid.
-                            */
+                    int cid = deactivateDataCallData.mCid;
+                    int slotIndex = iwlanDataServiceProvider.getSlotIndex();
+                    boolean isNetworkLost =
+                            !isNetworkConnected(
+                                    IwlanHelper.isDefaultDataSlot(mContext, slotIndex),
+                                    IwlanHelper.isCrossSimCallingEnabled(mContext, slotIndex));
+                    boolean isHandOutSuccessful = (reason == REQUEST_REASON_HANDOVER);
+
+                    for (String apn : iwlanDataServiceProvider.mTunnelStateForApn.keySet()) {
+                        if (apn.hashCode() == cid) {
+                            // No need to check state since dataconnection in framework serializes
+                            // setup and deactivate calls using callId/cid.
                             iwlanDataServiceProvider
                                     .mTunnelStateForApn
-                                    .get(tunnelApnName)
+                                    .get(apn)
                                     .setState(
                                             IwlanDataServiceProvider.TunnelState
                                                     .TUNNEL_IN_BRINGDOWN);
                             iwlanDataServiceProvider
                                     .mTunnelStateForApn
-                                    .get(tunnelApnName)
+                                    .get(apn)
                                     .setDataServiceCallback(callback);
-                            boolean isConnected =
-                                    isNetworkConnected(
-                                            IwlanHelper.isDefaultDataSlot(
-                                                    mContext,
-                                                    iwlanDataServiceProvider.getSlotIndex()),
-                                            IwlanHelper.isCrossSimCallingEnabled(
-                                                    mContext,
-                                                    iwlanDataServiceProvider.getSlotIndex()));
+
+                            // According to the handover procedure in 3GPP specifications (TS 23.402
+                            // clause 8.6.1 for S1; TS 23.502 clause 4.11.4.1 for N1), if the PDN is
+                            // handed out to another RAT, the IKE tunnel over ePDG SHOULD be
+                            // released by the network.  Thus, UE just released the tunnel locally.
                             iwlanDataServiceProvider
                                     .getTunnelManager()
-                                    .closeTunnel(tunnelApnName, !isConnected);
+                                    .closeTunnel(
+                                            apn,
+                                            isNetworkLost || isHandOutSuccessful /* forceClose */);
                             return;
                         }
                     }

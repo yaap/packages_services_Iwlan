@@ -94,14 +94,14 @@ public class IwlanEventListenerTest {
                 .thenReturn(mMockSubscriptionManager);
 
         when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
-                        eq(DEFAULT_SLOT_INDEX)))
+                        anyInt()))
                 .thenReturn(mMockSubscriptionInfo);
 
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
 
         when(mMockImsMmTelManager.isVoWiFiSettingEnabled()).thenReturn(true).thenReturn(false);
 
-        when(mMockImsManager.getImsMmTelManager(eq(2))).thenReturn(mMockImsMmTelManager);
+        when(mMockImsManager.getImsMmTelManager(anyInt())).thenReturn(mMockImsMmTelManager);
 
         when(mMockContext.getSystemService(eq(ImsManager.class))).thenReturn(mMockImsManager);
 
@@ -111,6 +111,7 @@ public class IwlanEventListenerTest {
         when(mMockTelephonyManager.createForSubscriptionId(eq(0)))
                 .thenReturn(mMockTelephonyManager);
 
+        IwlanEventListener.resetAllInstances();
         mIwlanEventListener = IwlanEventListener.getInstance(mMockContext, DEFAULT_SLOT_INDEX);
     }
 

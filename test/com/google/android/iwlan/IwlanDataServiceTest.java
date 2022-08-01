@@ -504,17 +504,46 @@ public class IwlanDataServiceTest {
 
         doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
 
+        verifiyNetworkConnected(TRANSPORT_WIFI);
+
         mSpyIwlanDataServiceProvider.setTunnelState(
                 dp, mMockDataServiceCallback, TunnelState.TUNNEL_IN_BRINGUP, null, false, 1);
 
         mSpyIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
-                DataService.REQUEST_REASON_NORMAL /* DataService.REQUEST_REASON_NORMAL */,
+                DataService.REQUEST_REASON_NORMAL,
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
-
         /* Check closeTunnel() is called. */
-        verify(mMockEpdgTunnelManager, times(1)).closeTunnel(eq(TEST_APN_NAME), anyBoolean());
+        verify(mMockEpdgTunnelManager, times(1)).closeTunnel(eq(TEST_APN_NAME), eq(false));
+
+        /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
+        mSpyIwlanDataServiceProvider
+                .getIwlanTunnelCallback()
+                .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR));
+        mTestLooper.dispatchAll();
+        verify(mMockDataServiceCallback, times(1))
+                .onDeactivateDataCallComplete(eq(DataServiceCallback.RESULT_SUCCESS));
+    }
+
+    @Test
+    public void testIwlanDeactivateDataCallAfterSuccessHandover() {
+        DataProfile dp = buildDataProfile();
+
+        doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
+
+        verifiyNetworkConnected(TRANSPORT_WIFI);
+
+        mSpyIwlanDataServiceProvider.setTunnelState(
+                dp, mMockDataServiceCallback, TunnelState.TUNNEL_IN_BRINGUP, null, false, 1);
+
+        mSpyIwlanDataServiceProvider.deactivateDataCall(
+                TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
+                DataService.REQUEST_REASON_HANDOVER,
+                mMockDataServiceCallback);
+        mTestLooper.dispatchAll();
+        /* Check closeTunnel() is called. */
+        verify(mMockEpdgTunnelManager, times(1)).closeTunnel(eq(TEST_APN_NAME), eq(true));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
         mSpyIwlanDataServiceProvider

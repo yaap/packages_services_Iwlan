@@ -152,9 +152,16 @@ public class IwlanEventListener {
         }
     }
 
-    /** Returns IwlanEventListener instance */
+    /**
+     * Returns IwlanEventListener instance
+     */
     public static IwlanEventListener getInstance(@NonNull Context context, int slotId) {
         return mInstances.computeIfAbsent(slotId, k -> new IwlanEventListener(context, slotId));
+    }
+
+    @VisibleForTesting
+    public static void resetAllInstances() {
+        mInstances.clear();
     }
 
     /**

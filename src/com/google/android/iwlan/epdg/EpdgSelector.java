@@ -55,8 +55,12 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 public class EpdgSelector {
     private static final String TAG = "EpdgSelector";
@@ -70,6 +74,16 @@ public class EpdgSelector {
     private byte[] mV6PcoData = null;
 
     private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 5L;
+
+    private static final long PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC = 20L;
+    private static final int MAX_DNS_RESOLVER_THREADS = 25;
+    Executor mDnsResolutionExecutor =
+            new ThreadPoolExecutor(
+                    0,
+                    MAX_DNS_RESOLVER_THREADS,
+                    60L,
+                    TimeUnit.SECONDS,
+                    new LinkedBlockingQueue<Runnable>());
 
     final Comparator<InetAddress> inetAddressComparator =
             new Comparator<InetAddress>() {
@@ -148,6 +162,139 @@ public class EpdgSelector {
         mV6PcoData = null;
     }
 
+    private CompletableFuture<Map.Entry<String, List<InetAddress>>> submitDnsResolverQuery(
+            String domainName, Network network, Executor executor) {
+        CompletableFuture<Map.Entry<String, List<InetAddress>>> result = new CompletableFuture();
+
+        final DnsResolver.Callback<List<InetAddress>> cb =
+                new DnsResolver.Callback<List<InetAddress>>() {
+                    @Override
+                    public void onAnswer(@NonNull final List<InetAddress> answer, final int rcode) {
+                        if (rcode != 0) {
+                            Log.e(
+                                    TAG,
+                                    "DnsResolver Response Code = "
+                                            + rcode
+                                            + " for domain "
+                                            + domainName);
+                        }
+                        Map.Entry<String, List<InetAddress>> entry = Map.entry(domainName, answer);
+                        result.complete(entry);
+                    }
+
+                    @Override
+                    public void onError(@Nullable final DnsResolver.DnsException error) {
+                        Log.e(
+                                TAG,
+                                "Resolve DNS with error: " + error + " for domain: " + domainName);
+                        result.complete(null);
+                    }
+                };
+        DnsResolver.getInstance()
+                .query(network, domainName, DnsResolver.FLAG_EMPTY, executor, null, cb);
+        return result;
+    }
+
+    private List<InetAddress> v4v6ProtocolFilter(List<InetAddress> ipList, int filter) {
+        List<InetAddress> validIpList = new ArrayList<>();
+        for (InetAddress ipAddress : ipList) {
+            switch (filter) {
+                case PROTO_FILTER_IPV4:
+                    if (ipAddress instanceof Inet4Address) {
+                        validIpList.add(ipAddress);
+                    }
+                    break;
+                case PROTO_FILTER_IPV6:
+                    if (!IwlanHelper.isIpv4EmbeddedIpv6Address(ipAddress)) {
+                        validIpList.add(ipAddress);
+                    }
+                    break;
+                case PROTO_FILTER_IPV4V6:
+                    validIpList.add(ipAddress);
+                    break;
+                default:
+                    Log.d(TAG, "Invalid ProtoFilter : " + filter);
+            }
+        }
+        return validIpList;
+    }
+
+    // Converts a list of CompletableFutures of type T into a single CompletableFuture containing a
+    // list of T. The resulting CompletableFuture waits for all futures to complete,
+    // even if any future throw an exception.
+    private <T> CompletableFuture<List<T>> allOf(List<CompletableFuture<T>> futuresList) {
+        CompletableFuture<Void> allFuturesResult =
+                CompletableFuture.allOf(
+                        futuresList.toArray(new CompletableFuture[futuresList.size()]));
+        return allFuturesResult.thenApply(
+                v ->
+                        futuresList.stream()
+                                .map(future -> future.join())
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.<T>toList()));
+    }
+
+    /**
+     * Returns a list of unique IP addresses corresponding to the given domain names, in the same
+     * order of the input. Runs DNS resolution across parallel threads.
+     *
+     * @param domainNames Domain names for which DNS resolution needs to be performed.
+     * @param filter Selects for IPv4, IPv6 (or both) addresses from the resulting DNS records
+     * @param network {@link Network} Network on which to run the DNS query.
+     * @return List of unique IP addresses corresponding to the domainNames.
+     */
+    private List<InetAddress> getIP(List<String> domainNames, int filter, Network network) {
+        // LinkedHashMap preserves insertion order (and hence priority) of domain names passed in.
+        Map<String, List<InetAddress>> domainNameToIpAddr = new LinkedHashMap<>();
+
+        List<CompletableFuture<Map.Entry<String, List<InetAddress>>>> futuresList =
+                new ArrayList<>();
+        for (String domainName : domainNames) {
+            domainNameToIpAddr.put(domainName, new ArrayList<>());
+            futuresList.add(submitDnsResolverQuery(domainName, network, mDnsResolutionExecutor));
+        }
+        CompletableFuture<List<Map.Entry<String, List<InetAddress>>>> allFuturesResult =
+                allOf(futuresList);
+
+        List<Map.Entry<String, List<InetAddress>>> resultList = null;
+        try {
+            resultList =
+                    allFuturesResult.get(
+                            PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC, TimeUnit.SECONDS);
+        } catch (ExecutionException e) {
+            Log.e(TAG, "Cause of ExecutionException: ", e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.e(TAG, "InterruptedException: ", e);
+        } catch (TimeoutException e) {
+            Log.e(TAG, "TimeoutException: ", e);
+        } finally {
+            if (resultList == null) {
+                Log.w(TAG, "No IP addresses in parallel DNS query!");
+            } else {
+                for (Map.Entry<String, List<InetAddress>> entry : resultList) {
+                    domainNameToIpAddr.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        // Removes duplicate IPs from result, keeps insertion order.
+        Set<InetAddress> resultSet = new LinkedHashSet<>();
+        domainNameToIpAddr.values().forEach(resultSet::addAll);
+
+        return v4v6ProtocolFilter(new ArrayList<>(resultSet), filter);
+    }
+
+    /**
+     * Updates the validIpList with the IP addresses corresponding to this domainName. Runs blocking
+     * DNS resolution on the same thread.
+     *
+     * @param domainName Domain name for which DNS resolution needs to be performed.
+     * @param filter Selects for IPv4, IPv6 (or both) addresses from the resulting DNS records
+     * @param validIpList A running list of IP addresses that needs to be updated.
+     * @param network {@link Network} Network on which to run the DNS query.
+     * @return none
+     */
     private void getIP(
             String domainName, int filter, ArrayList<InetAddress> validIpList, Network network) {
         List<InetAddress> ipList = new ArrayList<InetAddress>();
@@ -200,25 +347,7 @@ public class EpdgSelector {
         }
 
         // Filter the IP list by input ProtoFilter
-        for (InetAddress ipAddress : ipList) {
-            switch (filter) {
-                case PROTO_FILTER_IPV4:
-                    if (ipAddress instanceof Inet4Address) {
-                        validIpList.add(ipAddress);
-                    }
-                    break;
-                case PROTO_FILTER_IPV6:
-                    if (!IwlanHelper.isIpv4EmbeddedIpv6Address(ipAddress)) {
-                        validIpList.add(ipAddress);
-                    }
-                    break;
-                case PROTO_FILTER_IPV4V6:
-                    validIpList.add(ipAddress);
-                    break;
-                default:
-                    Log.d(TAG, "Invalid ProtoFilter : " + filter);
-            }
-        }
+        validIpList.addAll(v4v6ProtocolFilter(ipList, filter));
     }
 
     private String[] getPlmnList() {
@@ -392,6 +521,7 @@ public class EpdgSelector {
         Log.d(TAG, "PLMN Method");
 
         plmnList = getPlmnList();
+        List<String> domainNames = new ArrayList<>();
         for (String plmn : plmnList) {
             String[] mccmnc = splitMccMnc(plmn);
             /*
@@ -410,7 +540,7 @@ public class EpdgSelector {
                         .append(".mcc")
                         .append(mccmnc[0])
                         .append(".pub.3gppnetwork.org");
-                getIP(domainName.toString(), filter, validIpList, network);
+                domainNames.add(domainName.toString());
                 domainName.setLength(0);
             }
             // For emergency PDN setup, still adding FQDN without "sos" header as second priority
@@ -421,9 +551,10 @@ public class EpdgSelector {
                     .append(".mcc")
                     .append(mccmnc[0])
                     .append(".pub.3gppnetwork.org");
-            getIP(domainName.toString(), filter, validIpList, network);
+            domainNames.add(domainName.toString());
             domainName.setLength(0);
         }
+        validIpList.addAll(getIP(domainNames, filter, network));
     }
 
     private void resolutionMethodCellularLoc(

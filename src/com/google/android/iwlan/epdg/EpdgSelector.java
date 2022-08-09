@@ -52,11 +52,15 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -76,14 +80,37 @@ public class EpdgSelector {
     private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 5L;
 
     private static final long PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC = 20L;
-    private static final int MAX_DNS_RESOLVER_THREADS = 25;
+    private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.
+    private static final int MAX_EPDG_SELECTION_THREADS = 2; // 1 each for prefetch, tunnel bringup.
+    private static final int MAX_DNS_RESOLVER_THREADS = 25; // Do not expect > 25 FQDNs per carrier.
+
+    BlockingQueue<Runnable> dnsResolutionQueue =
+            new ArrayBlockingQueue<>(
+                    MAX_DNS_RESOLVER_THREADS
+                            * MAX_EPDG_SELECTION_THREADS
+                            * NUM_EPDG_SELECTION_EXECUTORS);
+
     Executor mDnsResolutionExecutor =
             new ThreadPoolExecutor(
+                    0, MAX_DNS_RESOLVER_THREADS, 60L, TimeUnit.SECONDS, dnsResolutionQueue);
+
+    ExecutorService mEpdgSelectionExecutor =
+            new ThreadPoolExecutor(
                     0,
-                    MAX_DNS_RESOLVER_THREADS,
+                    MAX_EPDG_SELECTION_THREADS,
                     60L,
                     TimeUnit.SECONDS,
-                    new LinkedBlockingQueue<Runnable>());
+                    new SynchronousQueue<Runnable>());
+    Future mDnsPrefetchFuture;
+
+    ExecutorService mSosEpdgSelectionExecutor =
+            new ThreadPoolExecutor(
+                    0,
+                    MAX_EPDG_SELECTION_THREADS,
+                    60L,
+                    TimeUnit.SECONDS,
+                    new SynchronousQueue<Runnable>());
+    Future mSosDnsPrefetchFuture;
 
     final Comparator<InetAddress> inetAddressComparator =
             new Comparator<InetAddress>() {
@@ -969,6 +996,44 @@ public class EpdgSelector {
         }
     }
 
+    // Cancels duplicate prefetches a prefetch is already running. Always schedules tunnel bringup.
+    private void trySubmitEpdgSelectionExecutor(
+            Runnable runnable, boolean isPrefetch, boolean isEmergency) {
+        if (isEmergency) {
+            if (isPrefetch) {
+                if (mSosDnsPrefetchFuture == null || mSosDnsPrefetchFuture.isDone()) {
+                    mSosDnsPrefetchFuture = mSosEpdgSelectionExecutor.submit(runnable);
+                }
+            } else {
+                mSosEpdgSelectionExecutor.execute(runnable);
+            }
+        } else {
+            if (isPrefetch) {
+                if (mDnsPrefetchFuture == null || mDnsPrefetchFuture.isDone()) {
+                    mDnsPrefetchFuture = mEpdgSelectionExecutor.submit(runnable);
+                }
+            } else {
+                mEpdgSelectionExecutor.execute(runnable);
+            }
+        }
+    }
+
+    /**
+     * Asynchronously runs DNS resolution on a carrier-specific list of ePDG servers into IP
+     * addresses, and passes them to the caller via the {@link EpdgSelectorCallback}.
+     *
+     * @param transactionId A unique ID passed in to match the response with the request. If this
+     *     value is 0, the caller is not interested in the result.
+     * @param filter Allows the caller to filter for IPv4 or IPv6 servers, or both.
+     * @param isRoaming Specifies whether the subscription is currently in roaming state.
+     * @param isEmergency Specifies whether the ePDG server lookup is to make an emergency call.
+     * @param network {@link Network} The server lookups will be performed over this Network.
+     * @param selectorCallback {@link EpdgSelectorCallback} The result will be returned through this
+     *     callback. If null, the caller is not interested in the result. Typically this means the
+     *     caller is performing DNS prefetch of the ePDG server addresses to warm the native
+     *     dnsresolver module's caches.
+     * @return {link IwlanError} denoting the status of this operation.
+     */
     public IwlanError getValidatedServerList(
             int transactionId,
             @ProtoFilter int filter,
@@ -979,9 +1044,16 @@ public class EpdgSelector {
         ArrayList<InetAddress> validIpList = new ArrayList<InetAddress>();
         StringBuilder domainName = new StringBuilder();
 
-        Runnable doValidation =
+        final Runnable epdgSelectionRunnable =
                 () -> {
-                    Log.d(TAG, "Processing request with transactionId: " + transactionId);
+                    Log.d(
+                            TAG,
+                            "Processing request with transactionId: "
+                                    + transactionId
+                                    + ", for slotID: "
+                                    + mSlotId
+                                    + ", isEmergency: "
+                                    + isEmergency);
                     String[] plmnList;
 
                     int[] addrResolutionMethods =
@@ -1043,8 +1115,10 @@ public class EpdgSelector {
                         }
                     }
                 };
-        Thread subThread = new Thread(doValidation);
-        subThread.start();
+
+        boolean isPrefetch = (selectorCallback == null);
+        trySubmitEpdgSelectionExecutor(epdgSelectionRunnable, isPrefetch, isEmergency);
+
         return new IwlanError(IwlanError.NO_ERROR);
     }
 }

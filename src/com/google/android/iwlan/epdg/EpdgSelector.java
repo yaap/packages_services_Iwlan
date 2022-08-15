@@ -152,7 +152,12 @@ public class EpdgSelector {
     }
 
     public boolean setPcoData(int pcoId, byte[] pcoData) {
-        Log.d(TAG, "onReceive PcoId:" + String.format("0x%04x", pcoId) + " PcoData:" + pcoData);
+        Log.d(
+                TAG,
+                "onReceive PcoId:"
+                        + String.format("0x%04x", pcoId)
+                        + " PcoData:"
+                        + Arrays.toString(pcoData));
 
         int PCO_ID_IPV6 =
                 IwlanHelper.getConfig(

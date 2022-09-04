@@ -147,14 +147,14 @@ public class EpdgTunnelManager {
     private static Map<Integer, EpdgTunnelManager> mTunnelManagerInstances =
             new ConcurrentHashMap<>();
 
-    private Queue<TunnelRequestWrapper> mRequestQueue = new LinkedList<>();
+    private Queue<TunnelRequestWrapper> mPendingBringUpRequests = new LinkedList<>();
 
     private EpdgInfo mValidEpdgInfo = new EpdgInfo();
     private InetAddress mEpdgAddress;
     private Network mNetwork;
     private int mTransactionId = 0;
     private int mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
-    private boolean mIsEpdgAddressSelected;
+    private boolean mHasConnectedToEpdg;
     private IkeSessionCreator mIkeSessionCreator;
 
     private Map<String, TunnelConfig> mApnNameToTunnelConfig = new ConcurrentHashMap<>();
@@ -720,7 +720,6 @@ public class EpdgTunnelManager {
         try {
             ikeSessionParams = buildIkeSessionParams(setupRequest, apnName);
         } catch (IwlanSimNotReadyException e) {
-            mRequestQueue.poll();
             IwlanError iwlanError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
             reportIwlanError(apnName, iwlanError);
             tunnelCallback.onClosed(apnName, iwlanError);
@@ -1237,6 +1236,15 @@ public class EpdgTunnelManager {
                 mHandler.obtainMessage(sessionType, new SessionClosedData(apnName, error)));
     }
 
+    private boolean isEpdgSelectionOrFirstTunnelBringUpInProgress() {
+        // Tunnel config is created but not connected to an ePDG. i.e., The first bring-up request
+        // in progress.
+        // No bring-up request in progress but pending queue is not empty. i.e. ePDG selection in
+        // progress
+        return (!mHasConnectedToEpdg && !mApnNameToTunnelConfig.isEmpty())
+                || !mPendingBringUpRequests.isEmpty();
+    }
+
     private final class TmHandler extends Handler {
         private final String TAG = TmHandler.class.getSimpleName();
 
@@ -1273,22 +1281,20 @@ public class EpdgTunnelManager {
                         return;
                     }
 
-                    // No tunnel bring up in progress and the epdg address is null
-                    if (!mIsEpdgAddressSelected
-                            && mApnNameToTunnelConfig.size() == 0
-                            && mRequestQueue.size() == 0) {
-                        mNetwork = setupRequest.network();
-                        mRequestQueue.add(tunnelRequestWrapper);
-                        selectEpdgAddress(setupRequest);
+                    if (mHasConnectedToEpdg) {
+                        // Service the request immediately when epdg address is available
+                        onBringUpTunnel(setupRequest, tunnelRequestWrapper.getTunnelCallback());
                         break;
                     }
 
-                    // Service the request immediately when epdg address is available
-                    if (mIsEpdgAddressSelected) {
-                        onBringUpTunnel(setupRequest, tunnelRequestWrapper.getTunnelCallback());
-                    } else {
-                        mRequestQueue.add(tunnelRequestWrapper);
+                    if (!isEpdgSelectionOrFirstTunnelBringUpInProgress()) {
+                        // No tunnel bring-up in progress. Select the ePDG address first
+                        mNetwork = setupRequest.network();
+                        selectEpdgAddress(setupRequest);
                     }
+
+                    // Another bring-up or ePDG selection is in progress, pending this request.
+                    mPendingBringUpRequests.add(tunnelRequestWrapper);
                     break;
 
                 case EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE:
@@ -1300,13 +1306,14 @@ public class EpdgTunnelManager {
                         break;
                     }
 
-                    if ((tunnelRequestWrapper = mRequestQueue.peek()) == null) {
+                    if (mPendingBringUpRequests.isEmpty()) {
                         Log.d(TAG, "Empty request queue");
                         break;
                     }
 
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
                             && selectorResult.getValidIpList() != null) {
+                        tunnelRequestWrapper = mPendingBringUpRequests.remove();
                         validateAndSetEpdgAddress(selectorResult.getValidIpList());
                         onBringUpTunnel(
                                 tunnelRequestWrapper.getSetupRequest(),
@@ -1351,9 +1358,10 @@ public class EpdgTunnelManager {
                                     .build();
                     tunnelConfig.getTunnelCallback().onOpened(apnName, linkProperties);
 
-                    setIsEpdgAddressSelected(true);
+                    reportIwlanError(apnName, new IwlanError(IwlanError.NO_ERROR));
+
+                    setHasConnectedToEpdg(true);
                     mValidEpdgInfo.resetIndex();
-                    mRequestQueue.poll();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
                     break;
@@ -1392,28 +1400,23 @@ public class EpdgTunnelManager {
                         iface.close();
                     }
 
-                    if (!mIsEpdgAddressSelected) {
-                        // fail all the requests. report back off timer, if present, to the
-                        // current request.
-                        if (tunnelConfig.isBackoffTimeValid()) {
-                            mRequestQueue.poll();
-                            reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
-                            tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
-                        }
-                        failAllPendingRequests(iwlanError);
-                    } else {
-                        mRequestQueue.poll();
-                        Log.d(TAG, "Tunnel Closed: " + iwlanError);
+                    if (!tunnelConfig.hasTunnelOpened()) {
                         if (tunnelConfig.isBackoffTimeValid()) {
                             reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
                         } else {
                             reportIwlanError(apnName, iwlanError);
                         }
-                        tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
+                    }
+
+                    Log.d(TAG, "Tunnel Closed: " + iwlanError);
+                    tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
+
+                    if (!mHasConnectedToEpdg) {
+                        failAllPendingRequests(iwlanError);
                     }
 
                     mApnNameToTunnelConfig.remove(apnName);
-                    if (mApnNameToTunnelConfig.size() == 0 && mRequestQueue.size() == 0) {
+                    if (mApnNameToTunnelConfig.size() == 0 && mPendingBringUpRequests.isEmpty()) {
                         resetTunnelManagerState();
                     }
                     break;
@@ -1678,24 +1681,21 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     int closePendingRequestsForApn(String apnName) {
         int numRequestsClosed = 0;
-        int queueSize = mRequestQueue.size();
+        int queueSize = mPendingBringUpRequests.size();
         if (queueSize == 0) {
             return numRequestsClosed;
         }
 
-        int count = 0;
-
-        while (count < queueSize) {
-            TunnelRequestWrapper requestWrapper = mRequestQueue.poll();
+        for (int count = 0; count < queueSize; count++) {
+            TunnelRequestWrapper requestWrapper = mPendingBringUpRequests.remove();
             if (requestWrapper.getSetupRequest().apnName() == apnName) {
                 requestWrapper
                         .getTunnelCallback()
                         .onClosed(apnName, new IwlanError(IwlanError.NO_ERROR));
                 numRequestsClosed++;
             } else {
-                mRequestQueue.add(requestWrapper);
+                mPendingBringUpRequests.add(requestWrapper);
             }
-            count++;
         }
         return numRequestsClosed;
     }
@@ -1724,35 +1724,37 @@ public class EpdgTunnelManager {
     void resetTunnelManagerState() {
         Log.d(TAG, "resetTunnelManagerState");
         mEpdgAddress = null;
-        setIsEpdgAddressSelected(false);
+        setHasConnectedToEpdg(false);
         mNetwork = null;
-        mRequestQueue = new LinkedList<>();
+        mPendingBringUpRequests = new LinkedList<>();
         mApnNameToTunnelConfig = new ConcurrentHashMap<>();
         mLocalAddresses = null;
     }
 
     private void serviceAllPendingRequests() {
-        while (mRequestQueue.size() > 0) {
+        while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "serviceAllPendingRequests");
-            TunnelRequestWrapper request = mRequestQueue.poll();
+            TunnelRequestWrapper request = mPendingBringUpRequests.remove();
             onBringUpTunnel(request.getSetupRequest(), request.getTunnelCallback());
         }
     }
 
     private void failAllPendingRequests(IwlanError error) {
-        while (mRequestQueue.size() > 0) {
+        while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "failAllPendingRequests");
-            TunnelRequestWrapper request = mRequestQueue.poll();
+            TunnelRequestWrapper request = mPendingBringUpRequests.remove();
             TunnelSetupRequest setupRequest = request.getSetupRequest();
             reportIwlanError(setupRequest.apnName(), error);
             request.getTunnelCallback().onClosed(setupRequest.apnName(), error);
         }
     }
 
-    // Prints mRequestQueue
+    // Prints mPendingBringUpRequests
     private void printRequestQueue(String info) {
         Log.d(TAG, info);
-        Log.d(TAG, "mRequestQueue: " + Arrays.toString(mRequestQueue.toArray()));
+        Log.d(
+                TAG,
+                "mPendingBringUpRequests: " + Arrays.toString(mPendingBringUpRequests.toArray()));
     }
 
     // Update Network wrapper
@@ -2080,8 +2082,8 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    void setIsEpdgAddressSelected(boolean value) {
-        mIsEpdgAddressSelected = value;
+    void setHasConnectedToEpdg(boolean value) {
+        mHasConnectedToEpdg = value;
     }
 
     @VisibleForTesting
@@ -2112,7 +2114,7 @@ public class EpdgTunnelManager {
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("---- EpdgTunnelManager ----");
-        pw.println("mIsEpdgAddressSelected: " + mIsEpdgAddressSelected);
+        pw.println("mHasConnectedToEpdg: " + mHasConnectedToEpdg);
         if (mEpdgAddress != null) {
             pw.println("mEpdgAddress: " + mEpdgAddress);
         }

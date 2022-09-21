@@ -63,6 +63,7 @@ import android.telephony.data.ApnSetting;
 import com.google.android.iwlan.IwlanError;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -164,6 +165,7 @@ public class EpdgTunnelManagerTest {
 
     @Before
     public void setUp() throws Exception {
+        EpdgTunnelManager.resetAllInstances();
         mEpdgTunnelManager = spy(EpdgTunnelManager.getInstance(mMockContext, DEFAULT_SLOT_INDEX));
 
         when(mMockContext.getSystemService(eq(IpSecManager.class))).thenReturn(mMockIpSecManager);
@@ -347,6 +349,7 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
+    @Ignore("b/239753287- Telus carrier errors out on parsing DEVICE_IDENTITY response")
     public void testBringUpTunnelSetsDeviceIdentityImeiSv() throws Exception {
         when(mMockContext.getSystemService(eq(TelephonyManager.class)))
                 .thenReturn(mMockTelephonyManager);
@@ -378,6 +381,7 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
+    @Ignore("b/239753287- Telus carrier errors out on parsing DEVICE_IDENTITY response")
     public void testBringUpTunnelSetsDeviceIdentityImei() throws Exception {
         when(mMockContext.getSystemService(eq(TelephonyManager.class)))
                 .thenReturn(mMockTelephonyManager);
@@ -407,6 +411,7 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
+    @Ignore("b/239753287- Telus carrier errors out on parsing DEVICE_IDENTITY response")
     public void testBringUpTunnelNoDeviceIdentityWhenImeiUnavailable() throws Exception {
         when(mMockContext.getSystemService(eq(TelephonyManager.class)))
                 .thenReturn(mMockTelephonyManager);

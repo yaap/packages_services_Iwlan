@@ -883,6 +883,98 @@ public class ErrorPolicyManagerTest {
     }
 
     @Test
+    public void testShouldRetryWithInitialAttach() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .setHandoverAttemptCount("2")
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+
+        // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(4, time);
+        assertFalse(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(8, time);
+        // Reached handover attempt count and error is IKE protocol error
+        assertTrue(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+    }
+
+    @Test
+    public void testShouldRetryWithInitialAttachForInternalError() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .setHandoverAttemptCount("2")
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}, {"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0", "0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+
+        // GENERIC_PROTOCOL_ERROR_TYPE - SERVER_SELECTION_FAILED and retryArray = 0, 0
+        IwlanError iwlanError = new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        assertFalse(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        // Should not retry with initial attach as the errors are not IKE_PROTOCOL_ERROR_TYPE
+        assertFalse(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+    }
+
+    @Test
     public void testHandoverAttemptCountInvalidErrorType() throws Exception {
         String apn = "ims";
         String config =

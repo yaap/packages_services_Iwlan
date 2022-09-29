@@ -447,6 +447,19 @@ public class ErrorPolicyManager {
         return new IwlanError(IwlanError.NO_ERROR);
     }
 
+    /**
+     * Returns whether framework should retry tunnel setup with initial PDN bringup request when
+     * handover request fails.
+     *
+     * @param apn apn name
+     * @return boolean result of whether framework should retry tunnel setup with initial PDN
+     *     bringup request when handover request fails
+     */
+    public synchronized boolean shouldRetryWithInitialAttach(String apn) {
+        ErrorInfo errorInfo = mLastErrorForApn.get(apn);
+        return errorInfo != null && errorInfo.shouldRetryWithInitialAttach();
+    }
+
     public void logErrorPolicies() {
         Log.d(LOG_TAG, "mCarrierConfigPolicies:");
         for (Map.Entry<String, List<ErrorPolicy>> entry : mCarrierConfigPolicies.entrySet()) {
@@ -1122,6 +1135,15 @@ public class ErrorPolicyManager {
                 ret = false;
             }
             return ret;
+        }
+
+        boolean shouldRetryWithInitialAttach() {
+            // UE should only uses initial attach to reset network failure, not for UE internal or
+            // DNS errors. When the number of handover failures due to network issues exceeds the
+            // configured threshold, UE should request network with initial attach instead of
+            // handover request.
+            return mErrorPolicy.getErrorType() == IKE_PROTOCOL_ERROR_TYPE
+                    && mCurrentRetryIndex + 1 >= mErrorPolicy.getHandoverAttemptCount();
         }
 
         ErrorPolicy getErrorPolicy() {

@@ -1647,11 +1647,6 @@ public class IwlanDataService extends DataService {
                 mContext.getSystemService(ConnectivityManager.class);
         connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
         mNetworkMonitorCallback = null;
-        if (mIwlanDataServiceHandlerThread != null) {
-            mIwlanDataServiceHandlerThread.quit();
-            mIwlanDataServiceHandlerThread = null;
-        }
-        mIwlanDataServiceHandler = null;
     }
 
     @VisibleForTesting

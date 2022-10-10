@@ -278,7 +278,6 @@ public class IwlanDataServiceTest {
         mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
         mTestLooper.dispatchAll();
         verify(mIwlanDataService, times(1)).deinitNetworkCallback();
-        assertEquals(mIwlanDataService.mIwlanDataServiceHandler, null);
         mIwlanDataService.onCreateDataServiceProvider(DEFAULT_SLOT_INDEX);
         mTestLooper.dispatchAll();
     }
@@ -865,6 +864,28 @@ public class IwlanDataServiceTest {
         assertEquals(finalUpStats.getAverage(), tunnelUpStats.getAverage(), 100);
         assertEquals(finalUpStats.getCount(), tunnelUpStats.getCount());
         assertEquals(finalUpStats.getMax(), tunnelUpStats.getMax(), 100);
+    }
+
+    @Test
+    public void testIwlanDataServiceHandlerOnUnbind() {
+        DataProfile dp = buildDataProfile();
+        doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
+        mSpyIwlanDataServiceProvider.setTunnelState(
+                dp, mMockDataServiceCallback, TunnelState.TUNNEL_UP, null, false, 1);
+
+        // Simulate IwlanDataService.onUnbind() which force close all tunnels
+        mSpyIwlanDataServiceProvider.forceCloseTunnels();
+        // Simulate DataService.onUnbind() which remove all IwlanDataServiceProviders
+        mSpyIwlanDataServiceProvider.close();
+        mTestLooper.dispatchAll();
+
+        verify(mMockEpdgTunnelManager, atLeastOnce()).closeTunnel(eq(TEST_APN_NAME), eq(true));
+        assertNotNull(mIwlanDataService.mIwlanDataServiceHandler);
+        // Should not raise NullPointerException
+        mSpyIwlanDataServiceProvider
+                .getIwlanTunnelCallback()
+                .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR));
+        mTestLooper.dispatchAll();
     }
 
     private void mockTunnelSetupFail(DataProfile dp) {

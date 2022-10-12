@@ -966,9 +966,21 @@ public class IwlanDataService extends DataService {
 
         private void prefetchEpdgServerList(Network network, boolean isRoaming) {
             mEpdgSelector.getValidatedServerList(
-                    0, EpdgSelector.PROTO_FILTER_IPV4V6, isRoaming, false, network, null);
+                    0,
+                    EpdgSelector.PROTO_FILTER_IPV4V6,
+                    EpdgSelector.SYSTEM_PREFERRED,
+                    isRoaming,
+                    false,
+                    network,
+                    null);
             mEpdgSelector.getValidatedServerList(
-                    0, EpdgSelector.PROTO_FILTER_IPV4V6, isRoaming, true, network, null);
+                    0,
+                    EpdgSelector.PROTO_FILTER_IPV4V6,
+                    EpdgSelector.SYSTEM_PREFERRED,
+                    isRoaming,
+                    true,
+                    network,
+                    null);
         }
 
         private int getCurrentCellularRat() {

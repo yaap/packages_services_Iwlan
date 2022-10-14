@@ -30,6 +30,7 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.os.PersistableBundle;
+import android.os.test.TestLooper;
 import android.telephony.CarrierConfigManager;
 import android.telephony.DataFailCause;
 import android.telephony.SubscriptionInfo;
@@ -60,6 +61,9 @@ public class ErrorPolicyManagerTest {
     private static final int DEFAULT_SUBID = 0;
     private static final int TEST_CARRIER_ID = 1;
 
+    private TestLooper mTestLooper = new TestLooper();
+    private long mMockedClockTime = 0;
+
     @Mock private Context mMockContext;
     @Mock CarrierConfigManager mMockCarrierConfigManager;
     @Mock SubscriptionManager mMockSubscriptionManager;
@@ -75,10 +79,12 @@ public class ErrorPolicyManagerTest {
         mStaticMockSession =
                 mockitoSession()
                         .mockStatic(IwlanDataService.class)
+                        .spyStatic(IwlanHelper.class)
                         .strictness(Strictness.LENIENT)
                         .startMocking();
         when(IwlanDataService.getDataServiceProvider(anyInt()))
                 .thenReturn(mMockDataServiceProvider);
+        when(IwlanHelper.elapsedRealtime()).thenAnswer(i -> mMockedClockTime);
         AssetManager mockAssetManager = mock(AssetManager.class);
         Context context = InstrumentationRegistry.getTargetContext();
         InputStream is = context.getResources().getAssets().open("defaultiwlanerrorconfig.json");
@@ -87,6 +93,8 @@ public class ErrorPolicyManagerTest {
         setupMockForCarrierConfig(null);
         ErrorPolicyManager.resetAllInstances();
         mErrorPolicyManager = spy(ErrorPolicyManager.getInstance(mMockContext, DEFAULT_SLOT_INDEX));
+        doReturn(mTestLooper.getLooper()).when(mErrorPolicyManager).getLooper();
+        mErrorPolicyManager.initHandler();
     }
 
     @After
@@ -144,8 +152,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -215,8 +222,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // Fallback to default Iwlan error policy for IKE_PROTOCOL_ERROR_TYPE(24) because of failed
         // parsing (or lack of explicit carrier-defined policy).
@@ -278,8 +284,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         mErrorPolicyManager.logErrorPolicies();
 
@@ -332,8 +337,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -343,7 +347,7 @@ public class ErrorPolicyManagerTest {
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertFalse(bringUpTunnel);
 
-        sleep(4000);
+        advanceClockByTimeMs(4000);
 
         bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
@@ -384,8 +388,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -431,7 +434,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 6, 12, 24
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -442,7 +445,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.WIFI_DISABLE_EVENT)
                 .sendToTarget();
-        sleep(500);
+        advanceClockByTimeMs(500);
         verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
@@ -482,7 +485,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 6, 12, 24
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -493,7 +496,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT)
                 .sendToTarget();
-        sleep(500);
+        advanceClockByTimeMs(500);
         verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
@@ -533,7 +536,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -544,7 +547,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.APM_ENABLE_EVENT)
                 .sendToTarget();
-        sleep(500);
+        advanceClockByTimeMs(500);
         verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
@@ -585,8 +588,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -643,8 +645,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
@@ -653,9 +654,9 @@ public class ErrorPolicyManagerTest {
         time = Math.round((double) mErrorPolicyManager.getCurrentRetryTimeMs(apn) / 1000);
         assertEquals(time, 2);
 
-        // sleep for 2 seconds and make sure that we can bring up tunnel after 2 secs
+        // advanceClockByTimeMs for 2 seconds and make sure that we can bring up tunnel after 2 secs
         // as back off time - 2 secs should override the retry time in policy - 10 secs
-        sleep(2000);
+        advanceClockByTimeMs(2000);
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
 
@@ -709,8 +710,7 @@ public class ErrorPolicyManagerTest {
                 .mHandler
                 .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
                 .sendToTarget();
-
-        sleep(1000);
+        mTestLooper.dispatchAll();
         assertEquals(DataFailCause.NONE, mErrorPolicyManager.getMostRecentDataFailCause());
 
         // IKE_PROTOCOL_ERROR_TYPE(15500)
@@ -840,12 +840,9 @@ public class ErrorPolicyManagerTest {
                 + "\"]";
     }
 
-    private void sleep(long time) {
-        try {
-            Thread.sleep(time);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    private void advanceClockByTimeMs(long time) {
+        mMockedClockTime += time;
+        mTestLooper.dispatchAll();
     }
 
     private void setupMockForCarrierConfig(PersistableBundle bundle) {

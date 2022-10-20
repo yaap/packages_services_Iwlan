@@ -25,7 +25,6 @@ import android.support.annotation.NonNull;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanError {
 
@@ -59,22 +58,16 @@ public class IwlanError {
     })
     @interface IwlanErrorType {};
 
-    private static final Map<Integer, String> sErrorTypeStrings =
-            new ConcurrentHashMap<>() {
-                {
-                    put(NO_ERROR, "IWLAN_NO_ERROR");
-                    put(IKE_PROTOCOL_EXCEPTION, "IWLAN_IKE_PROTOCOL_EXCEPTION");
-                    put(IKE_INTERNAL_IO_EXCEPTION, "IWLAN_IKE_INTERNAL_IO_EXCEPTION");
-                    put(IKE_GENERIC_EXCEPTION, "IWLAN_IKE_GENERIC_EXCEPTION");
-                    put(
-                            EPDG_SELECTOR_SERVER_SELECTION_FAILED,
-                            "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED");
-                    put(TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED");
-                    put(SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION");
-                    put(NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE");
-                    put(UNKNOWN_EXCEPTION, "IWLAN_UNKNOWN_EXCEPTION");
-                }
-            };
+    private static final Map<Integer, String> sErrorTypeStrings = Map.of(
+            NO_ERROR, "IWLAN_NO_ERROR",
+            IKE_PROTOCOL_EXCEPTION, "IWLAN_IKE_PROTOCOL_EXCEPTION",
+            IKE_INTERNAL_IO_EXCEPTION, "IWLAN_IKE_INTERNAL_IO_EXCEPTION",
+            IKE_GENERIC_EXCEPTION, "IWLAN_IKE_GENERIC_EXCEPTION",
+            EPDG_SELECTOR_SERVER_SELECTION_FAILED, "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED",
+            TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED",
+            SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION",
+            NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE",
+            UNKNOWN_EXCEPTION, "IWLAN_UNKNOWN_EXCEPTION");
 
     private int mErrorType;
     private Exception mException;
@@ -231,4 +224,3 @@ public class IwlanError {
         return ret;
     }
 }
-;

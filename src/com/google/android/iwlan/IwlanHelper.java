@@ -237,6 +237,37 @@ public class IwlanHelper {
         return false;
     }
 
+    /**
+     * Gets the slot index associated with the current active data subscription.
+     *
+     * <p>The currently active data slot may be different from the default data slot. For instance,
+     * when the DDS is OOS or the nDDS is in a voice call, the data PDN may move to the nDDS.
+     *
+     * @param context application context
+     * @return slot index associated with the active data subscription, or
+     *     SubscriptionManager#INVALID_SIM_SLOT_INDEX if no active data PDN.
+     */
+    private static int getActiveDataSlot(Context context) {
+        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
+        return sm.getSlotIndex(sm.getActiveDataSubscriptionId());
+    }
+
+    /**
+     * For dual-SIM UEs, determines if the active data PDN is on the other slot to the one provided.
+     *
+     * @param context application context
+     * @param slotIndex slot index associated with current subscription
+     * @return whether the other subscription has active data PDN.
+     */
+    public static boolean isActiveDataOnOtherSlot(Context context, int slotIndex) {
+        int activeDataSlot = getActiveDataSlot(context);
+        Log.d("apsankar:", slotIndex + " " + activeDataSlot);
+        if (activeDataSlot != SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+            return activeDataSlot != slotIndex;
+        }
+        return false;
+    }
+
     public static boolean isCrossSimCallingEnabled(Context context, int slotId) {
         boolean isCstEnabled = false;
         int subid = getSubId(context, slotId);
@@ -316,7 +347,7 @@ public class IwlanHelper {
     }
 
     static long elapsedRealtime() {
-      /*Returns milliseconds since boot, including time spent in sleep.*/
-      return SystemClock.elapsedRealtime();
+        /*Returns milliseconds since boot, including time spent in sleep.*/
+        return SystemClock.elapsedRealtime();
     }
 }

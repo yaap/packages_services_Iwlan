@@ -839,7 +839,7 @@ public class IwlanDataService extends DataService {
                         getTunnelManager().closeTunnel(entry.getKey(), true);
                     } else {
                         if (mIwlanDataService.isNetworkConnected(
-                                IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
+                                IwlanHelper.isActiveDataOnOtherSlot(mContext, getSlotIndex()),
                                 IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
                             getTunnelManager().updateNetwork(network, entry.getKey());
                         }
@@ -909,11 +909,19 @@ public class IwlanDataService extends DataService {
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             pw.println("---- IwlanDataServiceProvider[" + getSlotIndex() + "] ----");
             boolean isDDS = IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex());
+            boolean isActiveDataOnOtherSlot =
+                    IwlanHelper.isActiveDataOnOtherSlot(mContext, getSlotIndex());
             boolean isCSTEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex());
-            pw.println("isDefaultDataSub: " + isDDS + " isCrossSimEnabled: " + isCSTEnabled);
+            pw.println(
+                    "isDefaultDataSlot: "
+                            + isDDS
+                            + " isActiveDataOnOtherSlot: "
+                            + isActiveDataOnOtherSlot
+                            + " isCrossSimEnabled: "
+                            + isCSTEnabled);
             pw.println(
                     "isNetworkConnected: "
-                            + isNetworkConnected(isDDS, isCSTEnabled)
+                            + isNetworkConnected(isActiveDataOnOtherSlot, isCSTEnabled)
                             + " Wfc enabled: "
                             + mWfcEnabled);
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
@@ -939,6 +947,7 @@ public class IwlanDataService extends DataService {
             IwlanDataServiceProvider.TunnelState tunnelState;
             DataServiceCallback callback;
             int reason;
+            int slotId;
 
             switch (msg.what) {
                 case EVENT_TUNNEL_OPENED:
@@ -1127,17 +1136,19 @@ public class IwlanDataService extends DataService {
                         return;
                     }
 
-                    boolean isDDS =
-                            IwlanHelper.isDefaultDataSlot(
-                                    mContext, iwlanDataServiceProvider.getSlotIndex());
-                    boolean isCSTEnabled =
-                            IwlanHelper.isCrossSimCallingEnabled(
-                                    mContext, iwlanDataServiceProvider.getSlotIndex());
-                    boolean networkConnected = isNetworkConnected(isDDS, isCSTEnabled);
+                    slotId = iwlanDataServiceProvider.getSlotIndex();
+                    boolean isActiveDataOnOtherSlot =
+                            IwlanHelper.isActiveDataOnOtherSlot(mContext, slotId);
+                    boolean isCSTEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, slotId);
+                    boolean networkConnected =
+                            isNetworkConnected(isActiveDataOnOtherSlot, isCSTEnabled);
                     Log.d(
-                            TAG,
+                            TAG + "[" + slotId + "]",
                             "isDds: "
-                                    + isDDS
+                                    + IwlanHelper.isDefaultDataSlot(
+                                            mContext, slotId)
+                                    + ", isActiveDataOnOtherSlot: "
+                                    + isActiveDataOnOtherSlot
                                     + ", isCstEnabled: "
                                     + isCSTEnabled
                                     + ", transport: "
@@ -1164,7 +1175,7 @@ public class IwlanDataService extends DataService {
                                 && tunnelState.getState()
                                         == IwlanDataServiceProvider.TunnelState.TUNNEL_UP) {
                             Log.w(
-                                    TAG,
+                                    TAG + "[" + slotId + "]",
                                     "The tunnel for " + dataProfile.getApn() + " already exists.");
                             iwlanDataServiceProvider.deliverCallback(
                                     IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -1175,7 +1186,7 @@ public class IwlanDataService extends DataService {
                             return;
                         } else {
                             Log.e(
-                                    TAG,
+                                    TAG + "[" + slotId + "]",
                                     "Force close the existing PDN. pduSessionId = "
                                             + tunnelState.getPduSessionId()
                                             + " Tunnel State = "
@@ -1240,7 +1251,7 @@ public class IwlanDataService extends DataService {
                                     .bringUpTunnel(
                                             tunnelReqBuilder.build(),
                                             iwlanDataServiceProvider.getIwlanTunnelCallback());
-                    Log.d(TAG, "bringup Tunnel with result:" + result);
+                    Log.d(TAG + "[" + slotId + "]", "bringup Tunnel with result:" + result);
                     if (!result) {
                         iwlanDataServiceProvider.deliverCallback(
                                 IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -1259,11 +1270,11 @@ public class IwlanDataService extends DataService {
                     reason = deactivateDataCallData.mReason;
 
                     int cid = deactivateDataCallData.mCid;
-                    int slotIndex = iwlanDataServiceProvider.getSlotIndex();
+                    slotId = iwlanDataServiceProvider.getSlotIndex();
                     boolean isNetworkLost =
                             !isNetworkConnected(
-                                    IwlanHelper.isDefaultDataSlot(mContext, slotIndex),
-                                    IwlanHelper.isCrossSimCallingEnabled(mContext, slotIndex));
+                                    IwlanHelper.isActiveDataOnOtherSlot(mContext, slotId),
+                                    IwlanHelper.isCrossSimCallingEnabled(mContext, slotId));
                     boolean isHandOutSuccessful = (reason == REQUEST_REASON_HANDOVER);
 
                     for (String apn : iwlanDataServiceProvider.mTunnelStateForApn.keySet()) {
@@ -1327,14 +1338,10 @@ public class IwlanDataService extends DataService {
                 case EVENT_REMOVE_DATA_SERVICE_PROVIDER:
                     iwlanDataServiceProvider = (IwlanDataServiceProvider) msg.obj;
 
-                    IwlanDataServiceProvider dsp =
-                            sIwlanDataServiceProviders.remove(
-                                    iwlanDataServiceProvider.getSlotIndex());
+                    slotId = iwlanDataServiceProvider.getSlotIndex();
+                    IwlanDataServiceProvider dsp = sIwlanDataServiceProviders.remove(slotId);
                     if (dsp == null) {
-                        Log.w(
-                                TAG,
-                                "No DataServiceProvider exists for slot "
-                                        + iwlanDataServiceProvider.getSlotIndex());
+                        Log.w(TAG + "[" + slotId + "]", "No DataServiceProvider exists for slot!");
                     }
 
                     if (sIwlanDataServiceProviders.isEmpty()) {
@@ -1451,12 +1458,16 @@ public class IwlanDataService extends DataService {
     }
 
     @VisibleForTesting
-    static boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
-        if (!isDds && isCstEnabled) {
-            // Only Non-DDS sub with CST enabled, can use any transport.
+    static boolean isNetworkConnected(boolean isActiveDataOnOtherSlot, boolean isCstEnabled) {
+        if (isActiveDataOnOtherSlot && isCstEnabled) {
+            // For cross-SIM IWLAN (Transport.MOBILE), an active data PDN must be maintained on the
+            // other slot.
+            if (sNetworkConnected && (sDefaultDataTransport != Transport.MOBILE)) {
+                Log.e(TAG, "Internet is on other slot, but default transport is not MOBILE!");
+            }
             return sNetworkConnected;
         } else {
-            // For all other cases, only wifi transport can be used.
+            // For all other cases, only Transport.WIFI can be used.
             return ((sDefaultDataTransport == Transport.WIFI) && sNetworkConnected);
         }
     }

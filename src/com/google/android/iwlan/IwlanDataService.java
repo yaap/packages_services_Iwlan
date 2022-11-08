@@ -26,6 +26,10 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkSpecifier;
+import android.net.TelephonyNetworkSpecifier;
+import android.net.TransportInfo;
+import android.net.vcn.VcnTransportInfo;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -81,6 +85,11 @@ public class IwlanDataService extends DataService {
     private HandlerThread mIwlanDataServiceHandlerThread;
     private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
             new ConcurrentHashMap<>();
+    private static final int INVALID_SUB_ID = -1;
+
+    // The current subscription with the active internet PDN. Need not be the default data sub.
+    // If internet is over WiFi, this value will be INVALID_SUB_ID.
+    private static int mConnectedDataSub = INVALID_SUB_ID;
 
     private static final int EVENT_BASE = IwlanEventListener.DATA_SERVICE_INTERNAL_EVENT_BASE;
     private static final int EVENT_TUNNEL_OPENED = EVENT_BASE;
@@ -140,6 +149,7 @@ public class IwlanDataService extends DataService {
         @Override
         public void onLost(Network network) {
             Log.d(TAG, "onLost: " + network);
+            IwlanDataService.setConnectedDataSub(INVALID_SUB_ID);
             IwlanDataService.setNetworkConnected(false, network, Transport.UNSPECIFIED_NETWORK);
         }
 
@@ -170,9 +180,11 @@ public class IwlanDataService extends DataService {
             if (networkCapabilities != null) {
                 if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
                     Log.d(TAG, "Network " + network + " connected using transport MOBILE");
+                    IwlanDataService.setConnectedDataSub(getConnectedDataSub(networkCapabilities));
                     IwlanDataService.setNetworkConnected(true, network, Transport.MOBILE);
                 } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
                     Log.d(TAG, "Network " + network + " connected using transport WIFI");
+                    IwlanDataService.setConnectedDataSub(INVALID_SUB_ID);
                     IwlanDataService.setNetworkConnected(true, network, Transport.WIFI);
                 } else {
                     Log.w(TAG, "Network does not have cellular or wifi capability");
@@ -839,7 +851,7 @@ public class IwlanDataService extends DataService {
                         getTunnelManager().closeTunnel(entry.getKey(), true);
                     } else {
                         if (mIwlanDataService.isNetworkConnected(
-                                IwlanHelper.isActiveDataOnOtherSlot(mContext, getSlotIndex()),
+                                isActiveDataOnOtherSub(getSlotIndex()),
                                 IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
                             getTunnelManager().updateNetwork(network, entry.getKey());
                         }
@@ -866,7 +878,7 @@ public class IwlanDataService extends DataService {
         private void dnsPrefetchCheck() {
             boolean networkConnected =
                     mIwlanDataService.isNetworkConnected(
-                            IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
+                            isActiveDataOnOtherSub(getSlotIndex()),
                             IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()));
             /* Check if we need to do prefecting */
             if (networkConnected == true
@@ -909,19 +921,20 @@ public class IwlanDataService extends DataService {
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             pw.println("---- IwlanDataServiceProvider[" + getSlotIndex() + "] ----");
             boolean isDDS = IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex());
-            boolean isActiveDataOnOtherSlot =
-                    IwlanHelper.isActiveDataOnOtherSlot(mContext, getSlotIndex());
             boolean isCSTEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex());
             pw.println(
                     "isDefaultDataSlot: "
                             + isDDS
-                            + " isActiveDataOnOtherSlot: "
-                            + isActiveDataOnOtherSlot
+                            + "subID: "
+                            + IwlanHelper.getSubId(mContext, getSlotIndex())
+                            + " mConnectedDataSub: "
+                            + mConnectedDataSub
                             + " isCrossSimEnabled: "
                             + isCSTEnabled);
             pw.println(
                     "isNetworkConnected: "
-                            + isNetworkConnected(isActiveDataOnOtherSlot, isCSTEnabled)
+                            + isNetworkConnected(
+                                    isActiveDataOnOtherSub(getSlotIndex()), isCSTEnabled)
                             + " Wfc enabled: "
                             + mWfcEnabled);
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
@@ -1137,18 +1150,15 @@ public class IwlanDataService extends DataService {
                     }
 
                     slotId = iwlanDataServiceProvider.getSlotIndex();
-                    boolean isActiveDataOnOtherSlot =
-                            IwlanHelper.isActiveDataOnOtherSlot(mContext, slotId);
                     boolean isCSTEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, slotId);
                     boolean networkConnected =
-                            isNetworkConnected(isActiveDataOnOtherSlot, isCSTEnabled);
+                            isNetworkConnected(isActiveDataOnOtherSub(slotId), isCSTEnabled);
                     Log.d(
                             TAG + "[" + slotId + "]",
                             "isDds: "
-                                    + IwlanHelper.isDefaultDataSlot(
-                                            mContext, slotId)
-                                    + ", isActiveDataOnOtherSlot: "
-                                    + isActiveDataOnOtherSlot
+                                    + IwlanHelper.isDefaultDataSlot(mContext, slotId)
+                                    + ", isActiveDataOnOtherSub: "
+                                    + isActiveDataOnOtherSub(slotId)
                                     + ", isCstEnabled: "
                                     + isCSTEnabled
                                     + ", transport: "
@@ -1273,7 +1283,7 @@ public class IwlanDataService extends DataService {
                     slotId = iwlanDataServiceProvider.getSlotIndex();
                     boolean isNetworkLost =
                             !isNetworkConnected(
-                                    IwlanHelper.isActiveDataOnOtherSlot(mContext, slotId),
+                                    isActiveDataOnOtherSub(slotId),
                                     IwlanHelper.isCrossSimCallingEnabled(mContext, slotId));
                     boolean isHandOutSuccessful = (reason == REQUEST_REASON_HANDOVER);
 
@@ -1457,11 +1467,34 @@ public class IwlanDataService extends DataService {
         }
     }
 
+    static int getConnectedDataSub(NetworkCapabilities networkCapabilities) {
+        int connectedDataSub = INVALID_SUB_ID;
+        NetworkSpecifier specifier = networkCapabilities.getNetworkSpecifier();
+        TransportInfo transportInfo = networkCapabilities.getTransportInfo();
+
+        if (specifier != null && specifier instanceof TelephonyNetworkSpecifier) {
+            connectedDataSub = ((TelephonyNetworkSpecifier) specifier).getSubscriptionId();
+        } else if (transportInfo != null && transportInfo instanceof VcnTransportInfo) {
+            connectedDataSub = ((VcnTransportInfo) transportInfo).getSubId();
+        }
+        return connectedDataSub;
+    }
+
+    static void setConnectedDataSub(int subId) {
+        mConnectedDataSub = subId;
+    }
+
     @VisibleForTesting
-    static boolean isNetworkConnected(boolean isActiveDataOnOtherSlot, boolean isCstEnabled) {
-        if (isActiveDataOnOtherSlot && isCstEnabled) {
+    static boolean isActiveDataOnOtherSub(int slotId) {
+        int subId = IwlanHelper.getSubId(mContext, slotId);
+        return mConnectedDataSub != INVALID_SUB_ID && subId != mConnectedDataSub;
+    }
+
+    @VisibleForTesting
+    static boolean isNetworkConnected(boolean isActiveDataOnOtherSub, boolean isCstEnabled) {
+        if (isActiveDataOnOtherSub && isCstEnabled) {
             // For cross-SIM IWLAN (Transport.MOBILE), an active data PDN must be maintained on the
-            // other slot.
+            // other subscription.
             if (sNetworkConnected && (sDefaultDataTransport != Transport.MOBILE)) {
                 Log.e(TAG, "Internet is on other slot, but default transport is not MOBILE!");
             }

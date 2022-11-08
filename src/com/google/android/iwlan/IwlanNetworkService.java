@@ -196,7 +196,7 @@ public class IwlanNetworkService extends NetworkService {
         @VisibleForTesting
         void subscriptionChanged() {
             boolean subActive = false;
-            SubscriptionManager sm = SubscriptionManager.from(mContext);
+            SubscriptionManager sm = mContext.getSystemService(SubscriptionManager.class);
             if (sm.getActiveSubscriptionInfoForSimSlotIndex(getSlotIndex()) != null) {
                 subActive = true;
             }
@@ -222,6 +222,7 @@ public class IwlanNetworkService extends NetworkService {
             Log.d(TAG, "msg.what = " + eventToString(msg.what));
 
             IwlanNetworkServiceProvider iwlanNetworkServiceProvider;
+            int slotId;
 
             switch (msg.what) {
                 case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
@@ -261,23 +262,24 @@ public class IwlanNetworkService extends NetworkService {
                             .setEmergencyOnly(!iwlanNetworkServiceProvider.mIsSubActive)
                             .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
 
+                    slotId = iwlanNetworkServiceProvider.getSlotIndex();
                     if (!IwlanNetworkService.isNetworkConnected(
-                            IwlanHelper.isDefaultDataSlot(
-                                    mContext, iwlanNetworkServiceProvider.getSlotIndex()),
-                            IwlanHelper.isCrossSimCallingEnabled(
-                                    mContext, iwlanNetworkServiceProvider.getSlotIndex()))) {
+                            IwlanHelper.isActiveDataOnOtherSlot(mContext, slotId),
+                            IwlanHelper.isCrossSimCallingEnabled(mContext, slotId))) {
                         nriBuilder
                                 .setRegistrationState(
                                         NetworkRegistrationInfo
                                                 .REGISTRATION_STATE_NOT_REGISTERED_SEARCHING)
                                 .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_UNKNOWN);
-                        Log.d(TAG, "reg state REGISTRATION_STATE_NOT_REGISTERED_SEARCHING");
+                        Log.d(
+                                TAG + "[" + slotId + "]",
+                                ": reg state" + " REGISTRATION_STATE_NOT_REGISTERED_SEARCHING");
                     } else {
                         nriBuilder
                                 .setRegistrationState(
                                         NetworkRegistrationInfo.REGISTRATION_STATE_HOME)
                                 .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN);
-                        Log.d(TAG, "reg state REGISTRATION_STATE_HOME");
+                        Log.d(TAG + "[" + slotId + "]", ": reg state REGISTRATION_STATE_HOME");
                     }
 
                     callback.onRequestNetworkRegistrationInfoComplete(
@@ -296,14 +298,12 @@ public class IwlanNetworkService extends NetworkService {
 
                 case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER:
                     iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
-                    IwlanNetworkServiceProvider nsp =
-                            sIwlanNetworkServiceProviders.remove(
-                                    iwlanNetworkServiceProvider.getSlotIndex());
+                    slotId = iwlanNetworkServiceProvider.getSlotIndex();
+                    IwlanNetworkServiceProvider nsp = sIwlanNetworkServiceProviders.remove(slotId);
                     if (nsp == null) {
                         Log.w(
-                                TAG,
-                                "No NetworkServiceProvider exists for slot "
-                                        + iwlanNetworkServiceProvider.getSlotIndex());
+                                TAG + "[" + slotId + "]",
+                                "No NetworkServiceProvider exists for slot!");
                         return;
                     }
                     if (sIwlanNetworkServiceProviders.isEmpty()) {
@@ -360,9 +360,14 @@ public class IwlanNetworkService extends NetworkService {
         return np;
     }
 
-    public static boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
-        if (!isDds && isCstEnabled) {
-            // Only Non-DDS sub with CST enabled, can use any transport.
+    public static boolean isNetworkConnected(
+            boolean isActiveDataOnOtherSlot, boolean isCstEnabled) {
+        if (isActiveDataOnOtherSlot && isCstEnabled) {
+            // For cross-SIM IWLAN (Transport.MOBILE), an active data PDN must be maintained on the
+            // other slot.
+            if (sNetworkConnected && (sDefaultDataTransport != Transport.MOBILE)) {
+                Log.e(TAG, "Internet is on other slot, but default transport is not MOBILE!");
+            }
             return sNetworkConnected;
         } else {
             // For all other cases, only wifi transport can be used.

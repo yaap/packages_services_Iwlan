@@ -604,7 +604,7 @@ public class EpdgTunnelManager {
     }
 
     /**
-     * Gets a epdg tunnel manager instance.
+     * Gets a EpdgTunnelManager instance.
      *
      * @param context application context
      * @param subId subscription ID for the tunnel
@@ -613,6 +613,11 @@ public class EpdgTunnelManager {
     public static EpdgTunnelManager getInstance(@NonNull Context context, int subId) {
         return mTunnelManagerInstances.computeIfAbsent(
                 subId, k -> new EpdgTunnelManager(context, subId));
+    }
+
+    @VisibleForTesting
+    public static void resetAllInstances() {
+        mTunnelManagerInstances.clear();
     }
 
     public interface TunnelCallback {
@@ -967,13 +972,17 @@ public class EpdgTunnelManager {
 
         Ike3gppParams.Builder builder3gppParams = null;
 
-        String imei = getMobileDeviceIdentity();
-        if (imei != null) {
-            if (builder3gppParams == null) {
-                builder3gppParams = new Ike3gppParams.Builder();
+        // TODO(b/239753287): Telus carrier requests DEVICE_IDENTITY, but errors out when parsing
+        //  the response. Temporarily disabled.
+        if (false) {
+            String imei = getMobileDeviceIdentity();
+            if (imei != null) {
+                if (builder3gppParams == null) {
+                    builder3gppParams = new Ike3gppParams.Builder();
+                }
+                Log.d(TAG, "DEVICE_IDENTITY set in Ike3gppParams");
+                builder3gppParams.setMobileDeviceIdentity(imei);
             }
-            Log.d(TAG, "DEVICE_IDENTITY set in Ike3gppParams");
-            builder3gppParams.setMobileDeviceIdentity(imei);
         }
 
         if (setupRequest.pduSessionId() != 0) {

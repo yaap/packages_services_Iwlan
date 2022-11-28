@@ -2032,4 +2032,25 @@ public class EpdgTunnelManagerTest {
 
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
     }
+
+    @Test
+    public void testCloseTunnelWithEpdgSelectionIncomplete() throws Exception {
+        // Bring up tunnel
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback,
+                        mMockIwlanTunnelCallbackMetrics);
+        assertTrue(ret);
+
+        // close tunnel when ePDG selection is incomplete
+        ret = mEpdgTunnelManager.closeTunnel(TEST_APN_NAME, false /*forceClose*/);
+        assertTrue(ret);
+        mTestLooper.dispatchAll();
+
+        verify(mMockIwlanTunnelCallbackMetrics, times(1))
+                .onClosed(eq(TEST_APN_NAME), eq(null), eq(0), eq(0));
+    }
 }

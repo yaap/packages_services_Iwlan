@@ -1771,7 +1771,11 @@ public class EpdgTunnelManager {
 
                 requestWrapper
                         .getTunnelCallbackMetrics()
-                        .onClosed(apnName, mEpdgAddress.getHostAddress(), 0, 0);
+                        .onClosed(
+                                apnName,
+                                mEpdgAddress == null ? null : mEpdgAddress.getHostAddress(),
+                                0,
+                                0);
                 numRequestsClosed++;
             } else {
                 mPendingBringUpRequests.add(requestWrapper);

@@ -17,6 +17,7 @@
 package com.google.android.iwlan;
 
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
@@ -31,6 +32,8 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.TelephonyNetworkSpecifier;
+import android.net.vcn.VcnTransportInfo;
 import android.os.test.TestLooper;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.DataFailCause;
@@ -48,6 +51,7 @@ import android.telephony.ims.ImsMmTelManager;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
+import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallbackMetrics;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.TunnelState;
 import com.google.android.iwlan.IwlanDataService.IwlanNetworkMonitorCallback;
 import com.google.android.iwlan.epdg.EpdgSelector;
@@ -258,7 +262,7 @@ public class IwlanDataServiceTest {
         verifyNetworkConnected(TRANSPORT_WIFI);
         assertTrue(
                 mIwlanDataService.isNetworkConnected(
-                        false /* isActiveDataOnOtherSlot */, false /* isCstEnabled */));
+                        false /* isActiveDataOnOtherSub */, false /* isCstEnabled */));
     }
 
     @Test
@@ -269,10 +273,59 @@ public class IwlanDataServiceTest {
         verifyNetworkLost();
         assertFalse(
                 mIwlanDataService.isNetworkConnected(
-                        false /* isActiveDataOnOtherSlot */, false /* isCstEnabled */));
+                        false /* isActiveDataOnOtherSub */, false /* isCstEnabled */));
         verify(mMockIwlanDataServiceProvider).forceCloseTunnelsInDeactivatingState();
         mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
         mTestLooper.dispatchAll();
+    }
+
+    @Test
+    public void testNetworkNotConnectedWithCellularAndCrossSimDisabled()
+            throws InterruptedException {
+        NetworkCapabilities nc =
+                prepareNetworkCapabilitiesForTest(
+                        TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX, false /* isVcn */);
+        mIwlanDataService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
+
+        boolean isActiveDataOnOtherSub =
+                mIwlanDataService.isActiveDataOnOtherSub(DEFAULT_SLOT_INDEX);
+
+        assertFalse(isActiveDataOnOtherSub);
+        assertFalse(
+                mIwlanDataService.isNetworkConnected(
+                        isActiveDataOnOtherSub, true /* isCstEnabled */));
+    }
+
+    @Test
+    public void testCrossSimNetworkConnectedWithTelephonyNetwork() throws InterruptedException {
+        NetworkCapabilities nc =
+                prepareNetworkCapabilitiesForTest(
+                        TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX + 1, false /* isVcn */);
+        mIwlanDataService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
+
+        boolean isActiveDataOnOtherSub =
+                mIwlanDataService.isActiveDataOnOtherSub(DEFAULT_SLOT_INDEX);
+
+        assertTrue(isActiveDataOnOtherSub);
+        assertTrue(
+                mIwlanDataService.isNetworkConnected(
+                        isActiveDataOnOtherSub, true /* isCstEnabled */));
+    }
+
+    @Test
+    public void testCrossSimNetworkConnectedWithVcn() throws InterruptedException {
+        NetworkCapabilities nc =
+                prepareNetworkCapabilitiesForTest(
+                        TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX + 1, true /* isVcn */);
+        mIwlanDataService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
+
+        boolean isActiveDataOnOtherSub =
+                mIwlanDataService.isActiveDataOnOtherSub(DEFAULT_SLOT_INDEX);
+
+        assertTrue(isActiveDataOnOtherSub);
+        assertTrue(
+                mIwlanDataService.isNetworkConnected(
+                        isActiveDataOnOtherSub, true /* isCstEnabled */));
     }
 
     @Test
@@ -451,7 +504,10 @@ public class IwlanDataServiceTest {
 
         /* Check bringUpTunnel() is called. */
         verify(mMockEpdgTunnelManager, times(1))
-                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+                .bringUpTunnel(
+                        any(TunnelSetupRequest.class),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -488,7 +544,10 @@ public class IwlanDataServiceTest {
 
         /* Check bringUpTunnel() is called. */
         verify(mMockEpdgTunnelManager, times(1))
-                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+                .bringUpTunnel(
+                        any(TunnelSetupRequest.class),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         TunnelLinkProperties tp = TunnelLinkPropertiesTest.createTestTunnelLinkProperties();
@@ -583,6 +642,16 @@ public class IwlanDataServiceTest {
                 (setupDataReason == DataService.REQUEST_REASON_HANDOVER),
                 1);
 
+        mSpyIwlanDataServiceProvider.setMetricsAtom(
+                TEST_APN_NAME,
+                64, // type IMS
+                true,
+                13, // LTE
+                false,
+                true,
+                1 // Transport Wi-Fi
+                );
+
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR));
@@ -621,6 +690,16 @@ public class IwlanDataServiceTest {
                 null,
                 (setupDataReason == DataService.REQUEST_REASON_HANDOVER),
                 1);
+
+        mSpyIwlanDataServiceProvider.setMetricsAtom(
+                TEST_APN_NAME,
+                64, // type IMS
+                true,
+                13, // LTE
+                false,
+                true,
+                1 // Transport Wi-Fi
+                );
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -727,17 +806,28 @@ public class IwlanDataServiceTest {
         return dp;
     }
 
+    private NetworkCapabilities prepareNetworkCapabilitiesForTest(
+            int transportType, int subId, boolean isVcn) {
+        NetworkCapabilities.Builder builder =
+                new NetworkCapabilities.Builder().addTransportType(transportType);
+        if (isVcn) {
+            builder.setTransportInfo(new VcnTransportInfo(subId));
+        } else {
+            builder.setNetworkSpecifier(new TelephonyNetworkSpecifier(subId));
+        }
+        return builder.build();
+    }
+
     @Test
     public void testIwlanSetupDataCallFailsWithCellularAndCstDisabled() throws Exception {
         DataProfile dp = buildDataProfile();
-
-        /* Internet is connected through Mobile */
-        mIwlanDataService.setNetworkConnected(
-                true, mMockNetwork, IwlanDataService.Transport.MOBILE);
-
         /* CST is disabled, and data is on the same sub as the data service provider */
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(false);
-        when(mMockSubscriptionManager.getActiveDataSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
+
+        NetworkCapabilities nc =
+                prepareNetworkCapabilitiesForTest(
+                        TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX, false /* isVcn */);
+        mIwlanDataService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
 
         mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
@@ -763,13 +853,13 @@ public class IwlanDataServiceTest {
     public void testIwlanSetupDataCallFailsWithCellularOnSameSubAndCstEnabled() throws Exception {
         DataProfile dp = buildDataProfile();
 
-        /* Internet is connected through Mobile */
-        mIwlanDataService.setNetworkConnected(
-                true, mMockNetwork, IwlanDataService.Transport.MOBILE);
-
         /* CST is enabled, but data is on the same sub as the DataServiceProvider */
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
-        when(mMockSubscriptionManager.getActiveDataSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
+
+        NetworkCapabilities nc =
+                prepareNetworkCapabilitiesForTest(
+                        TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX, false /* isVcn */);
+        mIwlanDataService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
 
         mSpyIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
@@ -796,14 +886,13 @@ public class IwlanDataServiceTest {
             throws Exception {
         DataProfile dp = buildDataProfile();
 
-        /* Internet is connected through Mobile */
-        mIwlanDataService.setNetworkConnected(
-                true, mMockNetwork, IwlanDataService.Transport.MOBILE);
-
-        /* CST is enabled, and data is on a different sub than the DataServiceProvider */
+        /* CST is enabled, but data is on the same sub as the DataServiceProvider */
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
-        when(mMockSubscriptionManager.getActiveDataSubscriptionId())
-                .thenReturn(DEFAULT_SUB_INDEX + 1);
+
+        NetworkCapabilities nc =
+                prepareNetworkCapabilitiesForTest(
+                        TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX + 1, false /* isVcn */);
+        mIwlanDataService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
 
         doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
 
@@ -823,7 +912,10 @@ public class IwlanDataServiceTest {
 
         /* Check bringUpTunnel() is called. */
         verify(mMockEpdgTunnelManager, times(1))
-                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+                .bringUpTunnel(
+                        any(TunnelSetupRequest.class),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -859,6 +951,11 @@ public class IwlanDataServiceTest {
     @Test
     public void testIwlanTunnelStatsUnsolDownCounts() {
         DataProfile dp = buildDataProfile();
+
+        when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(mMockErrorPolicyManager);
+        when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
+                .thenReturn(DataFailCause.ERROR_UNSPECIFIED);
 
         mIwlanDataService.setNetworkConnected(true, mMockNetwork, IwlanDataService.Transport.WIFI);
         doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
@@ -930,6 +1027,21 @@ public class IwlanDataServiceTest {
         mSpyIwlanDataServiceProvider.setTunnelState(
                 dp, mMockDataServiceCallback, TunnelState.TUNNEL_UP, null, false, 1);
 
+        mSpyIwlanDataServiceProvider.setMetricsAtom(
+                TEST_APN_NAME,
+                64, // type IMS
+                true,
+                13, // LTE
+                false,
+                true,
+                1 // Transport Wi-Fi
+                );
+
+        when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(mMockErrorPolicyManager);
+        when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
+                .thenReturn(DataFailCause.ERROR_UNSPECIFIED);
+
         // Simulate IwlanDataService.onUnbind() which force close all tunnels
         mSpyIwlanDataServiceProvider.forceCloseTunnels();
         // Simulate DataService.onUnbind() which remove all IwlanDataServiceProviders
@@ -960,7 +1072,10 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         doReturn(true)
                 .when(mMockEpdgTunnelManager)
-                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+                .bringUpTunnel(
+                        any(TunnelSetupRequest.class),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -986,7 +1101,10 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         doReturn(true)
                 .when(mMockEpdgTunnelManager)
-                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+                .bringUpTunnel(
+                        any(TunnelSetupRequest.class),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
         mTestLooper.dispatchAll();
 
         advanceCalendarByTimeMs(setupTime);

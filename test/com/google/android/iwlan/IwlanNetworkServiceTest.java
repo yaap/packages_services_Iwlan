@@ -24,6 +24,10 @@ import static org.mockito.Mockito.*;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.TelephonyNetworkSpecifier;
+import android.net.vcn.VcnTransportInfo;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.INetworkService;
 import android.telephony.INetworkServiceCallback;
@@ -59,6 +63,7 @@ public class IwlanNetworkServiceTest {
     @Mock private ImsManager mMockImsManager;
     @Mock private ImsMmTelManager mMockImsMmTelManager;
     @Mock private INetworkServiceCallback mCallback;
+    @Mock private Network mMockNetwork;
     MockitoSession mStaticMockSession;
 
     IwlanNetworkService mIwlanNetworkService;
@@ -153,6 +158,25 @@ public class IwlanNetworkServiceTest {
                         eq(expectedStateBuilder.build()));
     }
 
+    private NetworkCapabilities prepareCellularNetworkCapabilitiesForTest(
+            int subId, boolean isVcn) {
+        NetworkCapabilities.Builder builder =
+                new NetworkCapabilities.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
+        if (isVcn) {
+            builder.setTransportInfo(new VcnTransportInfo(subId));
+        } else {
+            builder.setNetworkSpecifier(new TelephonyNetworkSpecifier(subId));
+        }
+        return builder.build();
+    }
+
+    private NetworkCapabilities prepareWifiNetworkCapabilitiesForTest() {
+        return new NetworkCapabilities.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .build();
+    }
+
     @Test
     public void testNetworkRegistrationInfoSearchingForCellularAndCstDisabled() throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
@@ -160,7 +184,9 @@ public class IwlanNetworkServiceTest {
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(false);
 
-        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.MOBILE);
+        NetworkCapabilities nc =
+                prepareCellularNetworkCapabilitiesForTest(DEFAULT_SUB_INDEX, false /* is Vcn */);
+        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
         mIwlanNetworkServiceProvider.subscriptionChanged();
 
         // Create expected NetworkRegistrationInfo
@@ -186,7 +212,9 @@ public class IwlanNetworkServiceTest {
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
 
-        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.MOBILE);
+        NetworkCapabilities nc =
+                prepareCellularNetworkCapabilitiesForTest(DEFAULT_SUB_INDEX, false /* is Vcn */);
+        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
         mIwlanNetworkServiceProvider.subscriptionChanged();
 
         // Create expected NetworkRegistrationInfo
@@ -211,10 +239,41 @@ public class IwlanNetworkServiceTest {
         assertTrue(mIwlanNetworkServiceProvider != null);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
-        when(mMockSubscriptionManager.getActiveDataSubscriptionId())
-                .thenReturn(DEFAULT_SUB_INDEX + 1);
 
-        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.MOBILE);
+        // Cellular data is on the other sub
+        NetworkCapabilities nc =
+                prepareCellularNetworkCapabilitiesForTest(
+                        DEFAULT_SUB_INDEX + 1, false /* is Vcn */);
+        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
+        mIwlanNetworkServiceProvider.subscriptionChanged();
+
+        // Create expected NetworkRegistrationInfo
+        NetworkRegistrationInfo.Builder expectedStateBuilder =
+                generateStateBuilder(
+                        NetworkRegistrationInfo.DOMAIN_PS,
+                        true /* isSubActive */,
+                        NetworkRegistrationInfo.REGISTRATION_STATE_HOME);
+
+        mBinder.requestNetworkRegistrationInfo(0, NetworkRegistrationInfo.DOMAIN_PS, mCallback);
+
+        verify(mCallback, timeout(1000).times(1))
+                .onRequestNetworkRegistrationInfoComplete(
+                        eq(NetworkServiceCallback.RESULT_SUCCESS),
+                        eq(expectedStateBuilder.build()));
+    }
+
+    @Test
+    public void testNetworkRegistrationInfoHomeForCellularVcnOnDifferentSubAndCstEnabled()
+            throws Exception {
+        mIwlanNetworkServiceProvider = initNSP();
+        assertTrue(mIwlanNetworkServiceProvider != null);
+
+        when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
+
+        // Cellular data as a VCN network is on the other sub
+        NetworkCapabilities nc =
+                prepareCellularNetworkCapabilitiesForTest(DEFAULT_SUB_INDEX + 1, true /* is Vcn */);
+        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
         mIwlanNetworkServiceProvider.subscriptionChanged();
 
         // Create expected NetworkRegistrationInfo
@@ -239,7 +298,8 @@ public class IwlanNetworkServiceTest {
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
 
-        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
+        NetworkCapabilities nc = prepareWifiNetworkCapabilitiesForTest();
+        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
         mIwlanNetworkServiceProvider.subscriptionChanged();
 
         // Create expected NetworkRegistrationInfo
@@ -264,7 +324,9 @@ public class IwlanNetworkServiceTest {
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(false);
 
-        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
+        NetworkCapabilities nc = prepareWifiNetworkCapabilitiesForTest();
+        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
+
         mIwlanNetworkServiceProvider.subscriptionChanged();
 
         // Create expected NetworkRegistrationInfo

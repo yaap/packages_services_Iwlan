@@ -809,7 +809,7 @@ public class IwlanDataService extends DataService {
             int networkTransport = -1;
             if (sDefaultDataTransport == Transport.MOBILE) {
                 networkTransport = TRANSPORT_CELLULAR;
-            } else if (sDefaultDataTransport == Transport.MOBILE) {
+            } else if (sDefaultDataTransport == Transport.WIFI) {
                 networkTransport = TRANSPORT_WIFI;
             }
 

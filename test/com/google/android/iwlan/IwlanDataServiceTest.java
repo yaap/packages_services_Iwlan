@@ -51,6 +51,7 @@ import android.telephony.ims.ImsMmTelManager;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
+import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallbackMetrics;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.TunnelState;
 import com.google.android.iwlan.IwlanDataService.IwlanNetworkMonitorCallback;
 import com.google.android.iwlan.epdg.EpdgSelector;
@@ -506,7 +507,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -546,7 +547,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         TunnelLinkProperties tp = TunnelLinkPropertiesTest.createTestTunnelLinkProperties();
@@ -916,7 +917,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -1076,7 +1077,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -1105,7 +1106,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
         mTestLooper.dispatchAll();
 
         advanceCalendarByTimeMs(setupTime);

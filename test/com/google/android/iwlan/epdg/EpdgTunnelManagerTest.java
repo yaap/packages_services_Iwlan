@@ -62,8 +62,6 @@ import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 
 import com.google.android.iwlan.IwlanError;
-import com.google.android.iwlan.IwlanTunnelMetricsImpl;
-import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 
 import org.junit.Before;
 import org.junit.Ignore;
@@ -137,12 +135,27 @@ public class EpdgTunnelManagerTest {
         public void onClosed(String apnName, IwlanError error) {}
     }
 
+    private static class IwlanTunnelCallbackMetrics
+            implements EpdgTunnelManager.TunnelCallbackMetrics {
+        public void onOpened(
+                String apnName,
+                String epdgServerAddress,
+                int epdgServerSelectionDuration,
+                int ikeTunnelEstablishmentDuration) {}
+
+        public void onClosed(
+                String apnName,
+                String epdgServerAddress,
+                int epdgServerSelectionDuration,
+                int ikeTunnelEstablishmentDuration) {}
+    }
+
     @Rule public final MockitoRule mockito = MockitoJUnit.rule();
     private TestLooper mTestLooper = new TestLooper();
 
     @Mock private Context mMockContext;
     @Mock private IwlanTunnelCallback mMockIwlanTunnelCallback;
-    @Mock private IwlanTunnelMetricsImpl mMockIwlanTunnelMetrics;
+    @Mock private IwlanTunnelCallbackMetrics mMockIwlanTunnelCallbackMetrics;
     @Mock private IkeSession mMockIkeSession;
     @Mock private EpdgSelector mMockEpdgSelector;
     @Mock private Network mMockNetwork;
@@ -226,7 +239,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_PPP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertFalse(ret);
     }
 
@@ -236,14 +249,14 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IPV6, 16),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertFalse(ret);
 
         ret =
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IPV6, -1),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertFalse(ret);
     }
 
@@ -268,17 +281,17 @@ public class EpdgTunnelManagerTest {
 
         boolean ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR_v4, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR_v4, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
 
         ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR_v6, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR_v6, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
 
         ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR_v4v6, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR_v4v6, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
     }
 
@@ -291,7 +304,7 @@ public class EpdgTunnelManagerTest {
 
         boolean ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertFalse(ret);
         verify(mEpdgTunnelManager).getTunnelSetupRequestApnName(TSR);
     }
@@ -304,7 +317,7 @@ public class EpdgTunnelManagerTest {
 
         boolean ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertFalse(ret);
         verify(mEpdgTunnelManager).isTunnelConfigContainExistApn(TEST_APN_NAME);
     }
@@ -319,14 +332,14 @@ public class EpdgTunnelManagerTest {
                 testApnName2,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
         doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
 
         boolean ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
     }
 
@@ -341,7 +354,7 @@ public class EpdgTunnelManagerTest {
 
         boolean ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        TSR, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -374,7 +387,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(apnName, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -494,7 +507,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -561,7 +574,7 @@ public class EpdgTunnelManagerTest {
                 testApnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
 
@@ -581,7 +594,7 @@ public class EpdgTunnelManagerTest {
                 testApnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
 
@@ -640,7 +653,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -708,7 +721,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -767,7 +780,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -828,7 +841,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -887,7 +900,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1012,7 +1025,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1152,7 +1165,7 @@ public class EpdgTunnelManagerTest {
                 testApnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
@@ -1183,7 +1196,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1206,7 +1219,7 @@ public class EpdgTunnelManagerTest {
                 apnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
         setVariable(mEpdgTunnelManager, "mLocalAddresses", EXPECTED_LOCAL_ADDRESSES);
@@ -1272,7 +1285,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(apnName, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1355,7 +1368,7 @@ public class EpdgTunnelManagerTest {
                 testApnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
@@ -1388,7 +1401,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1418,7 +1431,7 @@ public class EpdgTunnelManagerTest {
                 testApnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
@@ -1558,13 +1571,13 @@ public class EpdgTunnelManagerTest {
                     mEpdgTunnelManager.bringUpTunnel(
                             getHandoverTunnelSetupRequest(TEST_APN_NAME, apnProtocol),
                             mMockIwlanTunnelCallback,
-                            mMockIwlanTunnelMetrics);
+                            mMockIwlanTunnelCallbackMetrics);
         } else {
             ret =
                     mEpdgTunnelManager.bringUpTunnel(
                             getBasicTunnelSetupRequest(TEST_APN_NAME, apnProtocol),
                             mMockIwlanTunnelCallback,
-                            mMockIwlanTunnelMetrics);
+                            mMockIwlanTunnelCallbackMetrics);
         }
 
         assertTrue(ret);
@@ -1667,7 +1680,7 @@ public class EpdgTunnelManagerTest {
                 testApnName,
                 mMockIkeSession,
                 mMockIwlanTunnelCallback,
-                mMockIwlanTunnelMetrics,
+                mMockIwlanTunnelCallbackMetrics,
                 null,
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
@@ -1700,7 +1713,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1750,7 +1763,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
@@ -1792,7 +1805,7 @@ public class EpdgTunnelManagerTest {
                         getBasicTunnelSetupRequest(
                                 TEST_APN_NAME, ApnSetting.PROTOCOL_IPV6, PDU_SESSION_ID),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
 
         assertTrue(ret);
         mTestLooper.dispatchAll();
@@ -1861,7 +1874,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -1934,7 +1947,7 @@ public class EpdgTunnelManagerTest {
 
         boolean ret =
                 mEpdgTunnelManager.bringUpTunnel(
-                        tsr, mMockIwlanTunnelCallback, mMockIwlanTunnelMetrics);
+                        tsr, mMockIwlanTunnelCallback, mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -2041,7 +2054,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -2072,7 +2085,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
@@ -2092,7 +2105,7 @@ public class EpdgTunnelManagerTest {
                 mEpdgTunnelManager.bringUpTunnel(
                         getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
                         mMockIwlanTunnelCallback,
-                        mMockIwlanTunnelMetrics);
+                        mMockIwlanTunnelCallbackMetrics);
         assertTrue(ret);
 
         // close tunnel when ePDG selection is incomplete
@@ -2100,11 +2113,8 @@ public class EpdgTunnelManagerTest {
         assertTrue(ret);
         mTestLooper.dispatchAll();
 
-        ArgumentCaptor<OnClosedMetrics> metricsCaptor =
-                ArgumentCaptor.forClass(OnClosedMetrics.class);
-        verify(mMockIwlanTunnelMetrics, times(1)).onClosed(metricsCaptor.capture());
-        assertEquals(TEST_APN_NAME, metricsCaptor.getValue().getApnName());
-        assertNull(metricsCaptor.getValue().getEpdgServerAddress());
+        verify(mMockIwlanTunnelCallbackMetrics, times(1))
+                .onClosed(eq(TEST_APN_NAME), eq(null), eq(0), eq(0));
     }
 
     @Test

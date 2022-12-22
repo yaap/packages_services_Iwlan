@@ -763,7 +763,6 @@ public class IwlanDataServiceTest {
                 .getValidatedServerList(
                         eq(0),
                         eq(EpdgSelector.PROTO_FILTER_IPV4V6),
-                        eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(false),
                         eq(mMockNetwork),
@@ -772,7 +771,6 @@ public class IwlanDataServiceTest {
                 .getValidatedServerList(
                         eq(0),
                         eq(EpdgSelector.PROTO_FILTER_IPV4V6),
-                        eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(true),
                         eq(mMockNetwork),

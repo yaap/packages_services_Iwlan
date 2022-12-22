@@ -156,6 +156,7 @@ public class EpdgTunnelManager {
     private InetAddress mEpdgAddress;
     private Network mNetwork;
     private int mTransactionId = 0;
+    private int mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
     private boolean mHasConnectedToEpdg;
     private IkeSessionCreator mIkeSessionCreator;
 
@@ -1621,7 +1622,7 @@ public class EpdgTunnelManager {
 
                         try {
                             if (mEpdgAddress instanceof Inet4Address
-                                    && !IwlanHelper.hasIpv4Address(mLocalAddresses)) {
+                                    && mProtoFilter == EpdgSelector.PROTO_FILTER_IPV6) {
                                 mLocalAddresses =
                                         IwlanHelper.getStackedAddressesForNetwork(
                                                 mNetwork, mContext);
@@ -1781,50 +1782,28 @@ public class EpdgTunnelManager {
     }
 
     private void selectEpdgAddress(TunnelSetupRequest setupRequest) {
-        ++mTransactionId;
-        mEpdgServerSelectionStartTime = System.currentTimeMillis();
-
-        final int ipPreference =
-                IwlanHelper.getConfig(
-                        CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_IP_TYPE_PREFERENCE_INT,
-                        mContext,
-                        mSlotId);
-
-        if (isIpPreferenceConflictsWithNetwork(ipPreference, mNetwork)) {
-            sendSelectionRequestComplete(
-                    null,
-                    new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED),
-                    mTransactionId);
+        mLocalAddresses = getAddressForNetwork(mNetwork, mContext);
+        if (mLocalAddresses == null || mLocalAddresses.size() == 0) {
+            Log.e(TAG, "No local addresses available.");
+            failAllPendingRequests(
+                    new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED));
             return;
         }
 
-        int protoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
-        int epdgAddressOrder = EpdgSelector.SYSTEM_PREFERRED;
-        switch (ipPreference) {
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_PREFERRED:
-                epdgAddressOrder = EpdgSelector.IPV4_PREFERRED;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_PREFERRED:
-                epdgAddressOrder = EpdgSelector.IPV6_PREFERRED;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY:
-                protoFilter = EpdgSelector.PROTO_FILTER_IPV4;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY:
-                protoFilter = EpdgSelector.PROTO_FILTER_IPV6;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_SYSTEM_PREFERRED:
-                break;
-            default:
-                Log.w(TAG, "Invalid Ip preference : " + ipPreference);
+        mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
+        if (!IwlanHelper.hasIpv6Address(mLocalAddresses)) {
+            mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4;
+        }
+        if (!IwlanHelper.hasIpv4Address(mLocalAddresses)) {
+            mProtoFilter = EpdgSelector.PROTO_FILTER_IPV6;
         }
 
+        mEpdgServerSelectionStartTime = System.currentTimeMillis();
         EpdgSelector epdgSelector = getEpdgSelector();
         IwlanError epdgError =
                 epdgSelector.getValidatedServerList(
-                        mTransactionId,
-                        protoFilter,
-                        epdgAddressOrder,
+                        ++mTransactionId,
+                        mProtoFilter,
                         setupRequest.isRoaming(),
                         setupRequest.isEmergency(),
                         mNetwork,
@@ -1832,7 +1811,7 @@ public class EpdgTunnelManager {
 
         if (epdgError.getErrorType() != IwlanError.NO_ERROR) {
             Log.e(TAG, "Epdg address selection failed with error:" + epdgError);
-            sendSelectionRequestComplete(null, epdgError, mTransactionId);
+            failAllPendingRequests(epdgError);
         }
     }
 
@@ -2372,50 +2351,6 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     void setEpdgAddress(InetAddress inetAddress) {
         mEpdgAddress = inetAddress;
-    }
-
-    @VisibleForTesting
-    boolean isIpPreferenceConflictsWithNetwork(
-            @CarrierConfigManager.Iwlan.EpdgAddressIpPreference int ipPreference, Network network) {
-        mLocalAddresses = getAddressForNetwork(mNetwork, mContext);
-        if (mLocalAddresses == null || mLocalAddresses.size() == 0) {
-            Log.e(TAG, "No local addresses available.");
-            return true;
-        }
-
-        int sourceIpType = EpdgSelector.PROTO_FILTER_IPV4V6;
-        if (!IwlanHelper.hasIpv6Address(mLocalAddresses)) {
-            sourceIpType = EpdgSelector.PROTO_FILTER_IPV4;
-        }
-        if (!IwlanHelper.hasIpv4Address(mLocalAddresses)) {
-            sourceIpType = EpdgSelector.PROTO_FILTER_IPV6;
-        }
-
-        if (sourceIpType == EpdgSelector.PROTO_FILTER_IPV4
-                && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY) {
-            Log.e(
-                    TAG,
-                    "ePDG IP preference: "
-                            + ipPreference
-                            + " conflicts with source IP type: "
-                            + sourceIpType);
-            return true;
-        } else if (sourceIpType == EpdgSelector.PROTO_FILTER_IPV6
-                && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY) {
-            // b/209938719 allows Iwlan to support VoWiFi for IPv4 ePDG server while on IPv6 WiFi.
-            // Iwlan will receive a IPv4 address which is embedded in stacked IPv6 address. By using
-            // this IPv4 address, UE will connect to IPv4 ePDG server through XLAT. However, there
-            // are issues on connecting ePDG server through XLAT. Will allow IPV4_ONLY on IPv6 WiFi
-            // after the issues are resolved.
-            Log.e(
-                    TAG,
-                    "ePDG IP preference: "
-                            + ipPreference
-                            + " conflicts with source IP type: "
-                            + sourceIpType);
-            return true;
-        }
-        return false;
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

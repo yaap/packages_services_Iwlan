@@ -51,6 +51,7 @@ import android.telephony.ims.ImsMmTelManager;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
+import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallbackMetrics;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.TunnelState;
 import com.google.android.iwlan.IwlanDataService.IwlanNetworkMonitorCallback;
 import com.google.android.iwlan.epdg.EpdgSelector;
@@ -506,7 +507,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -546,7 +547,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         TunnelLinkProperties tp = TunnelLinkPropertiesTest.createTestTunnelLinkProperties();
@@ -763,7 +764,6 @@ public class IwlanDataServiceTest {
                 .getValidatedServerList(
                         eq(0),
                         eq(EpdgSelector.PROTO_FILTER_IPV4V6),
-                        eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(false),
                         eq(mMockNetwork),
@@ -772,7 +772,6 @@ public class IwlanDataServiceTest {
                 .getValidatedServerList(
                         eq(0),
                         eq(EpdgSelector.PROTO_FILTER_IPV4V6),
-                        eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(true),
                         eq(mMockNetwork),
@@ -916,7 +915,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -1076,7 +1075,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -1105,7 +1104,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelMetricsImpl.class));
+                        any(IwlanTunnelCallbackMetrics.class));
         mTestLooper.dispatchAll();
 
         advanceCalendarByTimeMs(setupTime);

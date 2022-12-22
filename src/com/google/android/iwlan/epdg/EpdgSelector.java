@@ -136,13 +136,6 @@ public class EpdgSelector {
     @IntDef({PROTO_FILTER_IPV4, PROTO_FILTER_IPV6, PROTO_FILTER_IPV4V6})
     @interface ProtoFilter {}
 
-    public static final int IPV4_PREFERRED = 0;
-    public static final int IPV6_PREFERRED = 1;
-    public static final int SYSTEM_PREFERRED = 2;
-
-    @IntDef({IPV4_PREFERRED, IPV6_PREFERRED, SYSTEM_PREFERRED})
-    @interface EpdgAddressOrder {}
-
     public interface EpdgSelectorCallback {
         /*gives priority ordered list of addresses*/
         void onServerListChanged(int transactionId, ArrayList<InetAddress> validIPList);
@@ -242,9 +235,6 @@ public class EpdgSelector {
     private List<InetAddress> v4v6ProtocolFilter(List<InetAddress> ipList, int filter) {
         List<InetAddress> validIpList = new ArrayList<>();
         for (InetAddress ipAddress : ipList) {
-            if (IwlanHelper.isIpv4EmbeddedIpv6Address(ipAddress)) {
-                continue;
-            }
             switch (filter) {
                 case PROTO_FILTER_IPV4:
                     if (ipAddress instanceof Inet4Address) {
@@ -252,7 +242,7 @@ public class EpdgSelector {
                     }
                     break;
                 case PROTO_FILTER_IPV6:
-                    if (ipAddress instanceof Inet6Address) {
+                    if (!IwlanHelper.isIpv4EmbeddedIpv6Address(ipAddress)) {
                         validIpList.add(ipAddress);
                     }
                     break;
@@ -480,21 +470,6 @@ public class EpdgSelector {
         }
 
         return resultIpList;
-    }
-
-    private void prioritizeIp(@NonNull List<InetAddress> validIpList, @EpdgAddressOrder int order) {
-        switch (order) {
-            case IPV4_PREFERRED:
-                validIpList.sort(inetAddressComparator);
-                break;
-            case IPV6_PREFERRED:
-                validIpList.sort(inetAddressComparator.reversed());
-                break;
-            case SYSTEM_PREFERRED:
-                break;
-            default:
-                Log.w(TAG, "Invalid EpdgAddressOrder : " + order);
-        }
     }
 
     private String[] splitMccMnc(String plmn) {
@@ -1073,7 +1048,6 @@ public class EpdgSelector {
     public IwlanError getValidatedServerList(
             int transactionId,
             @ProtoFilter int filter,
-            @EpdgAddressOrder int order,
             boolean isRoaming,
             boolean isEmergency,
             @NonNull Network network,
@@ -1143,8 +1117,6 @@ public class EpdgSelector {
                     if (selectorCallback != null) {
                         if (mErrorPolicyManager.getMostRecentDataFailCause()
                                 == DataFailCause.IWLAN_CONGESTION) {
-                            plmnDomainNamesToIpAddress.values().removeIf(List::isEmpty);
-
                             int numFqdns = plmnDomainNamesToIpAddress.size();
                             int index = mErrorPolicyManager.getCurrentFqdnIndex(numFqdns);
                             if (index >= 0 && index < numFqdns) {
@@ -1161,7 +1133,7 @@ public class EpdgSelector {
                         }
 
                         if (!validIpList.isEmpty()) {
-                            prioritizeIp(validIpList, order);
+                            Collections.sort(validIpList, inetAddressComparator);
                             selectorCallback.onServerListChanged(
                                     transactionId, removeDuplicateIp(validIpList));
                         } else {

@@ -486,7 +486,12 @@ public class IwlanEventListener {
                 Log.e(SUB_TAG, "Could not find  ImsMmTelManager");
                 return;
             }
-            boolean wfcEnabled = imsMmTelManager.isVoWiFiSettingEnabled();
+            boolean wfcEnabled = false;
+            try {
+                wfcEnabled = imsMmTelManager.isVoWiFiSettingEnabled();
+            } catch (IllegalArgumentException e) {
+                Log.w(SUB_TAG, e.getMessage());
+            }
             int event = (wfcEnabled) ? WIFI_CALLING_ENABLE_EVENT : WIFI_CALLING_DISABLE_EVENT;
             getInstance(mContext, slotIndex).updateHandlers(event);
         } else {

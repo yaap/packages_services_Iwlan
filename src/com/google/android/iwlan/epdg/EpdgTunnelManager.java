@@ -146,6 +146,9 @@ public class EpdgTunnelManager {
     private static final String TRAFFIC_SELECTOR_IPV6_END_ADDR =
             "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff";
 
+    // "192.0.2.0" is selected from RFC5737, "IPv4 Address Blocks Reserved for Documentation"
+    private static final InetAddress DUMMY_ADDR = InetAddresses.parseNumericAddress("192.0.2.0");
+
     private static final Map<Integer, EpdgTunnelManager> mTunnelManagerInstances =
             new ConcurrentHashMap<>();
 
@@ -162,8 +165,6 @@ public class EpdgTunnelManager {
     private final Map<String, Integer> mApnNameToCurrentToken = new ConcurrentHashMap<>();
 
     private final String TAG;
-
-    private List<InetAddress> mLocalAddresses;
 
     @Nullable private byte[] mNextReauthId = null;
     private long mEpdgServerSelectionDuration = 0;
@@ -1581,30 +1582,12 @@ public class EpdgTunnelManager {
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
 
                     if (tunnelConfig.getIface() == null) {
-                        if (mLocalAddresses == null
-                                || mLocalAddresses.size() == 0
-                                || ipSecManager == null) {
-                            Log.e(TAG, "No local addresses found.");
-                            closeIkeSession(
-                                    apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
-                            return;
-                        }
-
                         try {
-                            if (mEpdgAddress instanceof Inet4Address
-                                    && !IwlanHelper.hasIpv4Address(mLocalAddresses)) {
-                                mLocalAddresses =
-                                        IwlanHelper.getStackedAddressesForNetwork(
-                                                mNetwork, mContext);
-                            }
-                            InetAddress localAddress =
-                                    (mEpdgAddress instanceof Inet4Address)
-                                            ? IwlanHelper.getIpv4Address(mLocalAddresses)
-                                            : IwlanHelper.getIpv6Address(mLocalAddresses);
-                            Log.d(TAG, "Local address = " + localAddress);
                             tunnelConfig.setIface(
                                     ipSecManager.createIpSecTunnelInterface(
-                                            localAddress, mEpdgAddress, mNetwork));
+                                            DUMMY_ADDR /* unused */,
+                                            DUMMY_ADDR /* unused */,
+                                            mNetwork));
                         } catch (IpSecManager.ResourceUnavailableException | IOException e) {
                             Log.e(TAG, "Failed to create tunnel interface. " + e);
                             closeIkeSession(
@@ -1874,7 +1857,6 @@ public class EpdgTunnelManager {
         mNetwork = null;
         mPendingBringUpRequests = new LinkedList<>();
         mApnNameToTunnelConfig = new ConcurrentHashMap<>();
-        mLocalAddresses = null;
     }
 
     private void serviceAllPendingRequests() {
@@ -2378,11 +2360,11 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     IpPreferenceConflict isIpPreferenceConflictsWithNetwork(
             @CarrierConfigManager.Iwlan.EpdgAddressIpPreference int ipPreference) {
-        mLocalAddresses = getAddressForNetwork(mNetwork, mContext);
-        if (mLocalAddresses == null || mLocalAddresses.size() == 0) {
+        List<InetAddress> localAddresses = getAddressForNetwork(mNetwork, mContext);
+        if (localAddresses == null || localAddresses.size() == 0) {
             Log.e(TAG, "No local addresses available.");
             return new IpPreferenceConflict(true, IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
-        } else if (!IwlanHelper.hasIpv6Address(mLocalAddresses)
+        } else if (!IwlanHelper.hasIpv6Address(localAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY) {
             Log.e(
                     TAG,
@@ -2391,7 +2373,7 @@ public class EpdgTunnelManager {
                             + " conflicts with source IP type: "
                             + EpdgSelector.PROTO_FILTER_IPV4);
             return new IpPreferenceConflict(true, IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED);
-        } else if (!IwlanHelper.hasIpv4Address(mLocalAddresses)
+        } else if (!IwlanHelper.hasIpv4Address(localAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY) {
             // b/209938719 allows Iwlan to support VoWiFi for IPv4 ePDG server while on IPv6 WiFi.
             // Iwlan will receive a IPv4 address which is embedded in stacked IPv6 address. By using

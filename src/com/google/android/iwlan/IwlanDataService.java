@@ -1822,7 +1822,7 @@ public class IwlanDataService extends DataService {
         }
 
         if (!network.equals(sNetwork)) {
-            Log.e(TAG, "setNetworkConnected NW changed from: " + sNetwork + " TO: " + network);
+            Log.e(TAG, "System default network changed from: " + sNetwork + " TO: " + network);
             hasNetworkChanged = true;
         }
 

@@ -158,6 +158,7 @@ public class EpdgTunnelManager {
     private IkeSessionCreator mIkeSessionCreator;
 
     private Map<String, TunnelConfig> mApnNameToTunnelConfig = new ConcurrentHashMap<>();
+    private Map<String, Integer> mApnNameToCurrentToken = new ConcurrentHashMap<>();
 
     private final String TAG;
 
@@ -450,38 +451,41 @@ public class EpdgTunnelManager {
     class TmIkeSessionCallback implements IkeSessionCallback {
 
         private final String mApnName;
+        private final int mToken;
 
-        TmIkeSessionCallback(String apnName) {
+        TmIkeSessionCallback(String apnName, int token) {
             this.mApnName = apnName;
+            this.mToken = token;
         }
 
         @Override
         public void onOpened(IkeSessionConfiguration sessionConfiguration) {
-            Log.d(TAG, "Ike session opened for apn: " + mApnName);
+            Log.d(TAG, "Ike session opened for apn: " + mApnName + " with token: " + mToken);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IKE_SESSION_OPENED,
-                            new IkeSessionOpenedData(mApnName, sessionConfiguration)));
+                            new IkeSessionOpenedData(mApnName, mToken, sessionConfiguration)));
         }
 
         @Override
         public void onClosed() {
-            Log.d(TAG, "Ike session closed for apn: " + mApnName);
+            Log.d(TAG, "Ike session closed for apn: " + mApnName + " with token: " + mToken);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IKE_SESSION_CLOSED,
-                            new SessionClosedData(mApnName, new IwlanError(IwlanError.NO_ERROR))));
+                            new SessionClosedData(
+                                    mApnName, mToken, new IwlanError(IwlanError.NO_ERROR))));
         }
 
         @Override
         public void onClosedExceptionally(IkeException exception) {
             mNextReauthId = null;
-            onSessionClosedWithException(exception, mApnName, EVENT_IKE_SESSION_CLOSED);
+            onSessionClosedWithException(exception, mApnName, mToken, EVENT_IKE_SESSION_CLOSED);
         }
 
         @Override
         public void onError(IkeProtocolException exception) {
-            Log.d(TAG, "Ike session onError for apn: " + mApnName);
+            Log.d(TAG, "Ike session onError for apn: " + mApnName + " with token: " + mToken);
 
             mNextReauthId = null;
 
@@ -501,21 +505,26 @@ public class EpdgTunnelManager {
                     TAG,
                     "Ike session connection info changed for apn: "
                             + mApnName
+                            + " with token: "
+                            + mToken
                             + " Network: "
                             + network);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED,
-                            new IkeSessionConnectionInfoData(mApnName, ikeSessionConnectionInfo)));
+                            new IkeSessionConnectionInfoData(
+                                    mApnName, mToken, ikeSessionConnectionInfo)));
         }
     }
 
     @VisibleForTesting
     class TmIke3gppCallback implements Ike3gppExtension.Ike3gppDataListener {
         private final String mApnName;
+        private final int mToken;
 
-        private TmIke3gppCallback(String apnName) {
+        private TmIke3gppCallback(String apnName, int token) {
             mApnName = apnName;
+            mToken = token;
         }
 
         @Override
@@ -523,7 +532,7 @@ public class EpdgTunnelManager {
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IKE_3GPP_DATA_RECEIVED,
-                            new Ike3gppDataReceived(mApnName, payloads)));
+                            new Ike3gppDataReceived(mApnName, mToken, payloads)));
         }
     }
 
@@ -531,67 +540,94 @@ public class EpdgTunnelManager {
     class TmChildSessionCallback implements ChildSessionCallback {
 
         private final String mApnName;
+        private final int mToken;
 
-        TmChildSessionCallback(String apnName) {
+        TmChildSessionCallback(String apnName, int token) {
             this.mApnName = apnName;
+            this.mToken = token;
         }
 
         @Override
         public void onOpened(ChildSessionConfiguration sessionConfiguration) {
+            Log.d(TAG, "onOpened child session for apn: " + mApnName + " with token: " + mToken);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_OPENED,
                             new TunnelOpenedData(
                                     mApnName,
+                                    mToken,
                                     sessionConfiguration.getInternalDnsServers(),
                                     sessionConfiguration.getInternalAddresses())));
         }
 
         @Override
         public void onClosed() {
-            Log.d(TAG, "onClosed child session for apn: " + mApnName);
+            Log.d(TAG, "onClosed child session for apn: " + mApnName + " with token: " + mToken);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_CLOSED,
-                            new SessionClosedData(mApnName, new IwlanError(IwlanError.NO_ERROR))));
+                            new SessionClosedData(
+                                    mApnName, mToken, new IwlanError(IwlanError.NO_ERROR))));
         }
 
         @Override
         public void onClosedExceptionally(IkeException exception) {
-            onSessionClosedWithException(exception, mApnName, EVENT_CHILD_SESSION_CLOSED);
+            onSessionClosedWithException(exception, mApnName, mToken, EVENT_CHILD_SESSION_CLOSED);
         }
 
         @Override
         public void onIpSecTransformsMigrated(
                 IpSecTransform inIpSecTransform, IpSecTransform outIpSecTransform) {
             // migration is similar to addition
-            Log.d(TAG, "Transforms migrated for apn: + " + mApnName);
+            Log.d(TAG, "Transforms migrated for apn: " + mApnName + " with token: " + mToken);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IPSEC_TRANSFORM_CREATED,
                             new IpsecTransformData(
-                                    inIpSecTransform, IpSecManager.DIRECTION_IN, mApnName)));
+                                    inIpSecTransform,
+                                    IpSecManager.DIRECTION_IN,
+                                    mApnName,
+                                    mToken)));
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IPSEC_TRANSFORM_CREATED,
                             new IpsecTransformData(
-                                    outIpSecTransform, IpSecManager.DIRECTION_OUT, mApnName)));
+                                    outIpSecTransform,
+                                    IpSecManager.DIRECTION_OUT,
+                                    mApnName,
+                                    mToken)));
         }
 
         @Override
         public void onIpSecTransformCreated(IpSecTransform ipSecTransform, int direction) {
-            Log.d(TAG, "Transform created, direction: " + direction + ", apn:" + mApnName);
+            Log.d(
+                    TAG,
+                    "Transform created, direction: "
+                            + direction
+                            + ", apn: "
+                            + mApnName
+                            + ", token: "
+                            + mToken);
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IPSEC_TRANSFORM_CREATED,
-                            new IpsecTransformData(ipSecTransform, direction, mApnName)));
+                            new IpsecTransformData(ipSecTransform, direction, mApnName, mToken)));
         }
 
         @Override
         public void onIpSecTransformDeleted(IpSecTransform ipSecTransform, int direction) {
-            Log.d(TAG, "Transform deleted, direction: " + direction + ", apn:" + mApnName);
+            Log.d(
+                    TAG,
+                    "Transform deleted, direction: "
+                            + direction
+                            + ", apn: "
+                            + mApnName
+                            + ", token: "
+                            + mToken);
             mHandler.sendMessage(
-                    mHandler.obtainMessage(EVENT_IPSEC_TRANSFORM_DELETED, ipSecTransform));
+                    mHandler.obtainMessage(
+                            EVENT_IPSEC_TRANSFORM_DELETED,
+                            new IpsecTransformData(ipSecTransform, direction, mApnName, mToken)));
         }
     }
 
@@ -770,8 +806,10 @@ public class EpdgTunnelManager {
                         + "ePDG : "
                         + mEpdgAddress.getHostAddress());
 
+        final int token = incrementAndGetCurrentTokenForApn(apnName);
+
         try {
-            ikeSessionParams = buildIkeSessionParams(setupRequest, apnName);
+            ikeSessionParams = buildIkeSessionParams(setupRequest, apnName, token);
         } catch (IwlanSimNotReadyException e) {
             IwlanError iwlanError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
             reportIwlanError(apnName, iwlanError);
@@ -788,8 +826,8 @@ public class EpdgTunnelManager {
                                 ikeSessionParams,
                                 buildChildSessionParams(setupRequest),
                                 Executors.newSingleThreadExecutor(),
-                                getTmIkeSessionCallback(apnName),
-                                new TmChildSessionCallback(apnName));
+                                getTmIkeSessionCallback(apnName, token),
+                                new TmChildSessionCallback(apnName, token));
 
         boolean isSrcIpv6Present = setupRequest.srcIpv6Address().isPresent();
         putApnNameToTunnelConfig(
@@ -951,7 +989,8 @@ public class EpdgTunnelManager {
         return imei.substring(0, imei.length() - 1) + imeisv_suffix;
     }
 
-    private IkeSessionParams buildIkeSessionParams(TunnelSetupRequest setupRequest, String apnName)
+    private IkeSessionParams buildIkeSessionParams(
+            TunnelSetupRequest setupRequest, String apnName, int token)
             throws IwlanSimNotReadyException {
         int hardTimeSeconds =
                 (int) getConfig(CarrierConfigManager.Iwlan.KEY_IKE_REKEY_HARD_TIMER_SEC_INT);
@@ -1045,7 +1084,8 @@ public class EpdgTunnelManager {
 
         if (builder3gppParams != null) {
             Ike3gppExtension extension =
-                    new Ike3gppExtension(builder3gppParams.build(), new TmIke3gppCallback(apnName));
+                    new Ike3gppExtension(
+                            builder3gppParams.build(), new TmIke3gppCallback(apnName, token));
             builder.setIke3gppExtension(extension);
         }
 
@@ -1280,12 +1320,14 @@ public class EpdgTunnelManager {
     }
 
     private void onSessionClosedWithException(
-            IkeException exception, String apnName, int sessionType) {
+            IkeException exception, String apnName, int token, int sessionType) {
         IwlanError error = new IwlanError(exception);
         Log.e(
                 TAG,
                 "Closing tunnel with exception for apn: "
                         + apnName
+                        + " with token: "
+                        + token
                         + " sessionType:"
                         + sessionType
                         + " error: "
@@ -1293,7 +1335,7 @@ public class EpdgTunnelManager {
         exception.printStackTrace();
 
         mHandler.sendMessage(
-                mHandler.obtainMessage(sessionType, new SessionClosedData(apnName, error)));
+                mHandler.obtainMessage(sessionType, new SessionClosedData(apnName, token, error)));
     }
 
     private boolean isEpdgSelectionOrFirstTunnelBringUpInProgress() {
@@ -1310,10 +1352,30 @@ public class EpdgTunnelManager {
 
         @Override
         public void handleMessage(Message msg) {
-            Log.d(TAG, "msg.what = " + msg.what);
+            Log.d(TAG, "msg.what = " + eventToString(msg.what));
 
             String apnName;
             TunnelConfig tunnelConfig;
+
+            switch (msg.what) {
+                case EVENT_CHILD_SESSION_OPENED:
+                case EVENT_IKE_SESSION_CLOSED:
+                case EVENT_IPSEC_TRANSFORM_CREATED:
+                case EVENT_IPSEC_TRANSFORM_DELETED:
+                case EVENT_CHILD_SESSION_CLOSED:
+                case EVENT_IKE_SESSION_OPENED:
+                case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED:
+                case EVENT_IKE_3GPP_DATA_RECEIVED:
+                    IkeEventData ikeEventData = (IkeEventData) msg.obj;
+                    if (isObsoleteToken(ikeEventData.mApnName, ikeEventData.mToken)) {
+                        Log.d(
+                                TAG,
+                                eventToString(msg.what)
+                                        + " for obsolete token "
+                                        + ikeEventData.mToken);
+                        return;
+                    }
+            }
 
             switch (msg.what) {
                 case EVENT_TUNNEL_BRINGUP_REQUEST:
@@ -1616,7 +1678,8 @@ public class EpdgTunnelManager {
                     break;
 
                 case EVENT_IPSEC_TRANSFORM_DELETED:
-                    IpSecTransform transform = (IpSecTransform) msg.obj;
+                    transformData = (IpsecTransformData) msg.obj;
+                    IpSecTransform transform = transformData.getTransform();
                     transform.close();
                     break;
 
@@ -1635,10 +1698,11 @@ public class EpdgTunnelManager {
 
                 case EVENT_IKE_SESSION_OPENED:
                     IkeSessionOpenedData ikeSessionOpenedData = (IkeSessionOpenedData) msg.obj;
+                    apnName = ikeSessionOpenedData.mApnName;
                     IkeSessionConfiguration sessionConfiguration =
                             ikeSessionOpenedData.mIkeSessionConfiguration;
 
-                    tunnelConfig = mApnNameToTunnelConfig.get(ikeSessionOpenedData.mApnName);
+                    tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     tunnelConfig.setPcscfAddrList(sessionConfiguration.getPcscfServers());
 
                     boolean enabledFastReauth =
@@ -1793,7 +1857,11 @@ public class EpdgTunnelManager {
 
                 requestWrapper
                         .getTunnelCallbackMetrics()
-                        .onClosed(apnName, mEpdgAddress.getHostAddress(), 0, 0);
+                        .onClosed(
+                                apnName,
+                                mEpdgAddress == null ? null : mEpdgAddress.getHostAddress(),
+                                0,
+                                0);
                 numRequestsClosed++;
             } else {
                 mPendingBringUpRequests.add(requestWrapper);
@@ -1942,62 +2010,58 @@ public class EpdgTunnelManager {
     }
 
     // Data received from IkeSessionStateMachine on successful EVENT_CHILD_SESSION_OPENED.
-    private static final class TunnelOpenedData {
-        final String mApnName;
+    private static final class TunnelOpenedData extends IkeEventData {
         final List<InetAddress> mInternalDnsServers;
         final List<LinkAddress> mInternalAddresses;
 
         private TunnelOpenedData(
                 String apnName,
+                int token,
                 List<InetAddress> internalDnsServers,
                 List<LinkAddress> internalAddresses) {
-            mApnName = apnName;
+            super(apnName, token);
             mInternalDnsServers = internalDnsServers;
             mInternalAddresses = internalAddresses;
         }
     }
 
     // Data received from IkeSessionStateMachine on successful EVENT_IKE_SESSION_OPENED.
-    private static final class IkeSessionOpenedData {
-        final String mApnName;
+    private static final class IkeSessionOpenedData extends IkeEventData {
         final IkeSessionConfiguration mIkeSessionConfiguration;
 
         private IkeSessionOpenedData(
-                String apnName, IkeSessionConfiguration ikeSessionConfiguration) {
-            mApnName = apnName;
+                String apnName, int token, IkeSessionConfiguration ikeSessionConfiguration) {
+            super(apnName, token);
             mIkeSessionConfiguration = ikeSessionConfiguration;
         }
     }
 
-    private static final class IkeSessionConnectionInfoData {
-        final String mApnName;
+    private static final class IkeSessionConnectionInfoData extends IkeEventData {
         final IkeSessionConnectionInfo mIkeSessionConnectionInfo;
 
         private IkeSessionConnectionInfoData(
-                String apnName, IkeSessionConnectionInfo ikeSessionConnectionInfo) {
-            mApnName = apnName;
+                String apnName, int token, IkeSessionConnectionInfo ikeSessionConnectionInfo) {
+            super(apnName, token);
             mIkeSessionConnectionInfo = ikeSessionConnectionInfo;
         }
     }
 
-    private static final class Ike3gppDataReceived {
-        final String mApnName;
+    private static final class Ike3gppDataReceived extends IkeEventData {
         final List<Ike3gppData> mIke3gppData;
 
-        private Ike3gppDataReceived(String apnName, List<Ike3gppData> ike3gppData) {
-            mApnName = apnName;
+        private Ike3gppDataReceived(String apnName, int token, List<Ike3gppData> ike3gppData) {
+            super(apnName, token);
             mIke3gppData = ike3gppData;
         }
     }
 
     // Data received from IkeSessionStateMachine if either IKE session or Child session have been
     // closed, normally or exceptionally.
-    private static final class SessionClosedData {
-        final String mApnName;
+    private static final class SessionClosedData extends IkeEventData {
         final IwlanError mIwlanError;
 
-        private SessionClosedData(String apnName, IwlanError iwlanError) {
-            mApnName = apnName;
+        private SessionClosedData(String apnName, int token, IwlanError iwlanError) {
+            super(apnName, token);
             mIwlanError = iwlanError;
         }
     }
@@ -2007,15 +2071,15 @@ public class EpdgTunnelManager {
         mTunnelManagerInstances.remove(mSlotId);
     }
 
-    private static final class IpsecTransformData {
+    private static final class IpsecTransformData extends IkeEventData {
         private final IpSecTransform mTransform;
         private final int mDirection;
-        private final String mApnName;
 
-        private IpsecTransformData(IpSecTransform transform, int direction, String apnName) {
+        private IpsecTransformData(
+                IpSecTransform transform, int direction, String apnName, int token) {
+            super(apnName, token);
             mTransform = transform;
             mDirection = direction;
-            mApnName = apnName;
         }
 
         public IpSecTransform getTransform() {
@@ -2027,7 +2091,17 @@ public class EpdgTunnelManager {
         }
 
         public String getApnName() {
-            return mApnName;
+            return super.mApnName;
+        }
+    }
+
+    private abstract static class IkeEventData {
+        final String mApnName;
+        final int mToken;
+
+        private IkeEventData(String apnName, int token) {
+            mApnName = apnName;
+            mToken = token;
         }
     }
 
@@ -2164,6 +2238,15 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
+    int incrementAndGetCurrentTokenForApn(String apnName) {
+        final int currentToken =
+                mApnNameToCurrentToken.compute(
+                        apnName, (apn, token) -> token == null ? 0 : token + 1);
+        Log.d(TAG, "Added token: " + currentToken + " for apn: " + apnName);
+        return currentToken;
+    }
+
+    @VisibleForTesting
     boolean isTunnelConfigContainExistApn(String apnName) {
         boolean ret = mApnNameToTunnelConfig.containsKey(apnName);
         return ret;
@@ -2203,9 +2286,47 @@ public class EpdgTunnelManager {
                 || proto == ApnSetting.PROTOCOL_IPV6);
     }
 
+    boolean isObsoleteToken(String apnName, int token) {
+        if (!mApnNameToCurrentToken.containsKey(apnName)) {
+            return true;
+        }
+        return token != mApnNameToCurrentToken.get(apnName);
+    }
+
+    private static String eventToString(int event) {
+        switch (event) {
+            case EVENT_TUNNEL_BRINGUP_REQUEST:
+                return "EVENT_TUNNEL_BRINGUP_REQUEST";
+            case EVENT_TUNNEL_BRINGDOWN_REQUEST:
+                return "EVENT_TUNNEL_BRINGDOWN_REQUEST";
+            case EVENT_CHILD_SESSION_OPENED:
+                return "EVENT_CHILD_SESSION_OPENED";
+            case EVENT_CHILD_SESSION_CLOSED:
+                return "EVENT_CHILD_SESSION_CLOSED";
+            case EVENT_IKE_SESSION_CLOSED:
+                return "EVENT_IKE_SESSION_CLOSED";
+            case EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE:
+                return "EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE";
+            case EVENT_IPSEC_TRANSFORM_CREATED:
+                return "EVENT_IPSEC_TRANSFORM_CREATED";
+            case EVENT_IPSEC_TRANSFORM_DELETED:
+                return "EVENT_IPSEC_TRANSFORM_DELETED";
+            case EVENT_UPDATE_NETWORK:
+                return "EVENT_UPDATE_NETWORK";
+            case EVENT_IKE_SESSION_OPENED:
+                return "EVENT_IKE_SESSION_OPENED";
+            case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED:
+                return "EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED";
+            case EVENT_IKE_3GPP_DATA_RECEIVED:
+                return "EVENT_IKE_3GPP_DATA_RECEIVED";
+            default:
+                return "Unknown(" + event + ")";
+        }
+    }
+
     @VisibleForTesting
-    TmIkeSessionCallback getTmIkeSessionCallback(String apnName) {
-        return new TmIkeSessionCallback(apnName);
+    TmIkeSessionCallback getTmIkeSessionCallback(String apnName, int token) {
+        return new TmIkeSessionCallback(apnName, token);
     }
 
     @VisibleForTesting
@@ -2216,6 +2337,14 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     TunnelConfig getTunnelConfigForApn(String apnName) {
         return mApnNameToTunnelConfig.get(apnName);
+    }
+
+    @VisibleForTesting
+    int getCurrentTokenForApn(String apnName) {
+        if (!mApnNameToCurrentToken.containsKey(apnName)) {
+            throw new IllegalArgumentException("There is no token for apn: " + apnName);
+        }
+        return mApnNameToCurrentToken.get(apnName);
     }
 
     @VisibleForTesting

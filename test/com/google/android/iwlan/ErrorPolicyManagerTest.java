@@ -20,6 +20,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSess
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.mock;
@@ -40,6 +41,9 @@ import android.telephony.data.DataService;
 
 import androidx.test.InstrumentationRegistry;
 
+import com.google.auto.value.AutoValue;
+
+import org.json.JSONArray;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,9 +53,80 @@ import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class ErrorPolicyManagerTest {
+    @AutoValue
+    abstract static class ErrorPolicyString {
+        abstract String errorType();
+
+        abstract List<String> errorDetails();
+
+        abstract List<String> retryArray();
+
+        abstract List<String> unthrottlingEvents();
+
+        abstract Optional<String> numAttemptsPerFqdn();
+
+        abstract Optional<String> handoverAttemptCount();
+
+        static Builder builder() {
+            return new AutoValue_ErrorPolicyManagerTest_ErrorPolicyString.Builder();
+        }
+
+        @AutoValue.Builder
+        abstract static class Builder {
+            abstract Builder setErrorType(String errorType);
+
+            abstract Builder setErrorDetails(List<String> errorDetails);
+
+            abstract Builder setRetryArray(List<String> retryArray);
+
+            abstract Builder setUnthrottlingEvents(List<String> unthrottlingEvents);
+
+            abstract Builder setNumAttemptsPerFqdn(String numAttemptsPerFqdn);
+
+            abstract Builder setHandoverAttemptCount(String handoverAttemptCount);
+
+            abstract ErrorPolicyString build();
+        }
+
+        String getErrorPolicyInString() {
+            StringBuilder errorPolicy =
+                    new StringBuilder(
+                            "\"ErrorType\": \""
+                                    + errorType()
+                                    + "\","
+                                    + "\"ErrorDetails\": [\""
+                                    + String.join("\", \"", errorDetails())
+                                    + "\"],"
+                                    + "\"RetryArray\": [\""
+                                    + String.join("\", \"", retryArray())
+                                    + "\"],"
+                                    + "\"UnthrottlingEvents\": [\""
+                                    + String.join("\", \"", unthrottlingEvents())
+                                    + "\"]");
+
+            numAttemptsPerFqdn()
+                    .ifPresent(
+                            numAttemptsPerFqdn ->
+                                    errorPolicy
+                                            .append(",\"NumAttemptsPerFqdn\": \"")
+                                            .append(numAttemptsPerFqdn)
+                                            .append("\""));
+            handoverAttemptCount()
+                    .ifPresent(
+                            handoverAttemptCount ->
+                                    errorPolicy
+                                            .append(",\"HandoverAttemptCount\": \"")
+                                            .append(handoverAttemptCount)
+                                            .append("\""));
+            return errorPolicy.toString();
+        }
+    }
+
     private static final String TAG = "ErrorPolicyManagerTest";
 
     // @Rule public final MockitoRule mockito = MockitoJUnit.rule();
@@ -131,17 +206,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34", "9000-9050"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34", "9000-9050"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_ENABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
 
@@ -207,11 +287,14 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"WRONG_ERROR_DETAIL"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("WRONG_ERROR_DETAIL"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
 
@@ -264,17 +347,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"*"},
-                                new String[] {"0"},
-                                new String[] {"APM_ENABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("*"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -317,17 +405,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_ENABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -368,17 +461,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_ENABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -414,17 +512,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"6", "12", "24"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_DISABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("6", "12", "24"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_DISABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_DISABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -465,17 +568,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"6", "12", "24"},
-                                new String[] {"WIFI_CALLING_DISABLE_EVENT", "WIFI_DISABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("6", "12", "24"))
+                                .setUnthrottlingEvents(
+                                        List.of("WIFI_CALLING_DISABLE_EVENT", "WIFI_DISABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_DISABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -516,17 +624,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_DISABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -568,17 +681,22 @@ public class ErrorPolicyManagerTest {
                         + apn1
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"4", "8", "16"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_ENABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
         PersistableBundle bundle = new PersistableBundle();
@@ -624,17 +742,22 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
-                                new String[] {"10", "15", "20"},
-                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("10", "15", "20"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}, {"
-                        + getErrorTypeInJSON(
-                                "GENERIC_ERROR_TYPE",
-                                new String[] {"SERVER_SELECTION_FAILED"},
-                                new String[] {"0"},
-                                new String[] {"APM_ENABLE_EVENT"})
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
 
@@ -687,19 +810,21 @@ public class ErrorPolicyManagerTest {
                         + apn
                         + "\","
                         + "\"ErrorTypes\": [{"
-                        + getErrorTypeInJSON(
-                                "IKE_PROTOCOL_ERROR_TYPE", /* ErrorType */
-                                new String[] {"15500"}, /* ErrorDetails ("CONGESTION") */
-                                "6", /* NumAttemptsPerFqdn */
-                                new String[] {
-                                    "0", "0", "300", "600", "1200", "0", "0", "0", "300", "600",
-                                    "1200", "-1"
-                                }, /* RetryArray */
-                                new String[] {
-                                    "APM_ENABLE_EVENT",
-                                    "WIFI_DISABLE_EVENT",
-                                    "WIFI_CALLING_DISABLE_EVENT"
-                                }) /* UnthrottlingEvents */
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("15500")) /* CONGESTION */
+                                .setRetryArray(
+                                        List.of(
+                                                "0", "0", "300", "600", "1200", "0", "0", "0",
+                                                "300", "600", "1200", "-1"))
+                                .setUnthrottlingEvents(
+                                        List.of(
+                                                "APM_ENABLE_EVENT",
+                                                "WIFI_DISABLE_EVENT",
+                                                "WIFI_CALLING_DISABLE_EVENT"))
+                                .setNumAttemptsPerFqdn("6")
+                                .build()
+                                .getErrorPolicyInString()
                         + "}]"
                         + "}]";
 
@@ -758,6 +883,124 @@ public class ErrorPolicyManagerTest {
     }
 
     @Test
+    public void testShouldRetryWithInitialAttach() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .setHandoverAttemptCount("2")
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+
+        // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(4, time);
+        assertFalse(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(8, time);
+        // Reached handover attempt count and error is IKE protocol error
+        assertTrue(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+    }
+
+    @Test
+    public void testShouldRetryWithInitialAttachForInternalError() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24", "34"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .setHandoverAttemptCount("2")
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}, {"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("SERVER_SELECTION_FAILED"))
+                                .setRetryArray(List.of("0", "0"))
+                                .setUnthrottlingEvents(List.of("APM_ENABLE_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+
+        // GENERIC_PROTOCOL_ERROR_TYPE - SERVER_SELECTION_FAILED and retryArray = 0, 0
+        IwlanError iwlanError = new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        assertFalse(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        // Should not retry with initial attach as the errors are not IKE_PROTOCOL_ERROR_TYPE
+        assertFalse(mErrorPolicyManager.shouldRetryWithInitialAttach(apn));
+    }
+
+    @Test
+    public void testHandoverAttemptCountInvalidErrorType() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("GENERIC_ERROR_TYPE")
+                                .setErrorDetails(List.of("*"))
+                                .setRetryArray(List.of("4", "8", "16"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .setHandoverAttemptCount("2")
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}]"
+                        + "}]";
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> mErrorPolicyManager.readErrorPolicies(new JSONArray(config)));
+    }
+
+    @Test
     public void testErrorStats() throws Exception {
         String apn1 = "ims";
         String apn2 = "mms";
@@ -796,48 +1039,6 @@ public class ErrorPolicyManagerTest {
         assertEquals(resultAuthApn2, ikeAuthCountApn2);
         assertEquals(resultServerApn1, serverSelectionCountApn1);
         assertEquals(resultServerApn2, serverSelectionCountApn2);
-    }
-
-    private String getErrorTypeInJSON(
-            String ErrorType,
-            String[] errorDetails,
-            String[] retryArray,
-            String[] unthrottlingEvents) {
-        return "\"ErrorType\": \""
-                + ErrorType
-                + "\","
-                + "\"ErrorDetails\": [\""
-                + String.join("\", \"", errorDetails)
-                + "\"],"
-                + "\"RetryArray\": [\""
-                + String.join("\", \"", retryArray)
-                + "\"],"
-                + "\"UnthrottlingEvents\": [\""
-                + String.join("\", \"", unthrottlingEvents)
-                + "\"]";
-    }
-
-    private String getErrorTypeInJSON(
-            String ErrorType,
-            String[] errorDetails,
-            String numAttemptsPerFqdn,
-            String[] retryArray,
-            String[] unthrottlingEvents) {
-        return "\"ErrorType\": \""
-                + ErrorType
-                + "\","
-                + "\"ErrorDetails\": [\""
-                + String.join("\", \"", errorDetails)
-                + "\"],"
-                + "\"NumAttemptsPerFqdn\": \""
-                + numAttemptsPerFqdn
-                + "\","
-                + "\"RetryArray\": [\""
-                + String.join("\", \"", retryArray)
-                + "\"],"
-                + "\"UnthrottlingEvents\": [\""
-                + String.join("\", \"", unthrottlingEvents)
-                + "\"]";
     }
 
     private void advanceClockByTimeMs(long time) {

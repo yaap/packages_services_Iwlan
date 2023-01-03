@@ -217,6 +217,7 @@ public class IwlanDataService extends DataService {
         private EpdgSelector mEpdgSelector;
         private IwlanDataTunnelStats mTunnelStats;
         private CellInfo mCellInfo = null;
+        private int mCallState = TelephonyManager.CALL_STATE_IDLE;
         private long mProcessingStartTime = 0;
 
         // apn to TunnelState
@@ -246,6 +247,7 @@ public class IwlanDataService extends DataService {
             private boolean mIsHandover;
             private Date mBringUpStateTime = null;
             private Date mUpStateTime = null;
+            private boolean mIsImsOrEmergency;
 
             public int getPduSessionId() {
                 return mPduSessionId;
@@ -325,6 +327,14 @@ public class IwlanDataService extends DataService {
 
             public Date getUpStateTime() {
                 return mUpStateTime;
+            }
+
+            public boolean getIsImsOrEmergency() {
+                return mIsImsOrEmergency;
+            }
+
+            public void setIsImsOrEmergency(boolean isImsOrEmergency) {
+                mIsImsOrEmergency = isImsOrEmergency;
             }
 
             @Override
@@ -612,6 +622,7 @@ public class IwlanDataService extends DataService {
             events.add(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT);
             events.add(IwlanEventListener.CELLINFO_CHANGED_EVENT);
+            events.add(IwlanEventListener.CALL_STATE_CHANGED_EVENT);
             IwlanEventListener.getInstance(mContext, slotIndex)
                     .addEventListener(events, mIwlanDataServiceHandler);
         }
@@ -903,13 +914,15 @@ public class IwlanDataService extends DataService {
                 int tunnelStatus,
                 TunnelLinkProperties linkProperties,
                 boolean isHandover,
-                int pduSessionId) {
+                int pduSessionId,
+                boolean isImsOrEmergency) {
             TunnelState tunnelState = new TunnelState(callback);
             tunnelState.setState(tunnelStatus);
             tunnelState.setProtocolType(dataProfile.getProtocolType());
             tunnelState.setTunnelLinkProperties(linkProperties);
             tunnelState.setIsHandover(isHandover);
             tunnelState.setPduSessionId(pduSessionId);
+            tunnelState.setIsImsOrEmergency(isImsOrEmergency);
             mTunnelStateForApn.put(dataProfile.getApn(), tunnelState);
         }
 
@@ -1055,6 +1068,25 @@ public class IwlanDataService extends DataService {
             return TelephonyManager.NETWORK_TYPE_UNKNOWN;
         }
 
+        /* Determines if this subscription is in an active call */
+        private boolean isOnCall() {
+            return mCallState != TelephonyManager.CALL_STATE_IDLE;
+        }
+
+        /**
+         * IMS and Emergency are not allowed to retry with initial attach during call to keep call
+         * continuity. Other APNs like XCAP and MMS are allowed to retry with initial attach
+         * regardless of the call state.
+         */
+        private boolean shouldRetryWithInitialAttachForHandoverRequest(
+                String apn, TunnelState tunnelState) {
+            boolean isOnImsOrEmergencyCall = tunnelState.getIsImsOrEmergency() && isOnCall();
+            return tunnelState.getIsHandover()
+                    && !isOnImsOrEmergencyCall
+                    && ErrorPolicyManager.getInstance(mContext, getSlotIndex())
+                            .shouldRetryWithInitialAttach(apn);
+        }
+
         /**
          * Called when the instance of data service is destroyed (e.g. got unbind or binder died) or
          * when the data service provider is removed.
@@ -1168,20 +1200,21 @@ public class IwlanDataService extends DataService {
                                 .setId(apnName.hashCode())
                                 .setProtocolType(tunnelState.getProtocolType());
 
-                        if (tunnelState.getIsHandover()) {
-                            respBuilder.setHandoverFailureMode(
-                                    DataCallResponse
-                                            .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
-                            metricsAtom.setHandoverFailureMode(
-                                    DataCallResponse
-                                            .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
-                        } else {
+                        if (iwlanDataServiceProvider.shouldRetryWithInitialAttachForHandoverRequest(
+                                apnName, tunnelState)) {
                             respBuilder.setHandoverFailureMode(
                                     DataCallResponse
                                             .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL);
                             metricsAtom.setHandoverFailureMode(
                                     DataCallResponse
                                             .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL);
+                        } else if (tunnelState.getIsHandover()) {
+                            respBuilder.setHandoverFailureMode(
+                                    DataCallResponse
+                                            .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
+                            metricsAtom.setHandoverFailureMode(
+                                    DataCallResponse
+                                            .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
                         }
 
                         if (tunnelState.getState()
@@ -1331,6 +1364,13 @@ public class IwlanDataService extends DataService {
                     }
                     break;
 
+                case IwlanEventListener.CALL_STATE_CHANGED_EVENT:
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+
+                    iwlanDataServiceProvider.mCallState = msg.arg2;
+                    break;
+
                 case EVENT_SETUP_DATA_CALL:
                     SetupDataCallData setupDataCallData = (SetupDataCallData) msg.obj;
                     int accessNetworkType = setupDataCallData.mAccessNetworkType;
@@ -1447,10 +1487,8 @@ public class IwlanDataService extends DataService {
                     }
 
                     int apnTypeBitmask = dataProfile.getSupportedApnTypesBitmask();
-                    boolean isIMS = (apnTypeBitmask & ApnSetting.TYPE_IMS) == ApnSetting.TYPE_IMS;
-                    boolean isEmergency =
-                            (apnTypeBitmask & ApnSetting.TYPE_EMERGENCY)
-                                    == ApnSetting.TYPE_EMERGENCY;
+                    boolean isIMS = hasApnTypes(apnTypeBitmask, ApnSetting.TYPE_IMS);
+                    boolean isEmergency = hasApnTypes(apnTypeBitmask, ApnSetting.TYPE_EMERGENCY);
                     tunnelReqBuilder.setRequestPcscf(isIMS || isEmergency);
                     tunnelReqBuilder.setIsEmergency(isEmergency);
 
@@ -1460,7 +1498,8 @@ public class IwlanDataService extends DataService {
                             IwlanDataServiceProvider.TunnelState.TUNNEL_IN_BRINGUP,
                             null,
                             (reason == DataService.REQUEST_REASON_HANDOVER),
-                            pduSessionId);
+                            pduSessionId,
+                            isIMS || isEmergency);
 
                     boolean result =
                             iwlanDataServiceProvider
@@ -1990,6 +2029,10 @@ public class IwlanDataService extends DataService {
         mNetworkMonitorCallback = null;
     }
 
+    boolean hasApnTypes(int apnTypeBitmask, int expectedApn) {
+        return (apnTypeBitmask & expectedApn) != 0;
+    }
+
     @VisibleForTesting
     void setAppContext(Context appContext) {
         mContext = appContext;
@@ -2044,6 +2087,8 @@ public class IwlanDataService extends DataService {
                 return "EVENT_TUNNEL_OPENED_METRICS";
             case EVENT_TUNNEL_CLOSED_METRICS:
                 return "EVENT_TUNNEL_CLOSED_METRICS";
+            case IwlanEventListener.CALL_STATE_CHANGED_EVENT:
+                return "CALL_STATE_CHANGED_EVENT";
             default:
                 return "Unknown(" + event + ")";
         }

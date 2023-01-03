@@ -93,8 +93,7 @@ public class IwlanEventListenerTest {
         when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
                 .thenReturn(mMockSubscriptionManager);
 
-        when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
-                        anyInt()))
+        when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(anyInt()))
                 .thenReturn(mMockSubscriptionInfo);
 
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
@@ -279,6 +278,27 @@ public class IwlanEventListenerTest {
         TelephonyCallback.CellInfoListener mTelephonyCallback =
                 mIwlanEventListener.getTelephonyCallback();
         mTelephonyCallback.onCellInfoChanged(arrayCi);
+
+        verify(mMockMessage, times(1)).sendToTarget();
+    }
+
+    @Test
+    public void testCallStateChanged() throws Exception {
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CALL_STATE_CHANGED_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        eq(TelephonyManager.CALL_STATE_OFFHOOK)))
+                .thenReturn(mMockMessage);
+
+        events = new ArrayList<Integer>();
+        events.add(IwlanEventListener.CALL_STATE_CHANGED_EVENT);
+        mIwlanEventListener.addEventListener(events, mMockHandler);
+
+        mIwlanEventListener.registerTelephonyCallback();
+
+        TelephonyCallback.CallStateListener mTelephonyCallback =
+                mIwlanEventListener.getTelephonyCallback();
+        mTelephonyCallback.onCallStateChanged(TelephonyManager.CALL_STATE_OFFHOOK);
 
         verify(mMockMessage, times(1)).sendToTarget();
     }

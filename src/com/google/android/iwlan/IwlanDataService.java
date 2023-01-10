@@ -1095,8 +1095,10 @@ public class IwlanDataService extends DataService {
         public void close() {
             // TODO: call epdgtunnelmanager.releaseInstance or equivalent
             mIwlanDataService.removeDataServiceProvider(this);
-            IwlanEventListener.getInstance(mContext, getSlotIndex())
-                    .removeEventListener(mIwlanDataServiceHandler);
+            IwlanEventListener iwlanEventListener =
+                    IwlanEventListener.getInstance(mContext, getSlotIndex());
+            iwlanEventListener.removeEventListener(mIwlanDataServiceHandler);
+            iwlanEventListener.unregisterContentObserver();
         }
 
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

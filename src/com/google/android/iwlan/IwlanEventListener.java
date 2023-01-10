@@ -43,6 +43,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -142,6 +143,8 @@ public class IwlanEventListener {
 
         @Override
         public void onChange(boolean selfChange, Uri uri) {
+            Objects.requireNonNull(mCrossSimCallingUri, "CrossSimCallingUri must not be null");
+            Objects.requireNonNull(mWfcEnabledUri, "WfcEnabledUri must not be null");
             if (mCrossSimCallingUri.equals(uri)) {
                 notifyCurrentSetting(uri);
             } else if (mWfcEnabledUri.equals(uri)) {
@@ -414,7 +417,7 @@ public class IwlanEventListener {
     }
 
     /** Unregister ContentObserver. */
-    private void unregisterContentObserver() {
+    void unregisterContentObserver() {
         if (mUserSettingContentObserver != null) {
             mContext.getContentResolver().unregisterContentObserver(mUserSettingContentObserver);
         }

@@ -2260,7 +2260,7 @@ public class EpdgTunnelManagerTest {
     public void testBringUpTunnelIpv6OnlyOnIpv4Wifi() throws Exception {
         TunnelSetupRequest TSR =
                 getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IPV6);
-        IwlanError error = new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
+        IwlanError error = new IwlanError(IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT);
         doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(TEST_APN_NAME), eq(error));
 

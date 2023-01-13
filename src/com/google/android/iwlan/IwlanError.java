@@ -42,6 +42,7 @@ public class IwlanError {
     public static final int SIM_NOT_READY_EXCEPTION = 6;
     public static final int IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED = 7;
     public static final int IKE_NETWORK_LOST_EXCEPTION = 8;
+    public static final int EPDG_IP_VERSION_PREFERENCE_CONFLICT = 9;
 
     @IntDef({
         NO_ERROR,
@@ -52,7 +53,8 @@ public class IwlanError {
         TUNNEL_TRANSFORM_FAILED,
         SIM_NOT_READY_EXCEPTION,
         IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED,
-        IKE_NETWORK_LOST_EXCEPTION
+        IKE_NETWORK_LOST_EXCEPTION,
+        EPDG_IP_VERSION_PREFERENCE_CONFLICT
     })
     @interface IwlanErrorType {}
 
@@ -70,7 +72,10 @@ public class IwlanError {
                     Map.entry(
                             IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED,
                             "IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED"),
-                    Map.entry(IKE_NETWORK_LOST_EXCEPTION, "IWLAN_IKE_NETWORK_LOST_EXCEPTION"));
+                    Map.entry(IKE_NETWORK_LOST_EXCEPTION, "IWLAN_IKE_NETWORK_LOST_EXCEPTION"),
+                    Map.entry(
+                            EPDG_IP_VERSION_PREFERENCE_CONFLICT,
+                            "EPDG_IP_VERSION_PREFERENCE_CONFLICT"));
 
     private int mErrorType;
     private Exception mException;

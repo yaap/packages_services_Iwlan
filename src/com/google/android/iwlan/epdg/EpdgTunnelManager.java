@@ -1528,10 +1528,13 @@ public class EpdgTunnelManager {
                     if (sessionClosedData.mIwlanError.getErrorType() != IwlanError.NO_ERROR) {
                         iwlanError = sessionClosedData.mIwlanError;
                     } else {
-                        // If IKE session setup failed without error cause, Iwlan reports
-                        // NETWORK_FAILURE instead of NO_ERROR
+                        // If IKE session opened, then closed before child session (and IWLAN
+                        // tunnel) opened.
+                        // Iwlan reports IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED
+                        // instead of NO_ERROR
                         if (!tunnelConfig.hasTunnelOpened()) {
-                            iwlanError = new IwlanError(IwlanError.NETWORK_FAILURE);
+                            iwlanError = new IwlanError(
+                                    IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED);
                         } else {
                             iwlanError = tunnelConfig.getError();
                         }

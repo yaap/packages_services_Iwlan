@@ -888,14 +888,24 @@ public class IwlanDataService extends DataService {
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
                 TunnelState tunnelState = entry.getValue();
                 if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGDOWN) {
-                    getTunnelManager().closeTunnel(entry.getKey(), true);
+                    getTunnelManager()
+                            .closeTunnel(
+                                    entry.getKey(),
+                                    true /* forceClose */,
+                                    getIwlanTunnelCallback(),
+                                    getIwlanTunnelCallbackMetrics());
                 }
             }
         }
 
         void forceCloseTunnels() {
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
-                getTunnelManager().closeTunnel(entry.getKey(), true);
+                getTunnelManager()
+                        .closeTunnel(
+                                entry.getKey(),
+                                true /* forceClose */,
+                                getIwlanTunnelCallback(),
+                                getIwlanTunnelCallbackMetrics());
             }
         }
 
@@ -975,7 +985,12 @@ public class IwlanDataService extends DataService {
                         // This may not result in actual closing of Ike Session since
                         // epdg selection may not be complete yet.
                         tunnelState.setState(TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP);
-                        getTunnelManager().closeTunnel(entry.getKey(), true);
+                        getTunnelManager()
+                                .closeTunnel(
+                                        entry.getKey(),
+                                        true /* forceClose */,
+                                        getIwlanTunnelCallback(),
+                                        getIwlanTunnelCallbackMetrics());
                     } else {
                         if (mIwlanDataService.isNetworkConnected(
                                 isActiveDataOnOtherSub(getSlotIndex()),
@@ -1229,13 +1244,11 @@ public class IwlanDataService extends DataService {
                                             .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
                         }
 
-                        if (tunnelState.getState()
-                                == IwlanDataServiceProvider.TunnelState.TUNNEL_IN_BRINGUP) {
-                            errorCause =
-                                    ErrorPolicyManager.getInstance(
-                                                    mContext,
-                                                    iwlanDataServiceProvider.getSlotIndex())
-                                            .getDataFailCause(apnName);
+                        errorCause =
+                                ErrorPolicyManager.getInstance(
+                                                mContext, iwlanDataServiceProvider.getSlotIndex())
+                                        .getDataFailCause(apnName);
+                        if (errorCause != DataFailCause.NONE) {
                             respBuilder.setCause(errorCause);
                             metricsAtom.setDataCallFailCause(errorCause);
 
@@ -1247,10 +1260,9 @@ public class IwlanDataService extends DataService {
                                                     .getCurrentRetryTimeMs(apnName);
                             respBuilder.setRetryDurationMillis(retryTimeMillis);
                             metricsAtom.setRetryDurationMillis(retryTimeMillis);
-
-                        } else if (tunnelState.getState()
-                                == IwlanDataServiceProvider.TunnelState
-                                        .TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
+                        } else {
+                            // TODO(b/265215349): Use a different DataFailCause for scenario where
+                            // tunnel in bringup is closed or force-closed without error.
                             respBuilder.setCause(DataFailCause.IWLAN_NETWORK_FAILURE);
                             metricsAtom.setDataCallFailCause(DataFailCause.IWLAN_NETWORK_FAILURE);
                             respBuilder.setRetryDurationMillis(5000);
@@ -1466,7 +1478,10 @@ public class IwlanDataService extends DataService {
                                     .getTunnelManager()
                                     .closeTunnel(
                                             dataProfile.getApnSetting().getApnName(),
-                                            true /* forceClose */);
+                                            true /* forceClose */,
+                                            iwlanDataServiceProvider.getIwlanTunnelCallback(),
+                                            iwlanDataServiceProvider
+                                                    .getIwlanTunnelCallbackMetrics());
                             iwlanDataServiceProvider.deliverCallback(
                                     IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
                                     5 /* DataServiceCallback
@@ -1576,7 +1591,10 @@ public class IwlanDataService extends DataService {
                                     .getTunnelManager()
                                     .closeTunnel(
                                             apn,
-                                            isNetworkLost || isHandOutSuccessful /* forceClose */);
+                                            isNetworkLost || isHandOutSuccessful /* forceClose */,
+                                            iwlanDataServiceProvider.getIwlanTunnelCallback(),
+                                            iwlanDataServiceProvider
+                                                    .getIwlanTunnelCallbackMetrics());
                             return;
                         }
                     }

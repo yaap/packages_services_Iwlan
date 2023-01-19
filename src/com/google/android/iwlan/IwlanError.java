@@ -16,7 +16,6 @@
 
 package com.google.android.iwlan;
 
-import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeIOException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
@@ -42,9 +41,6 @@ public class IwlanError {
     public static final int SIM_NOT_READY_EXCEPTION = 6;
     public static final int NETWORK_FAILURE = 7;
 
-    // Catch all exception
-    public static final int UNKNOWN_EXCEPTION = 8; // catch all
-
     @IntDef({
         NO_ERROR,
         IKE_PROTOCOL_EXCEPTION,
@@ -53,8 +49,7 @@ public class IwlanError {
         EPDG_SELECTOR_SERVER_SELECTION_FAILED,
         TUNNEL_TRANSFORM_FAILED,
         SIM_NOT_READY_EXCEPTION,
-        NETWORK_FAILURE,
-        UNKNOWN_EXCEPTION
+        NETWORK_FAILURE
     })
     @interface IwlanErrorType {};
 
@@ -66,8 +61,7 @@ public class IwlanError {
             EPDG_SELECTOR_SERVER_SELECTION_FAILED, "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED",
             TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED",
             SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION",
-            NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE",
-            UNKNOWN_EXCEPTION, "IWLAN_UNKNOWN_EXCEPTION");
+            NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE");
 
     private int mErrorType;
     private Exception mException;
@@ -92,11 +86,8 @@ public class IwlanError {
             IwlanErrorIkeIOException((IkeIOException) exception);
         } else if (exception instanceof IkeInternalException) {
             IwlanErrorIkeInternalException((IkeInternalException) exception);
-        } else if (exception instanceof IkeException) {
-            mErrorType = IKE_GENERIC_EXCEPTION;
-            mException = exception;
         } else {
-            mErrorType = UNKNOWN_EXCEPTION;
+            mErrorType = IKE_GENERIC_EXCEPTION;
             mException = exception;
         }
     }
@@ -150,9 +141,6 @@ public class IwlanError {
                 sb.append("MSG: " + mException.getMessage() + "\n CAUSE: ");
                 sb.append(mException.getCause());
                 break;
-            case UNKNOWN_EXCEPTION:
-                sb.append(mException.toString());
-                break;
             case IKE_PROTOCOL_EXCEPTION:
                 sb.append("ERR: " + ((IkeProtocolException) mException).getErrorType() + "\nDATA:");
                 for (byte b : ((IkeProtocolException) mException).getErrorData()) {
@@ -172,8 +160,7 @@ public class IwlanError {
      * @return IwlanErrorType
      */
     public static int getErrorType(String errorType) {
-        int ret = IwlanError.UNKNOWN_EXCEPTION;
-
+        int ret = NO_ERROR;
         // TODO: Add representation for Global error
         switch (errorType) {
             case "IKE_PROTOCOL_EXCEPTION":

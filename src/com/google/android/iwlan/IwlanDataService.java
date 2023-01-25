@@ -224,6 +224,7 @@ public class IwlanDataService extends DataService {
         // Access should be serialized inside IwlanDataServiceHandler
         private Map<String, TunnelState> mTunnelStateForApn = new ConcurrentHashMap<>();
         private Map<String, MetricsAtom> mMetricsAtomForApn = new ConcurrentHashMap<>();
+        private Calendar mCalendar;
 
         // Holds the state of a tunnel (for an APN)
         @VisibleForTesting
@@ -306,10 +307,10 @@ public class IwlanDataService extends DataService {
             public void setState(int state) {
                 mState = state;
                 if (mState == TunnelState.TUNNEL_IN_BRINGUP) {
-                    mBringUpStateTime = Calendar.getInstance().getTime();
+                    mBringUpStateTime = mCalendar.getTime();
                 }
                 if (mState == TunnelState.TUNNEL_UP) {
-                    mUpStateTime = Calendar.getInstance().getTime();
+                    mUpStateTime = mCalendar.getTime();
                 }
             }
 
@@ -327,6 +328,10 @@ public class IwlanDataService extends DataService {
 
             public Date getUpStateTime() {
                 return mUpStateTime;
+            }
+
+            public Date getCurrentTime() {
+                return mCalendar.getTime();
             }
 
             public boolean getIsImsOrEmergency() {
@@ -379,10 +384,10 @@ public class IwlanDataService extends DataService {
         @VisibleForTesting
         class IwlanTunnelCallback implements EpdgTunnelManager.TunnelCallback {
 
-            DataServiceProvider mDataServiceProvider;
+            IwlanDataServiceProvider mIwlanDataServiceProvider;
 
-            public IwlanTunnelCallback(DataServiceProvider dsp) {
-                mDataServiceProvider = dsp;
+            public IwlanTunnelCallback(IwlanDataServiceProvider dsp) {
+                mIwlanDataServiceProvider = dsp;
             }
 
             // TODO: full implementation
@@ -395,7 +400,7 @@ public class IwlanDataService extends DataService {
                         mIwlanDataServiceHandler.obtainMessage(
                                 EVENT_TUNNEL_OPENED,
                                 new TunnelOpenedData(
-                                        apnName, linkProperties, IwlanDataServiceProvider.this)));
+                                        apnName, linkProperties, mIwlanDataServiceProvider)));
             }
 
             public void onClosed(String apnName, IwlanError error) {
@@ -405,8 +410,7 @@ public class IwlanDataService extends DataService {
                 mIwlanDataServiceHandler.sendMessage(
                         mIwlanDataServiceHandler.obtainMessage(
                                 EVENT_TUNNEL_CLOSED,
-                                new TunnelClosedData(
-                                        apnName, error, IwlanDataServiceProvider.this)));
+                                new TunnelClosedData(apnName, error, mIwlanDataServiceProvider)));
             }
         }
 
@@ -485,7 +489,7 @@ public class IwlanDataService extends DataService {
             private final int APN_COUNT_MAX = 10;
 
             public IwlanDataTunnelStats() {
-                mStartTime = Calendar.getInstance().getTime();
+                mStartTime = mCalendar.getTime();
                 statCount = 0L;
             }
 
@@ -534,7 +538,7 @@ public class IwlanDataService extends DataService {
                     long count = mUnsolTunnelDownCounts.get(apn);
                     mUnsolTunnelDownCounts.put(apn, ++count);
                 }
-                Date currentTime = Calendar.getInstance().getTime();
+                Date currentTime = tunnelState.getCurrentTime();
                 Date upTime = tunnelState.getUpStateTime();
                 if (upTime != null) {
                     if (!mTunnelUpStats.containsKey(apn)) {
@@ -583,12 +587,12 @@ public class IwlanDataService extends DataService {
                     sb.append("\n\t  Apn: " + entry.getKey());
                     sb.append("\n\t  counts: " + entry.getValue());
                 }
-                sb.append("\n\tendTime: " + Calendar.getInstance().getTime());
+                sb.append("\n\tendTime: " + mCalendar.getTime());
                 return sb.toString();
             }
 
             private void reset() {
-                mStartTime = Calendar.getInstance().getTime();
+                mStartTime = mCalendar.getTime();
                 mTunnelSetupSuccessStats = new HashMap<String, LongSummaryStatistics>();
                 mTunnelUpStats = new HashMap<String, LongSummaryStatistics>();
                 mTunnelSetupFailureCounts = new HashMap<String, Long>();
@@ -613,6 +617,7 @@ public class IwlanDataService extends DataService {
             mIwlanTunnelCallback = new IwlanTunnelCallback(this);
             mIwlanTunnelCallbackMetrics = new IwlanTunnelCallbackMetrics(this);
             mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, slotIndex);
+            mCalendar = Calendar.getInstance();
             mTunnelStats = new IwlanDataTunnelStats();
 
             // Register IwlanEventListener
@@ -1128,6 +1133,11 @@ public class IwlanDataService extends DataService {
             EpdgTunnelManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
             ErrorPolicyManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
             pw.println("-------------------------------------");
+        }
+
+        @VisibleForTesting
+        public void setCalendar(Calendar c) {
+            mCalendar = c;
         }
     }
 

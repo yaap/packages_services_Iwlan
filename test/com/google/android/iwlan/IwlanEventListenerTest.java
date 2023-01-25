@@ -18,7 +18,6 @@ package com.google.android.iwlan;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
-import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import android.content.ContentResolver;
@@ -300,6 +299,27 @@ public class IwlanEventListenerTest {
                 mIwlanEventListener.getTelephonyCallback();
         mTelephonyCallback.onCallStateChanged(TelephonyManager.CALL_STATE_OFFHOOK);
 
+        verify(mMockMessage, times(1)).sendToTarget();
+    }
+
+    @Test
+    public void testWfcChangeThrowIAE() throws Exception {
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
+                .thenReturn(mMockMessage);
+
+        events = new ArrayList<Integer>();
+        events.add(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT);
+        mIwlanEventListener.addEventListener(events, mMockHandler);
+        mIwlanEventListener.setWfcEnabledUri(WFC_ENABLED_URI);
+
+        doThrow(new IllegalArgumentException("IllegalArgumentException at isVoWiFiSettingEnabled"))
+                .when(mMockImsMmTelManager)
+                .isVoWiFiSettingEnabled();
+
+        mIwlanEventListener.notifyCurrentSetting(WFC_ENABLED_URI);
         verify(mMockMessage, times(1)).sendToTarget();
     }
 }

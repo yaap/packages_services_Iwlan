@@ -51,17 +51,20 @@ public class IwlanError {
         SIM_NOT_READY_EXCEPTION,
         NETWORK_FAILURE
     })
-    @interface IwlanErrorType {};
+    @interface IwlanErrorType {}
 
-    private static final Map<Integer, String> sErrorTypeStrings = Map.of(
-            NO_ERROR, "IWLAN_NO_ERROR",
-            IKE_PROTOCOL_EXCEPTION, "IWLAN_IKE_PROTOCOL_EXCEPTION",
-            IKE_INTERNAL_IO_EXCEPTION, "IWLAN_IKE_INTERNAL_IO_EXCEPTION",
-            IKE_GENERIC_EXCEPTION, "IWLAN_IKE_GENERIC_EXCEPTION",
-            EPDG_SELECTOR_SERVER_SELECTION_FAILED, "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED",
-            TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED",
-            SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION",
-            NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE");
+    private static final Map<Integer, String> sErrorTypeStrings =
+            Map.ofEntries(
+                    Map.entry(NO_ERROR, "IWLAN_NO_ERROR"),
+                    Map.entry(IKE_PROTOCOL_EXCEPTION, "IWLAN_IKE_PROTOCOL_EXCEPTION"),
+                    Map.entry(IKE_INTERNAL_IO_EXCEPTION, "IWLAN_IKE_INTERNAL_IO_EXCEPTION"),
+                    Map.entry(IKE_GENERIC_EXCEPTION, "IWLAN_IKE_GENERIC_EXCEPTION"),
+                    Map.entry(
+                            EPDG_SELECTOR_SERVER_SELECTION_FAILED,
+                            "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED"),
+                    Map.entry(TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED"),
+                    Map.entry(SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION"),
+                    Map.entry(NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE"));
 
     private int mErrorType;
     private Exception mException;
@@ -74,7 +77,7 @@ public class IwlanError {
      * Sets the IwlanError based on the Exception: 1. IkeException is base the class for all IKE
      * exception ErrorType: IKE_GENERIC_EXCEPTION. 2. IkeProtocolException is for specific protocol
      * errors (like IKE notify error codes) ErrorType: IKE_PROTOCOL_EXCEPTION 3.
-     * IkeInternalException is just a wrapper for various exeptions that IKE lib may encounter
+     * IkeInternalException is just a wrapper for various exceptions that IKE lib may encounter
      * ErrorType: IKE_INTERNAL_IO_EXCEPTION if the Exception is instance of IOException ErrorType:
      * IKE_GENERIC_EXCEPTION for all the other.
      */
@@ -138,11 +141,13 @@ public class IwlanError {
 
         switch (mErrorType) {
             case IKE_GENERIC_EXCEPTION:
-                sb.append("MSG: " + mException.getMessage() + "\n CAUSE: ");
+                sb.append("MSG: ").append(mException.getMessage()).append("\n CAUSE: ");
                 sb.append(mException.getCause());
                 break;
             case IKE_PROTOCOL_EXCEPTION:
-                sb.append("ERR: " + ((IkeProtocolException) mException).getErrorType() + "\nDATA:");
+                sb.append("ERR: ")
+                        .append(((IkeProtocolException) mException).getErrorType())
+                        .append("\nDATA:");
                 for (byte b : ((IkeProtocolException) mException).getErrorData()) {
                     sb.append(String.format("%02x ", b));
                 }
@@ -151,41 +156,6 @@ public class IwlanError {
                 sb.append("-No Details-");
         }
         return sb.toString();
-    }
-
-    /**
-     * Returns the error of the String. String that matches the name of the Error
-     *
-     * @param errorType string form of errorType
-     * @return IwlanErrorType
-     */
-    public static int getErrorType(String errorType) {
-        int ret = NO_ERROR;
-        // TODO: Add representation for Global error
-        switch (errorType) {
-            case "IKE_PROTOCOL_EXCEPTION":
-                ret = IwlanError.IKE_PROTOCOL_EXCEPTION;
-                break;
-            case "IKE_INTERNAL_IO_EXCEPTION":
-                ret = IwlanError.IKE_INTERNAL_IO_EXCEPTION;
-                break;
-            case "IKE_GENERIC_EXCEPTION":
-                ret = IwlanError.IKE_GENERIC_EXCEPTION;
-                break;
-            case "EPDG_SELECTOR_SERVER_SELECTION_FAILED":
-                ret = IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED;
-                break;
-            case "TUNNEL_TRANSFORM_FAILED":
-                ret = IwlanError.TUNNEL_TRANSFORM_FAILED;
-                break;
-            case "SIM_NOT_READY_EXCEPTION":
-                ret = IwlanError.SIM_NOT_READY_EXCEPTION;
-                break;
-            case "NETWORK_FAILURE":
-                ret = IwlanError.NETWORK_FAILURE;
-                break;
-        }
-        return ret;
     }
 
     @Override

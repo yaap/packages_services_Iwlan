@@ -62,7 +62,6 @@ import com.google.android.iwlan.epdg.TunnelSetupRequest;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -121,7 +120,7 @@ public class IwlanDataServiceTest {
     private IwlanDataServiceProvider mIwlanDataServiceProvider;
     private IwlanDataServiceProvider mSpyIwlanDataServiceProvider;
     private TestLooper mTestLooper = new TestLooper();
-    private long mMockedCalendarTime;
+    private long mMockedCalendarTime = 0L;
 
     private final class IwlanDataServiceCallback extends IDataServiceCallback.Stub {
 
@@ -228,7 +227,6 @@ public class IwlanDataServiceTest {
                         mIwlanDataService.onCreateDataServiceProvider(DEFAULT_SLOT_INDEX);
         mTestLooper.dispatchAll();
         mSpyIwlanDataServiceProvider = spy(mIwlanDataServiceProvider);
-        when(Calendar.getInstance().getTime()).thenAnswer(i -> mMockedCalendarTime);
     }
 
     @After
@@ -1030,8 +1028,11 @@ public class IwlanDataServiceTest {
                         isNull());
     }
 
-    private void advanceCalendarByTimeMs(long time) {
+    private void advanceCalendarByTimeMs(long time, Calendar calendar) {
         mMockedCalendarTime += time;
+        if (calendar != null) {
+            calendar.setTimeInMillis(mMockedCalendarTime);
+        }
         mTestLooper.dispatchAll();
     }
 
@@ -1218,7 +1219,7 @@ public class IwlanDataServiceTest {
 
         long count = 3L;
         for (int i = 0; i < count; i++) {
-            mockTunnelSetupSuccess(dp, 0);
+            mockTunnelSetupSuccess(dp, 0, null);
             mockUnsolTunnelDown();
         }
 
@@ -1229,37 +1230,39 @@ public class IwlanDataServiceTest {
     }
 
     @Test
-    @Ignore("b/266148049 - Flaky test")
     public void testIwlanTunnelStats() {
         DataProfile dp = buildImsDataProfile();
+        Calendar calendar = mock(Calendar.class);
+        when(calendar.getTime()).thenAnswer(i -> new Date(mMockedCalendarTime));
 
+        mSpyIwlanDataServiceProvider.setCalendar(calendar);
         mIwlanDataService.setNetworkConnected(true, mMockNetwork, IwlanDataService.Transport.WIFI);
         doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
 
         LongSummaryStatistics tunnelSetupSuccessStats = new LongSummaryStatistics();
         LongSummaryStatistics tunnelUpStats = new LongSummaryStatistics();
 
-        Date beforeSetup = Calendar.getInstance().getTime();
-        mockTunnelSetupSuccess(dp, 0);
-        Date tunnelUp = Calendar.getInstance().getTime();
-        mockDeactivateTunnel(0);
-        Date tunnelDown = Calendar.getInstance().getTime();
+        Date beforeSetup = calendar.getTime();
+        mockTunnelSetupSuccess(dp, 0, calendar);
+        Date tunnelUp = calendar.getTime();
+        mockDeactivateTunnel(0, calendar);
+        Date tunnelDown = calendar.getTime();
         tunnelSetupSuccessStats.accept(tunnelUp.getTime() - beforeSetup.getTime());
         tunnelUpStats.accept(tunnelDown.getTime() - tunnelUp.getTime());
 
-        beforeSetup = Calendar.getInstance().getTime();
-        mockTunnelSetupSuccess(dp, 1000);
-        tunnelUp = Calendar.getInstance().getTime();
-        mockDeactivateTunnel(3000);
-        tunnelDown = Calendar.getInstance().getTime();
+        beforeSetup = calendar.getTime();
+        mockTunnelSetupSuccess(dp, 1000, calendar);
+        tunnelUp = calendar.getTime();
+        mockDeactivateTunnel(3000, calendar);
+        tunnelDown = calendar.getTime();
         tunnelSetupSuccessStats.accept(tunnelUp.getTime() - beforeSetup.getTime());
         tunnelUpStats.accept(tunnelDown.getTime() - tunnelUp.getTime());
 
-        beforeSetup = Calendar.getInstance().getTime();
-        mockTunnelSetupSuccess(dp, 600);
-        tunnelUp = Calendar.getInstance().getTime();
-        mockDeactivateTunnel(500);
-        tunnelDown = Calendar.getInstance().getTime();
+        beforeSetup = calendar.getTime();
+        mockTunnelSetupSuccess(dp, 600, calendar);
+        tunnelUp = calendar.getTime();
+        mockDeactivateTunnel(500, calendar);
+        tunnelDown = calendar.getTime();
         tunnelSetupSuccessStats.accept(tunnelUp.getTime() - beforeSetup.getTime());
         tunnelUpStats.accept(tunnelDown.getTime() - tunnelUp.getTime());
 
@@ -1268,13 +1271,13 @@ public class IwlanDataServiceTest {
         LongSummaryStatistics finalSetupStats = stats.mTunnelSetupSuccessStats.get(TEST_APN_NAME);
         LongSummaryStatistics finalUpStats = stats.mTunnelUpStats.get(TEST_APN_NAME);
 
-        assertEquals(finalSetupStats.getAverage(), tunnelSetupSuccessStats.getAverage(), 100);
-        assertEquals(finalSetupStats.getCount(), tunnelSetupSuccessStats.getCount());
-        assertEquals(finalSetupStats.getMax(), tunnelSetupSuccessStats.getMax(), 100);
+        assertEquals(tunnelSetupSuccessStats.getAverage(), finalSetupStats.getAverage(), 0);
+        assertEquals(tunnelSetupSuccessStats.getCount(), finalSetupStats.getCount());
+        assertEquals(tunnelSetupSuccessStats.getMax(), finalSetupStats.getMax(), 0);
 
-        assertEquals(finalUpStats.getAverage(), tunnelUpStats.getAverage(), 100);
-        assertEquals(finalUpStats.getCount(), tunnelUpStats.getCount());
-        assertEquals(finalUpStats.getMax(), tunnelUpStats.getMax(), 100);
+        assertEquals(tunnelUpStats.getAverage(), finalUpStats.getAverage(), 0);
+        assertEquals(tunnelUpStats.getCount(), finalUpStats.getCount());
+        assertEquals(tunnelUpStats.getMax(), finalUpStats.getMax(), 0);
     }
 
     @Test
@@ -1349,7 +1352,7 @@ public class IwlanDataServiceTest {
                         eq(DataServiceCallback.RESULT_SUCCESS), any(DataCallResponse.class));
     }
 
-    private void mockTunnelSetupSuccess(DataProfile dp, long setupTime) {
+    private void mockTunnelSetupSuccess(DataProfile dp, long setupTime, Calendar calendar) {
         mSpyIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
@@ -1370,7 +1373,7 @@ public class IwlanDataServiceTest {
                         any(IwlanTunnelCallbackMetrics.class));
         mTestLooper.dispatchAll();
 
-        advanceCalendarByTimeMs(setupTime);
+        advanceCalendarByTimeMs(setupTime, calendar);
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -1388,7 +1391,7 @@ public class IwlanDataServiceTest {
         mTestLooper.dispatchAll();
     }
 
-    private void mockDeactivateTunnel(long deactivationTime) {
+    private void mockDeactivateTunnel(long deactivationTime, Calendar calendar) {
         mSpyIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_NORMAL /* DataService.REQUEST_REASON_NORMAL */,
@@ -1396,7 +1399,7 @@ public class IwlanDataServiceTest {
         mTestLooper.dispatchAll();
         verify(mMockEpdgTunnelManager, atLeastOnce()).closeTunnel(eq(TEST_APN_NAME), anyBoolean());
 
-        advanceCalendarByTimeMs(deactivationTime);
+        advanceCalendarByTimeMs(deactivationTime, calendar);
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()

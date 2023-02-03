@@ -1747,7 +1747,7 @@ public class EpdgTunnelManager {
         if (isIpPreferenceConflictsWithNetwork(ipPreference)) {
             sendSelectionRequestComplete(
                     null,
-                    new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED),
+                    new IwlanError(IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT),
                     mTransactionId);
             return;
         }

@@ -301,7 +301,8 @@ public class ErrorPolicyManager {
 
         if (error.getErrorType() == IwlanError.NO_ERROR) {
             ret = DataFailCause.NONE;
-        } else if (error.getErrorType() == IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED) {
+        } else if (error.getErrorType() == IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED
+                || error.getErrorType() == IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT) {
             ret = DataFailCause.IWLAN_DNS_RESOLUTION_NAME_FAILURE;
         } else if (error.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
@@ -1006,6 +1007,9 @@ public class ErrorPolicyManager {
                     break;
                 case IwlanError.IKE_NETWORK_LOST_EXCEPTION:
                     ret = "IKE_NETWORK_LOST_EXCEPTION";
+                    break;
+                case IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT:
+                    ret = "EPDG_IP_VERSION_PREFERENCE_CONFLICT";
                     break;
                     // TODO: Add TIMEOUT_EXCEPTION processing
             }

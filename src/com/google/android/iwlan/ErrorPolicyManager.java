@@ -1002,6 +1002,9 @@ public class ErrorPolicyManager {
                 case IwlanError.TUNNEL_TRANSFORM_FAILED:
                     ret = "TUNNEL_TRANSFORM_FAILED";
                     break;
+                case IwlanError.IKE_NETWORK_LOST_EXCEPTION:
+                    ret = "IKE_NETWORK_LOST_EXCEPTION";
+                    break;
                     // TODO: Add TIMEOUT_EXCEPTION processing
             }
             return ret;

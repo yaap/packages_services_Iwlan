@@ -18,6 +18,7 @@ package com.google.android.iwlan;
 
 import android.net.ipsec.ike.exceptions.IkeIOException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
+import android.net.ipsec.ike.exceptions.IkeNetworkLostException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
@@ -40,6 +41,7 @@ public class IwlanError {
     public static final int TUNNEL_TRANSFORM_FAILED = 5;
     public static final int SIM_NOT_READY_EXCEPTION = 6;
     public static final int NETWORK_FAILURE = 7;
+    public static final int IKE_NETWORK_LOST_EXCEPTION = 8;
 
     @IntDef({
         NO_ERROR,
@@ -49,7 +51,8 @@ public class IwlanError {
         EPDG_SELECTOR_SERVER_SELECTION_FAILED,
         TUNNEL_TRANSFORM_FAILED,
         SIM_NOT_READY_EXCEPTION,
-        NETWORK_FAILURE
+        NETWORK_FAILURE,
+        IKE_NETWORK_LOST_EXCEPTION,
     })
     @interface IwlanErrorType {}
 
@@ -64,7 +67,8 @@ public class IwlanError {
                             "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED"),
                     Map.entry(TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED"),
                     Map.entry(SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION"),
-                    Map.entry(NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE"));
+                    Map.entry(NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE"),
+                    Map.entry(IKE_NETWORK_LOST_EXCEPTION, "IWLAN_IKE_NETWORK_LOST_EXCEPTION"));
 
     private int mErrorType;
     private Exception mException;
@@ -89,6 +93,8 @@ public class IwlanError {
             IwlanErrorIkeIOException((IkeIOException) exception);
         } else if (exception instanceof IkeInternalException) {
             IwlanErrorIkeInternalException((IkeInternalException) exception);
+        } else if (exception instanceof IkeNetworkLostException) {
+            IwlanErrorIkeNetworkLostException((IkeNetworkLostException) exception);
         } else {
             mErrorType = IKE_GENERIC_EXCEPTION;
             mException = exception;
@@ -111,6 +117,11 @@ public class IwlanError {
 
     private void IwlanErrorIkeIOException(@NonNull IkeIOException exception) {
         mErrorType = IKE_INTERNAL_IO_EXCEPTION;
+        mException = exception;
+    }
+
+    private void IwlanErrorIkeNetworkLostException(@NonNull IkeNetworkLostException exception) {
+        mErrorType = IKE_NETWORK_LOST_EXCEPTION;
         mException = exception;
     }
 
@@ -151,6 +162,14 @@ public class IwlanError {
                 for (byte b : ((IkeProtocolException) mException).getErrorData()) {
                     sb.append(String.format("%02x ", b));
                 }
+                break;
+            case IKE_NETWORK_LOST_EXCEPTION:
+                sb.append("ERR: ")
+                        .append(mException.getMessage())
+                        .append("\n CAUSE: ")
+                        .append(mException.getCause())
+                        .append("\n NETWORK: ")
+                        .append(((IkeNetworkLostException) mException).getNetwork());
                 break;
             default:
                 sb.append("-No Details-");

@@ -1158,7 +1158,8 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testHandleOnClosedWithEpdgConnected_True() throws Exception {
         String testApnName = "www.xyz.com";
-        IwlanError error = new IwlanError(IwlanError.NETWORK_FAILURE);
+        IwlanError error =
+                new IwlanError(IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED);
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
         mEpdgTunnelManager.putApnNameToTunnelConfig(
@@ -1184,7 +1185,8 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testHandleOnClosedWithEpdgConnected_False() throws Exception {
         String testApnName = "www.xyz.com";
-        IwlanError error = new IwlanError(IwlanError.NETWORK_FAILURE);
+        IwlanError error =
+                new IwlanError(IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED);
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
 

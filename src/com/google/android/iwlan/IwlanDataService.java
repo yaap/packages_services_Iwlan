@@ -1131,7 +1131,7 @@ public class IwlanDataService extends DataService {
             }
             pw.println(mTunnelStats);
             EpdgTunnelManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
-            ErrorPolicyManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
+            ErrorPolicyManager.getInstance(mContext, getSlotIndex()).dump(pw);
             pw.println("-------------------------------------");
         }
 

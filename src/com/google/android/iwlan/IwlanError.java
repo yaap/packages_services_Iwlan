@@ -40,7 +40,7 @@ public class IwlanError {
     public static final int EPDG_SELECTOR_SERVER_SELECTION_FAILED = 4;
     public static final int TUNNEL_TRANSFORM_FAILED = 5;
     public static final int SIM_NOT_READY_EXCEPTION = 6;
-    public static final int NETWORK_FAILURE = 7;
+    public static final int IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED = 7;
     public static final int IKE_NETWORK_LOST_EXCEPTION = 8;
 
     @IntDef({
@@ -51,8 +51,8 @@ public class IwlanError {
         EPDG_SELECTOR_SERVER_SELECTION_FAILED,
         TUNNEL_TRANSFORM_FAILED,
         SIM_NOT_READY_EXCEPTION,
-        NETWORK_FAILURE,
-        IKE_NETWORK_LOST_EXCEPTION,
+        IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED,
+        IKE_NETWORK_LOST_EXCEPTION
     })
     @interface IwlanErrorType {}
 
@@ -67,7 +67,9 @@ public class IwlanError {
                             "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED"),
                     Map.entry(TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED"),
                     Map.entry(SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION"),
-                    Map.entry(NETWORK_FAILURE, "IWLAN_NETWORK_FAILURE"),
+                    Map.entry(
+                            IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED,
+                            "IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED"),
                     Map.entry(IKE_NETWORK_LOST_EXCEPTION, "IWLAN_IKE_NETWORK_LOST_EXCEPTION"));
 
     private int mErrorType;

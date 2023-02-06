@@ -22,9 +22,19 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,8 +74,8 @@ import android.telephony.data.ApnSetting;
 
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanTunnelMetricsImpl;
-import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
 import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
+import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
 
 import org.junit.Before;
 import org.junit.Ignore;
@@ -2277,7 +2287,7 @@ public class EpdgTunnelManagerTest {
     public void testBringUpTunnelIpv6OnlyOnIpv4Wifi() throws Exception {
         TunnelSetupRequest TSR =
                 getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IPV6);
-        IwlanError error = new IwlanError(IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT);
+        IwlanError error = new IwlanError(IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED);
         doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(TEST_APN_NAME), eq(error));
 

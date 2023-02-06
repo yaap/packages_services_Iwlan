@@ -325,6 +325,8 @@ public class ErrorPolicyManager {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.TUNNEL_TRANSFORM_FAILED) {
             ret = DataFailCause.IWLAN_TUNNEL_TRANSFORM_FAILED;
+        } else if (error.getErrorType() == IwlanError.IKE_NETWORK_LOST_EXCEPTION) {
+            ret = DataFailCause.IWLAN_IKE_NETWORK_LOST_EXCEPTION;
         } else if (error.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
             Exception exception = error.getException();
             if (exception instanceof IkeProtocolException) {

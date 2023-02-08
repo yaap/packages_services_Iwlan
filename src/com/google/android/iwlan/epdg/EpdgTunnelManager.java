@@ -663,20 +663,25 @@ public class EpdgTunnelManager {
 
     /**
      * Close tunnel for an apn. Confirmation of closing will be delivered in TunnelCallback that was
-     * provided in {@link #bringUpTunnel}
+     * provided in {@link #bringUpTunnel}. If no tunnel was available, callback will be delivered
+     * using client-provided provided tunnelCallback and tunnelCallbackMetrics
      *
      * @param apnName apn name
      * @param forceClose if true, results in local cleanup of tunnel
-     * @return true if params are valid and tunnel exists. False otherwise.
+     * @param tunnelCallback Used if no current or pending IWLAN tunnel exists
+     * @param tunnelCallbackMetrics Used to report metrics if no current or pending IWLAN tunnel
+     *     exists
      */
-    public boolean closeTunnel(@NonNull String apnName, boolean forceClose) {
+    public void closeTunnel(
+            @NonNull String apnName,
+            boolean forceClose,
+            @NonNull TunnelCallback tunnelCallback,
+            @NonNull TunnelCallbackMetrics tunnelCallbackMetrics) {
         mHandler.sendMessage(
                 mHandler.obtainMessage(
                         EVENT_TUNNEL_BRINGDOWN_REQUEST,
-                        forceClose ? 1 : 0,
-                        0 /*not used*/,
-                        apnName));
-        return true;
+                        new TunnelBringdownRequest(
+                                apnName, forceClose, tunnelCallback, tunnelCallbackMetrics)));
     }
 
     /**
@@ -1533,18 +1538,19 @@ public class EpdgTunnelManager {
                     break;
 
                 case EVENT_TUNNEL_BRINGDOWN_REQUEST:
-                    apnName = (String) msg.obj;
-                    int forceClose = msg.arg1;
+                    TunnelBringdownRequest bringdownRequest = (TunnelBringdownRequest) msg.obj;
+                    apnName = bringdownRequest.mApnName;
+                    boolean forceClose = bringdownRequest.mForceClose;
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     if (tunnelConfig == null) {
-                        Log.d(
+                        Log.w(
                                 TAG,
                                 "Bringdown request: No tunnel exists for apn: "
                                         + apnName
                                         + "forced: "
                                         + forceClose);
                     } else {
-                        if (forceClose == 1) {
+                        if (forceClose) {
                             tunnelConfig.getIkeSession().kill();
                         } else {
                             tunnelConfig.getIkeSession().close();
@@ -1553,6 +1559,14 @@ public class EpdgTunnelManager {
                     int numClosed = closePendingRequestsForApn(apnName);
                     if (numClosed > 0) {
                         Log.d(TAG, "Closed " + numClosed + " pending requests for apn: " + apnName);
+                    }
+                    if (tunnelConfig == null && numClosed == 0) {
+                        // IwlanDataService expected to close a (pending or up) tunnel but was not
+                        // found. Recovers state in IwlanDataService through TunnelCallback.
+                        iwlanError = new IwlanError(IwlanError.TUNNEL_NOT_FOUND);
+                        reportIwlanError(apnName, iwlanError);
+                        bringdownRequest.mTunnelCallback.onClosed(apnName, iwlanError);
+                        bringdownRequest.mTunnelCallbackMetrics.onClosed(apnName, null, 0, 0);
                     }
                     break;
 
@@ -1909,6 +1923,7 @@ public class EpdgTunnelManager {
             return mNetwork;
         }
     }
+
     // Tunnel request + tunnel callback
     private static final class TunnelRequestWrapper {
         private final TunnelSetupRequest mSetupRequest;
@@ -1935,6 +1950,24 @@ public class EpdgTunnelManager {
 
         public TunnelCallbackMetrics getTunnelCallbackMetrics() {
             return mTunnelCallbackMetrics;
+        }
+    }
+
+    private static final class TunnelBringdownRequest {
+        final String mApnName;
+        final boolean mForceClose;
+        final TunnelCallback mTunnelCallback;
+        final TunnelCallbackMetrics mTunnelCallbackMetrics;
+
+        private TunnelBringdownRequest(
+                String apnName,
+                boolean forceClose,
+                TunnelCallback tunnelCallback,
+                TunnelCallbackMetrics tunnelCallbackMetrics) {
+            mApnName = apnName;
+            mForceClose = forceClose;
+            mTunnelCallback = tunnelCallback;
+            mTunnelCallbackMetrics = tunnelCallbackMetrics;
         }
     }
 

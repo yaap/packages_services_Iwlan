@@ -921,6 +921,12 @@ public class IwlanDataService extends DataService {
         }
 
         @VisibleForTesting
+        @Nullable
+        public MetricsAtom getMetricsAtomByApn(String apnName) {
+            return mMetricsAtomForApn.get(apnName);
+        }
+
+        @VisibleForTesting
         public IwlanTunnelCallback getIwlanTunnelCallback() {
             return mIwlanTunnelCallback;
         }
@@ -1181,6 +1187,9 @@ public class IwlanDataService extends DataService {
                         // Record setup result for the Metrics
                         metricsAtom.setSetupRequestResult(DataServiceCallback.RESULT_SUCCESS);
                         metricsAtom.setIwlanError(iwlanError.getErrorType());
+
+                        metricsAtom.setIwlanErrorWrappedClassnameAndStack(iwlanError);
+
                         metricsAtom.setTunnelState(tunnelState.getState());
                         metricsAtom.setMessageId(
                                 IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED);

@@ -31,6 +31,7 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.os.test.TestLooper;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.DataFailCause;
@@ -56,6 +57,7 @@ import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelLinkPropertiesTest;
 import com.google.android.iwlan.epdg.TunnelSetupRequest;
+import com.google.android.iwlan.proto.MetricsAtom;
 
 import org.junit.After;
 import org.junit.Before;
@@ -936,6 +938,112 @@ public class IwlanDataServiceTest {
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR));
         mTestLooper.dispatchAll();
+    }
+
+    @Test
+    public void testMetricsWhenTunnelClosedWithWrappedException() {
+        DataProfile dp = buildDataProfile();
+
+        mSpyIwlanDataServiceProvider.setTunnelState(
+                dp,
+                mMockDataServiceCallback,
+                TunnelState.TUNNEL_IN_BRINGUP,
+                null, /* linkProperties */
+                false /* isHandover */,
+                1 /* pduSessionId */);
+
+        mSpyIwlanDataServiceProvider.setMetricsAtom(
+                TEST_APN_NAME,
+                64, // type IMS
+                true,
+                13, // LTE
+                false,
+                true,
+                1 // Transport Wi-Fi
+                );
+
+        MetricsAtom metricsAtom = mSpyIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
+        assertNotNull(metricsAtom);
+
+        String exceptionMessage = "Some exception message";
+        Exception mockException = spy(new IllegalStateException(exceptionMessage));
+        String firstDeclaringClassName = "test.test.TestClass";
+        String firstMethodName = "someMethod";
+        String firstFileName = "TestClass.java";
+        int firstLineNumber = 12345;
+        StackTraceElement[] stackTraceElements = {
+            new StackTraceElement(
+                    firstDeclaringClassName, firstMethodName, firstFileName, firstLineNumber),
+            new StackTraceElement("test", "test", "test.java", 123)
+        };
+        doReturn(stackTraceElements).when(mockException).getStackTrace();
+
+        when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(mMockErrorPolicyManager);
+        when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
+                .thenReturn(DataFailCause.ERROR_UNSPECIFIED);
+
+        mSpyIwlanDataServiceProvider
+                .getIwlanTunnelCallback()
+                .onClosed(TEST_APN_NAME, new IwlanError(new IkeInternalException(mockException)));
+
+        mTestLooper.dispatchAll();
+
+        var expectedClassNameAndStack =
+                mockException.getClass().getCanonicalName()
+                        + "\n"
+                        + firstDeclaringClassName
+                        + "."
+                        + firstMethodName
+                        + "("
+                        + firstFileName
+                        + ":"
+                        + firstLineNumber
+                        + ")";
+
+        assertEquals(
+                expectedClassNameAndStack, metricsAtom.getIwlanErrorWrappedClassnameAndStack());
+    }
+
+    @Test
+    public void testMetricsWhenTunnelClosedWithoutWrappedException() {
+        DataProfile dp = buildDataProfile();
+
+        mSpyIwlanDataServiceProvider.setTunnelState(
+                dp,
+                mMockDataServiceCallback,
+                TunnelState.TUNNEL_IN_BRINGUP,
+                null, /* linkProperties */
+                false /* isHandover */,
+                1 /* pduSessionId */);
+
+        mSpyIwlanDataServiceProvider.setMetricsAtom(
+                TEST_APN_NAME,
+                64, // type IMS
+                true,
+                13, // LTE
+                false,
+                true,
+                1 // Transport Wi-Fi
+                );
+
+        MetricsAtom metricsAtom = mSpyIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
+        assertNotNull(metricsAtom);
+
+        when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(mMockErrorPolicyManager);
+        when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
+                .thenReturn(DataFailCause.ERROR_UNSPECIFIED);
+
+        mSpyIwlanDataServiceProvider
+                .getIwlanTunnelCallback()
+                .onClosed(
+                        TEST_APN_NAME,
+                        new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED));
+
+        mTestLooper.dispatchAll();
+
+        assertEquals(null, metricsAtom.getIwlanErrorWrappedClassnameAndStack());
     }
 
     private void mockTunnelSetupFail(DataProfile dp) {

@@ -590,7 +590,12 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
         /* Check closeTunnel() is called. */
-        verify(mMockEpdgTunnelManager, times(1)).closeTunnel(eq(TEST_APN_NAME), eq(false));
+        verify(mMockEpdgTunnelManager, times(1))
+                .closeTunnel(
+                        eq(TEST_APN_NAME),
+                        eq(false),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
         mSpyIwlanDataServiceProvider
@@ -624,7 +629,12 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
         /* Check closeTunnel() is called. */
-        verify(mMockEpdgTunnelManager, times(1)).closeTunnel(eq(TEST_APN_NAME), eq(true));
+        verify(mMockEpdgTunnelManager, times(1))
+                .closeTunnel(
+                        eq(TEST_APN_NAME),
+                        eq(true),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
         mSpyIwlanDataServiceProvider
@@ -1314,7 +1324,12 @@ public class IwlanDataServiceTest {
         mSpyIwlanDataServiceProvider.close();
         mTestLooper.dispatchAll();
 
-        verify(mMockEpdgTunnelManager, atLeastOnce()).closeTunnel(eq(TEST_APN_NAME), eq(true));
+        verify(mMockEpdgTunnelManager, atLeastOnce())
+                .closeTunnel(
+                        eq(TEST_APN_NAME),
+                        eq(true),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
         assertNotNull(mIwlanDataService.mIwlanDataServiceHandler);
         // Should not raise NullPointerException
         mSpyIwlanDataServiceProvider
@@ -1397,7 +1412,12 @@ public class IwlanDataServiceTest {
                 DataService.REQUEST_REASON_NORMAL /* DataService.REQUEST_REASON_NORMAL */,
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
-        verify(mMockEpdgTunnelManager, atLeastOnce()).closeTunnel(eq(TEST_APN_NAME), anyBoolean());
+        verify(mMockEpdgTunnelManager, atLeastOnce())
+                .closeTunnel(
+                        eq(TEST_APN_NAME),
+                        anyBoolean(),
+                        any(IwlanTunnelCallback.class),
+                        any(IwlanTunnelCallbackMetrics.class));
 
         advanceCalendarByTimeMs(deactivationTime, calendar);
 

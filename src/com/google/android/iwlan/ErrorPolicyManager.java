@@ -312,6 +312,8 @@ public class ErrorPolicyManager {
                 == IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED) {
             // TODO(b/265215821): Add new DataFailCause to match with IwlanError when possible.
             ret = DataFailCause.NETWORK_FAILURE;
+        } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
+            ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
         } else if (error.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
             Exception exception = error.getException();
             if (exception instanceof IkeProtocolException) {

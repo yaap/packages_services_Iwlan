@@ -41,8 +41,7 @@ enum IkeSessionState {
     CHILD_SESSION_OPENED {
         @Override
         public int getErrorType() {
-            // TODO(b/265214194): return IwlanError.IKE_DPD_TIMEOUT
-            return IwlanError.NO_ERROR;
+            return IwlanError.IKE_DPD_TIMEOUT;
         }
     };
 

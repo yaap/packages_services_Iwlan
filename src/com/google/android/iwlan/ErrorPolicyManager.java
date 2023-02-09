@@ -318,6 +318,8 @@ public class ErrorPolicyManager {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+        } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
             Exception exception = error.getException();
             if (exception instanceof IkeProtocolException) {
@@ -1023,6 +1025,9 @@ public class ErrorPolicyManager {
                     break;
                 case IwlanError.IKE_MOBILITY_TIMEOUT:
                     ret = "IKE_MOBILITY_TIMEOUT";
+                    break;
+                case IwlanError.IKE_DPD_TIMEOUT:
+                    ret = "IKE_DPD_TIMEOUT";
                     break;
             }
             return ret;

@@ -35,8 +35,7 @@ enum IkeSessionState {
     IKE_MOBILITY_IN_PROGRESS {
         @Override
         public int getErrorType() {
-            // TODO(b/265213955): return IwlanError.IKE_MOBILITY_TIMEOUT
-            return IwlanError.NO_ERROR;
+            return IwlanError.IKE_MOBILITY_TIMEOUT;
         }
     },
     CHILD_SESSION_OPENED {

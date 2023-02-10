@@ -540,11 +540,21 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testCloseTunnelWithNoTunnelForApn() throws Exception {
         String testApnName = "www.xyz.com";
+        doReturn(0L)
+                .when(mEpdgTunnelManager)
+                .reportIwlanError(eq(testApnName), eq(new IwlanError(IwlanError.TUNNEL_NOT_FOUND)));
 
-        boolean ret = mEpdgTunnelManager.closeTunnel(testApnName, false /*forceClose*/);
-        assertTrue(ret);
+        mEpdgTunnelManager.closeTunnel(
+                testApnName,
+                false /*forceClose*/,
+                mMockIwlanTunnelCallback,
+                mMockIwlanTunnelCallbackMetrics);
         mTestLooper.dispatchAll();
+
         verify(mEpdgTunnelManager).closePendingRequestsForApn(eq(testApnName));
+        verify(mMockIwlanTunnelCallback)
+                .onClosed(eq(testApnName), eq(new IwlanError(IwlanError.TUNNEL_NOT_FOUND)));
+        verify(mMockIwlanTunnelCallbackMetrics).onClosed(eq(testApnName), eq(null), eq(0), eq(0));
     }
 
     @Test
@@ -559,8 +569,11 @@ public class EpdgTunnelManagerTest {
                 null,
                 0);
 
-        boolean ret = mEpdgTunnelManager.closeTunnel(testApnName, true /*forceClose*/);
-        assertTrue(ret);
+        mEpdgTunnelManager.closeTunnel(
+                testApnName,
+                true /*forceClose*/,
+                mMockIwlanTunnelCallback,
+                mMockIwlanTunnelCallbackMetrics);
         mTestLooper.dispatchAll();
 
         verify(mMockIkeSession).kill();
@@ -579,8 +592,11 @@ public class EpdgTunnelManagerTest {
                 null,
                 0);
 
-        boolean ret = mEpdgTunnelManager.closeTunnel(testApnName, false /*forceClose*/);
-        assertTrue(ret);
+        mEpdgTunnelManager.closeTunnel(
+                testApnName,
+                false /*forceClose*/,
+                mMockIwlanTunnelCallback,
+                mMockIwlanTunnelCallbackMetrics);
         mTestLooper.dispatchAll();
 
         verify(mMockIkeSession).close();
@@ -2092,10 +2108,15 @@ public class EpdgTunnelManagerTest {
         assertTrue(ret);
 
         // close tunnel when ePDG selection is incomplete
-        ret = mEpdgTunnelManager.closeTunnel(TEST_APN_NAME, false /*forceClose*/);
-        assertTrue(ret);
+        mEpdgTunnelManager.closeTunnel(
+                TEST_APN_NAME,
+                false /*forceClose*/,
+                mMockIwlanTunnelCallback,
+                mMockIwlanTunnelCallbackMetrics);
         mTestLooper.dispatchAll();
 
+        verify(mMockIwlanTunnelCallback, times(1))
+                .onClosed(eq(TEST_APN_NAME), eq(new IwlanError(IwlanError.NO_ERROR)));
         verify(mMockIwlanTunnelCallbackMetrics, times(1))
                 .onClosed(eq(TEST_APN_NAME), eq(null), eq(0), eq(0));
     }

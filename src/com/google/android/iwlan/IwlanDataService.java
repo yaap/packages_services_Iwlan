@@ -65,6 +65,8 @@ import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelSetupRequest;
 import com.google.android.iwlan.proto.MetricsAtom;
+import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
+import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -211,7 +213,7 @@ public class IwlanDataService extends DataService {
         private final String SUB_TAG;
         private final IwlanDataService mIwlanDataService;
         private final IwlanTunnelCallback mIwlanTunnelCallback;
-        private final IwlanTunnelCallbackMetrics mIwlanTunnelCallbackMetrics;
+        private final IwlanTunnelMetricsImpl mIwlanTunnelMetrics;
         private boolean mWfcEnabled = false;
         private boolean mCarrierConfigReady = false;
         private final EpdgSelector mEpdgSelector;
@@ -417,52 +419,6 @@ public class IwlanDataService extends DataService {
             }
         }
 
-        @VisibleForTesting
-        class IwlanTunnelCallbackMetrics implements EpdgTunnelManager.TunnelCallbackMetrics {
-
-            DataServiceProvider mDataServiceProvider;
-
-            public IwlanTunnelCallbackMetrics(DataServiceProvider dsp) {
-                mDataServiceProvider = dsp;
-            }
-
-            public void onOpened(
-                    String apnName,
-                    String epdgServerAddress,
-                    int epdgServerSelectionDuration,
-                    int ikeTunnelEstablishmentDuration) {
-                mIwlanDataServiceHandler.sendMessage(
-                        mIwlanDataServiceHandler.obtainMessage(
-                                EVENT_TUNNEL_OPENED_METRICS,
-                                new TunnelOpenedMetricsData(
-                                        apnName,
-                                        epdgServerAddress,
-                                        System.currentTimeMillis() - mProcessingStartTime,
-                                        epdgServerSelectionDuration,
-                                        ikeTunnelEstablishmentDuration,
-                                        IwlanDataServiceProvider.this)));
-            }
-
-            public void onClosed(
-                    String apnName,
-                    String epdgServerAddress,
-                    int epdgServerSelectionDuration,
-                    int ikeTunnelEstablishmentDuration) {
-                mIwlanDataServiceHandler.sendMessage(
-                        mIwlanDataServiceHandler.obtainMessage(
-                                EVENT_TUNNEL_CLOSED_METRICS,
-                                new TunnelClosedMetricsData(
-                                        apnName,
-                                        epdgServerAddress,
-                                        mProcessingStartTime > 0
-                                                ? System.currentTimeMillis() - mProcessingStartTime
-                                                : 0,
-                                        epdgServerSelectionDuration,
-                                        ikeTunnelEstablishmentDuration,
-                                        IwlanDataServiceProvider.this)));
-            }
-        }
-
         /** Holds all tunnel related time and count statistics for this IwlanDataServiceProvider */
         @VisibleForTesting
         class IwlanDataTunnelStats {
@@ -615,7 +571,7 @@ public class IwlanDataService extends DataService {
             // get reference to resolver
             mIwlanDataService = iwlanDataService;
             mIwlanTunnelCallback = new IwlanTunnelCallback(this);
-            mIwlanTunnelCallbackMetrics = new IwlanTunnelCallbackMetrics(this);
+            mIwlanTunnelMetrics = new IwlanTunnelMetricsImpl(this, mIwlanDataServiceHandler);
             mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, slotIndex);
             mCalendar = Calendar.getInstance();
             mTunnelStats = new IwlanDataTunnelStats();
@@ -893,7 +849,7 @@ public class IwlanDataService extends DataService {
                                     entry.getKey(),
                                     true /* forceClose */,
                                     getIwlanTunnelCallback(),
-                                    getIwlanTunnelCallbackMetrics());
+                                    getIwlanTunnelMetrics());
                 }
             }
         }
@@ -905,7 +861,7 @@ public class IwlanDataService extends DataService {
                                 entry.getKey(),
                                 true /* forceClose */,
                                 getIwlanTunnelCallback(),
-                                getIwlanTunnelCallbackMetrics());
+                                getIwlanTunnelMetrics());
             }
         }
 
@@ -966,8 +922,8 @@ public class IwlanDataService extends DataService {
         }
 
         @VisibleForTesting
-        public IwlanTunnelCallbackMetrics getIwlanTunnelCallbackMetrics() {
-            return mIwlanTunnelCallbackMetrics;
+        public IwlanTunnelMetricsImpl getIwlanTunnelMetrics() {
+            return mIwlanTunnelMetrics;
         }
 
         @VisibleForTesting
@@ -990,7 +946,7 @@ public class IwlanDataService extends DataService {
                                         entry.getKey(),
                                         true /* forceClose */,
                                         getIwlanTunnelCallback(),
-                                        getIwlanTunnelCallbackMetrics());
+                                        getIwlanTunnelMetrics());
                     } else {
                         if (mIwlanDataService.isNetworkConnected(
                                 isActiveDataOnOtherSub(getSlotIndex()),
@@ -1480,8 +1436,7 @@ public class IwlanDataService extends DataService {
                                             dataProfile.getApnSetting().getApnName(),
                                             true /* forceClose */,
                                             iwlanDataServiceProvider.getIwlanTunnelCallback(),
-                                            iwlanDataServiceProvider
-                                                    .getIwlanTunnelCallbackMetrics());
+                                            iwlanDataServiceProvider.getIwlanTunnelMetrics());
                             iwlanDataServiceProvider.deliverCallback(
                                     IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
                                     5 /* DataServiceCallback
@@ -1540,8 +1495,7 @@ public class IwlanDataService extends DataService {
                                     .bringUpTunnel(
                                             tunnelReqBuilder.build(),
                                             iwlanDataServiceProvider.getIwlanTunnelCallback(),
-                                            iwlanDataServiceProvider
-                                                    .getIwlanTunnelCallbackMetrics());
+                                            iwlanDataServiceProvider.getIwlanTunnelMetrics());
                     Log.d(TAG + "[" + slotId + "]", "bringup Tunnel with result:" + result);
                     if (!result) {
                         iwlanDataServiceProvider.deliverCallback(
@@ -1593,8 +1547,7 @@ public class IwlanDataService extends DataService {
                                             apn,
                                             isNetworkLost || isHandOutSuccessful /* forceClose */,
                                             iwlanDataServiceProvider.getIwlanTunnelCallback(),
-                                            iwlanDataServiceProvider
-                                                    .getIwlanTunnelCallbackMetrics());
+                                            iwlanDataServiceProvider.getIwlanTunnelMetrics());
                             return;
                         }
                     }
@@ -1644,37 +1597,41 @@ public class IwlanDataService extends DataService {
                     break;
 
                 case EVENT_TUNNEL_OPENED_METRICS:
-                    TunnelOpenedMetricsData tunnelOpenedMetricsData =
-                            (TunnelOpenedMetricsData) msg.obj;
-                    iwlanDataServiceProvider = tunnelOpenedMetricsData.mIwlanDataServiceProvider;
-                    apnName = tunnelOpenedMetricsData.mApnName;
+                    OnOpenedMetrics openedMetricsData = (OnOpenedMetrics) msg.obj;
+                    iwlanDataServiceProvider = openedMetricsData.getIwlanDataServiceProvider();
+                    apnName = openedMetricsData.getApnName();
 
                     metricsAtom = iwlanDataServiceProvider.mMetricsAtomForApn.get(apnName);
-                    metricsAtom.setEpdgServerAddress(tunnelOpenedMetricsData.mEpdgServerAddress);
+                    metricsAtom.setEpdgServerAddress(openedMetricsData.getEpdgServerAddress());
                     metricsAtom.setProcessingDurationMillis(
-                            tunnelOpenedMetricsData.mProcessingDuration);
+                            (int)
+                                    (System.currentTimeMillis()
+                                            - iwlanDataServiceProvider.mProcessingStartTime));
                     metricsAtom.setEpdgServerSelectionDurationMillis(
-                            tunnelOpenedMetricsData.mEpdgServerSelectionDuration);
+                            openedMetricsData.getEpdgServerSelectionDuration());
                     metricsAtom.setIkeTunnelEstablishmentDurationMillis(
-                            tunnelOpenedMetricsData.mIkeTunnelEstablishmentDuration);
+                            openedMetricsData.getIkeTunnelEstablishmentDuration());
 
                     metricsAtom.sendMetricsData();
                     break;
 
                 case EVENT_TUNNEL_CLOSED_METRICS:
-                    TunnelClosedMetricsData tunnelClosedMetricsData =
-                            (TunnelClosedMetricsData) msg.obj;
-                    iwlanDataServiceProvider = tunnelClosedMetricsData.mIwlanDataServiceProvider;
-                    apnName = tunnelClosedMetricsData.mApnName;
+                    OnClosedMetrics closedMetricsData = (OnClosedMetrics) msg.obj;
+                    iwlanDataServiceProvider = closedMetricsData.getIwlanDataServiceProvider();
+                    apnName = closedMetricsData.getApnName();
 
                     metricsAtom = iwlanDataServiceProvider.mMetricsAtomForApn.get(apnName);
-                    metricsAtom.setEpdgServerAddress(tunnelClosedMetricsData.mEpdgServerAddress);
+                    metricsAtom.setEpdgServerAddress(closedMetricsData.getEpdgServerAddress());
                     metricsAtom.setProcessingDurationMillis(
-                            tunnelClosedMetricsData.mProcessingDuration);
+                            iwlanDataServiceProvider.mProcessingStartTime > 0
+                                    ? (int)
+                                            (System.currentTimeMillis()
+                                                    - iwlanDataServiceProvider.mProcessingStartTime)
+                                    : 0);
                     metricsAtom.setEpdgServerSelectionDurationMillis(
-                            tunnelClosedMetricsData.mEpdgServerSelectionDuration);
+                            closedMetricsData.getEpdgServerSelectionDuration());
                     metricsAtom.setIkeTunnelEstablishmentDurationMillis(
-                            tunnelClosedMetricsData.mIkeTunnelEstablishmentDuration);
+                            closedMetricsData.getIkeTunnelEstablishmentDuration());
 
                     metricsAtom.sendMetricsData();
                     iwlanDataServiceProvider.mMetricsAtomForApn.remove(apnName);
@@ -1715,54 +1672,6 @@ public class IwlanDataService extends DataService {
             mApnName = apnName;
             mIwlanError = iwlanError;
             mIwlanDataServiceProvider = dsp;
-        }
-    }
-
-    private static final class TunnelOpenedMetricsData {
-        final String mApnName;
-        final IwlanDataServiceProvider mIwlanDataServiceProvider;
-        final String mEpdgServerAddress;
-        final int mProcessingDuration;
-        final int mEpdgServerSelectionDuration;
-        final int mIkeTunnelEstablishmentDuration;
-
-        private TunnelOpenedMetricsData(
-                String apnName,
-                String epdgServerAddress,
-                long processingDuration,
-                int epdgServerSelectionDuration,
-                int ikeTunnelEstablishmentDuration,
-                IwlanDataServiceProvider dsp) {
-            mApnName = apnName;
-            mIwlanDataServiceProvider = dsp;
-            mEpdgServerAddress = epdgServerAddress;
-            mProcessingDuration = (int) processingDuration;
-            mEpdgServerSelectionDuration = epdgServerSelectionDuration;
-            mIkeTunnelEstablishmentDuration = ikeTunnelEstablishmentDuration;
-        }
-    }
-
-    private static final class TunnelClosedMetricsData {
-        final String mApnName;
-        final IwlanDataServiceProvider mIwlanDataServiceProvider;
-        final String mEpdgServerAddress;
-        final int mProcessingDuration;
-        final int mEpdgServerSelectionDuration;
-        final int mIkeTunnelEstablishmentDuration;
-
-        private TunnelClosedMetricsData(
-                String apnName,
-                String epdgServerAddress,
-                long processingDuration,
-                int epdgServerSelectionDuration,
-                int ikeTunnelEstablishmentDuration,
-                IwlanDataServiceProvider dsp) {
-            mApnName = apnName;
-            mIwlanDataServiceProvider = dsp;
-            mEpdgServerAddress = epdgServerAddress;
-            mProcessingDuration = (int) processingDuration;
-            mEpdgServerSelectionDuration = epdgServerSelectionDuration;
-            mIkeTunnelEstablishmentDuration = ikeTunnelEstablishmentDuration;
         }
     }
 

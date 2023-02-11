@@ -16,14 +16,29 @@
 
 package com.google.android.iwlan;
 
-import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.isNull;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.content.ContentResolver;
 import android.content.Context;
@@ -51,7 +66,6 @@ import android.telephony.ims.ImsMmTelManager;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
-import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallbackMetrics;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.TunnelState;
 import com.google.android.iwlan.IwlanDataService.IwlanNetworkMonitorCallback;
 import com.google.android.iwlan.epdg.EpdgSelector;
@@ -507,7 +521,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -547,7 +561,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         TunnelLinkProperties tp = TunnelLinkPropertiesTest.createTestTunnelLinkProperties();
@@ -595,7 +609,7 @@ public class IwlanDataServiceTest {
                         eq(TEST_APN_NAME),
                         eq(false),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
         mSpyIwlanDataServiceProvider
@@ -634,7 +648,7 @@ public class IwlanDataServiceTest {
                         eq(TEST_APN_NAME),
                         eq(true),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
         mSpyIwlanDataServiceProvider
@@ -1182,7 +1196,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         mSpyIwlanDataServiceProvider
@@ -1329,7 +1343,7 @@ public class IwlanDataServiceTest {
                         eq(TEST_APN_NAME),
                         eq(true),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
         assertNotNull(mIwlanDataService.mIwlanDataServiceHandler);
         // Should not raise NullPointerException
         mSpyIwlanDataServiceProvider
@@ -1356,7 +1370,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -1385,7 +1399,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(
                         any(TunnelSetupRequest.class),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
         mTestLooper.dispatchAll();
 
         advanceCalendarByTimeMs(setupTime, calendar);
@@ -1417,7 +1431,7 @@ public class IwlanDataServiceTest {
                         eq(TEST_APN_NAME),
                         anyBoolean(),
                         any(IwlanTunnelCallback.class),
-                        any(IwlanTunnelCallbackMetrics.class));
+                        any(IwlanTunnelMetricsImpl.class));
 
         advanceCalendarByTimeMs(deactivationTime, calendar);
 

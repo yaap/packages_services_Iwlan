@@ -1169,6 +1169,23 @@ public class IwlanDataService extends DataService {
                     IwlanError iwlanError = tunnelClosedData.mIwlanError;
 
                     tunnelState = iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
+
+                    if (tunnelState == null) {
+                        // On a successful handover to EUTRAN, the NW may initiate an IKE DEL before
+                        // the UE initiates a deactivateDataCall(). There may be a race condition
+                        // where the deactivateDataCall() arrives immediately before
+                        // IwlanDataService receives EVENT_TUNNEL_CLOSED (and clears TunnelState).
+                        // Even though there is no tunnel, EpdgTunnelManager will still process the
+                        // bringdown request and send back an onClosed() to ensure state coherence.
+                        if (iwlanError.getErrorType() != IwlanError.TUNNEL_NOT_FOUND) {
+                            Log.w(
+                                    TAG,
+                                    "Tunnel state does not exist! Unexpected IwlanError: "
+                                            + iwlanError);
+                        }
+                        break;
+                    }
+
                     iwlanDataServiceProvider.mTunnelStats.reportTunnelDown(apnName, tunnelState);
                     iwlanDataServiceProvider.mTunnelStateForApn.remove(apnName);
                     metricsAtom = iwlanDataServiceProvider.mMetricsAtomForApn.get(apnName);
@@ -1621,6 +1638,10 @@ public class IwlanDataService extends DataService {
                     apnName = closedMetricsData.getApnName();
 
                     metricsAtom = iwlanDataServiceProvider.mMetricsAtomForApn.get(apnName);
+                    if (metricsAtom == null) {
+                        Log.w(TAG, "EVENT_TUNNEL_CLOSED_METRICS: MetricsAtom is null!");
+                        break;
+                    }
                     metricsAtom.setEpdgServerAddress(closedMetricsData.getEpdgServerAddress());
                     metricsAtom.setProcessingDurationMillis(
                             iwlanDataServiceProvider.mProcessingStartTime > 0

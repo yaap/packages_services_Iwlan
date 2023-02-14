@@ -1305,6 +1305,11 @@ public class IwlanDataServiceTest {
     }
 
     @Test
+    public void testUnexpectedTunnelClosedIsSuppressed() {
+        mockUnsolTunnelDown();
+    }
+
+    @Test
     public void testIwlanDataServiceHandlerOnUnbind() {
         DataProfile dp = buildImsDataProfile();
         doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();

@@ -307,7 +307,7 @@ public class ErrorPolicyManager {
         } else if (error.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.SIM_NOT_READY_EXCEPTION) {
-            ret = DataFailCause.IWLAN_PDN_CONNECTION_REJECTION;
+            ret = DataFailCause.SIM_CARD_CHANGED;
         } else if (error.getErrorType()
                 == IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED) {
             // TODO(b/265215821): Add new DataFailCause to match with IwlanError when possible.

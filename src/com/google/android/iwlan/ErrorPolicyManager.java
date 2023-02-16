@@ -314,6 +314,12 @@ public class ErrorPolicyManager {
             ret = DataFailCause.NETWORK_FAILURE;
         } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
             ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
+        } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+        } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+        } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
             Exception exception = error.getException();
             if (exception instanceof IkeProtocolException) {
@@ -1014,6 +1020,15 @@ public class ErrorPolicyManager {
                     ret = "EPDG_IP_VERSION_PREFERENCE_CONFLICT";
                     break;
                     // TODO: Add TIMEOUT_EXCEPTION processing
+                case IwlanError.IKE_INIT_TIMEOUT:
+                    ret = "IKE_INIT_TIMEOUT";
+                    break;
+                case IwlanError.IKE_MOBILITY_TIMEOUT:
+                    ret = "IKE_MOBILITY_TIMEOUT";
+                    break;
+                case IwlanError.IKE_DPD_TIMEOUT:
+                    ret = "IKE_DPD_TIMEOUT";
+                    break;
             }
             return ret;
         }

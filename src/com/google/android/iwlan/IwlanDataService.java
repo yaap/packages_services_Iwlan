@@ -1145,16 +1145,6 @@ public class IwlanDataService extends DataService {
                     iwlanDataServiceProvider.mTunnelStats.reportTunnelSetupSuccess(
                             apnName, tunnelState);
 
-                    // Record setup result for the Metrics
-                    metricsAtom = iwlanDataServiceProvider.mMetricsAtomForApn.get(apnName);
-                    metricsAtom.setSetupRequestResult(DataServiceCallback.RESULT_SUCCESS);
-                    metricsAtom.setIwlanError(IwlanError.NO_ERROR);
-                    metricsAtom.setDataCallFailCause(DataFailCause.NONE);
-                    metricsAtom.setTunnelState(tunnelState.getState());
-                    metricsAtom.setHandoverFailureMode(-1);
-                    metricsAtom.setRetryDurationMillis(0);
-                    metricsAtom.setMessageId(IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED);
-
                     iwlanDataServiceProvider.deliverCallback(
                             IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
                             DataServiceCallback.RESULT_SUCCESS,
@@ -1618,7 +1608,16 @@ public class IwlanDataService extends DataService {
                     iwlanDataServiceProvider = openedMetricsData.getIwlanDataServiceProvider();
                     apnName = openedMetricsData.getApnName();
 
+                    // Record setup result for the Metrics
                     metricsAtom = iwlanDataServiceProvider.mMetricsAtomForApn.get(apnName);
+                    tunnelState = iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
+                    metricsAtom.setSetupRequestResult(DataServiceCallback.RESULT_SUCCESS);
+                    metricsAtom.setIwlanError(IwlanError.NO_ERROR);
+                    metricsAtom.setDataCallFailCause(DataFailCause.NONE);
+                    metricsAtom.setTunnelState(tunnelState.getState());
+                    metricsAtom.setHandoverFailureMode(-1);
+                    metricsAtom.setRetryDurationMillis(0);
+                    metricsAtom.setMessageId(IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED);
                     metricsAtom.setEpdgServerAddress(openedMetricsData.getEpdgServerAddress());
                     metricsAtom.setProcessingDurationMillis(
                             (int)

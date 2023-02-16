@@ -44,6 +44,9 @@ public class IwlanError {
     public static final int IKE_NETWORK_LOST_EXCEPTION = 8;
     public static final int EPDG_IP_VERSION_PREFERENCE_CONFLICT = 9;
     public static final int TUNNEL_NOT_FOUND = 10;
+    public static final int IKE_INIT_TIMEOUT = 12;
+    public static final int IKE_MOBILITY_TIMEOUT = 13;
+    public static final int IKE_DPD_TIMEOUT = 14;
 
     @IntDef({
         NO_ERROR,
@@ -57,6 +60,9 @@ public class IwlanError {
         IKE_NETWORK_LOST_EXCEPTION,
         EPDG_IP_VERSION_PREFERENCE_CONFLICT,
         TUNNEL_NOT_FOUND,
+        IKE_INIT_TIMEOUT,
+        IKE_MOBILITY_TIMEOUT,
+        IKE_DPD_TIMEOUT
     })
     @interface IwlanErrorType {}
 
@@ -78,13 +84,20 @@ public class IwlanError {
                     Map.entry(
                             EPDG_IP_VERSION_PREFERENCE_CONFLICT,
                             "EPDG_IP_VERSION_PREFERENCE_CONFLICT"),
-                    Map.entry(TUNNEL_NOT_FOUND, "IWLAN_TUNNEL_NOT_FOUND"));
-
+                    Map.entry(TUNNEL_NOT_FOUND, "IWLAN_TUNNEL_NOT_FOUND"),
+                    Map.entry(IKE_INIT_TIMEOUT, "IKE_INIT_TIMEOUT"),
+                    Map.entry(IKE_MOBILITY_TIMEOUT, "IKE_MOBILITY_TIMEOUT"),
+                    Map.entry(IKE_DPD_TIMEOUT, "IKE_DPD_TIMEOUT"));
     private int mErrorType;
     private Exception mException;
 
     public IwlanError(@IwlanErrorType int err) {
         mErrorType = err;
+    }
+
+    public IwlanError(@IwlanErrorType int err, @NonNull Exception exception) {
+        mErrorType = err;
+        mException = exception;
     }
 
     /**

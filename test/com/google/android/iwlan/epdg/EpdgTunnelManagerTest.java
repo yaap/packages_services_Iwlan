@@ -48,6 +48,7 @@ import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.SaProposal;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
+import android.net.ipsec.ike.exceptions.IkeIOException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
@@ -136,6 +137,7 @@ public class EpdgTunnelManagerTest {
     @Mock IpSecManager mMockIpSecManager;
     @Mock EpdgTunnelManager.IkeSessionCreator mMockIkeSessionCreator;
     @Mock IkeException mMockIkeException;
+    @Mock IkeIOException mMockIkeIoException;
     @Mock IkeSessionConfiguration mMockIkeSessionConfiguration;
     @Mock ChildSessionConfiguration mMockChildSessionConfiguration;
     @Mock IpSecManager.IpSecTunnelInterface mMockIpSecTunnelInterface;
@@ -2350,5 +2352,30 @@ public class EpdgTunnelManagerTest {
                 ArgumentCaptor.forClass(OnOpenedMetrics.class);
         verify(mMockIwlanTunnelMetrics, times(1)).onOpened(metricsCaptor.capture());
         assertEquals(TEST_APN_NAME, metricsCaptor.getValue().getApnName());
+    }
+
+    @Test
+    public void testCloseTunnelWithIkeInitTimeout() throws Exception {
+        String testApnName = "www.xyz.com";
+        IwlanError error = new IwlanError(IwlanError.IKE_INIT_TIMEOUT, mMockIkeIoException);
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
+
+        setupTunnelBringup(testApnName, 1);
+
+        ArgumentCaptor<EpdgTunnelManager.TmIkeSessionCallback> ikeSessionCallbackCaptor =
+                ArgumentCaptor.forClass(EpdgTunnelManager.TmIkeSessionCallback.class);
+        verify(mMockIkeSessionCreator, atLeastOnce())
+                .createIkeSession(
+                        eq(mMockContext),
+                        any(IkeSessionParams.class),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        ikeSessionCallbackCaptor.capture(),
+                        any(ChildSessionCallback.class));
+        ikeSessionCallbackCaptor.getValue().onClosedWithException(mMockIkeIoException);
+        mTestLooper.dispatchAll();
+
+        verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
+        verify(mMockIwlanTunnelCallback, atLeastOnce()).onClosed(eq(testApnName), eq(error));
     }
 }

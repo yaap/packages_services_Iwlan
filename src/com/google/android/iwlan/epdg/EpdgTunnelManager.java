@@ -1761,11 +1761,11 @@ public class EpdgTunnelManager {
                         mContext,
                         mSlotId);
 
-        if (isIpPreferenceConflictsWithNetwork(ipPreference)) {
+        IpPreferenceConflict ipPreferenceConflict =
+                isIpPreferenceConflictsWithNetwork(ipPreference);
+        if (ipPreferenceConflict.mIsConflict) {
             sendSelectionRequestComplete(
-                    null,
-                    new IwlanError(IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT),
-                    mTransactionId);
+                    null, new IwlanError(ipPreferenceConflict.mErrorType), mTransactionId);
             return;
         }
 
@@ -2126,6 +2126,21 @@ public class EpdgTunnelManager {
         }
     }
 
+    private static class IpPreferenceConflict {
+        final boolean mIsConflict;
+        final int mErrorType;
+
+        private IpPreferenceConflict(boolean isConflict, int errorType) {
+            mIsConflict = isConflict;
+            mErrorType = errorType;
+        }
+
+        private IpPreferenceConflict() {
+            mIsConflict = false;
+            mErrorType = IwlanError.NO_ERROR;
+        }
+    }
+
     private int[] getRetransmissionTimeoutsFromConfig() {
         int[] timeList = getConfig(CarrierConfigManager.Iwlan.KEY_RETRANSMIT_TIMER_MSEC_INT_ARRAY);
         boolean isValid =
@@ -2346,32 +2361,22 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    boolean isIpPreferenceConflictsWithNetwork(
+    IpPreferenceConflict isIpPreferenceConflictsWithNetwork(
             @CarrierConfigManager.Iwlan.EpdgAddressIpPreference int ipPreference) {
         mLocalAddresses = getAddressForNetwork(mNetwork, mContext);
         if (mLocalAddresses == null || mLocalAddresses.size() == 0) {
             Log.e(TAG, "No local addresses available.");
-            return true;
-        }
-
-        int sourceIpType = EpdgSelector.PROTO_FILTER_IPV4V6;
-        if (!IwlanHelper.hasIpv6Address(mLocalAddresses)) {
-            sourceIpType = EpdgSelector.PROTO_FILTER_IPV4;
-        }
-        if (!IwlanHelper.hasIpv4Address(mLocalAddresses)) {
-            sourceIpType = EpdgSelector.PROTO_FILTER_IPV6;
-        }
-
-        if (sourceIpType == EpdgSelector.PROTO_FILTER_IPV4
+            return new IpPreferenceConflict(true, IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
+        } else if (!IwlanHelper.hasIpv6Address(mLocalAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY) {
             Log.e(
                     TAG,
                     "ePDG IP preference: "
                             + ipPreference
                             + " conflicts with source IP type: "
-                            + sourceIpType);
-            return true;
-        } else if (sourceIpType == EpdgSelector.PROTO_FILTER_IPV6
+                            + EpdgSelector.PROTO_FILTER_IPV4);
+            return new IpPreferenceConflict(true, IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED);
+        } else if (!IwlanHelper.hasIpv4Address(mLocalAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY) {
             // b/209938719 allows Iwlan to support VoWiFi for IPv4 ePDG server while on IPv6 WiFi.
             // Iwlan will receive a IPv4 address which is embedded in stacked IPv6 address. By using
@@ -2383,10 +2388,10 @@ public class EpdgTunnelManager {
                     "ePDG IP preference: "
                             + ipPreference
                             + " conflicts with source IP type: "
-                            + sourceIpType);
-            return true;
+                            + EpdgSelector.PROTO_FILTER_IPV6);
+            return new IpPreferenceConflict(true, IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED);
         }
-        return false;
+        return new IpPreferenceConflict();
     }
 
     public void dump(PrintWriter pw) {

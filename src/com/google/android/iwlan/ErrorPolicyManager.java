@@ -301,9 +301,12 @@ public class ErrorPolicyManager {
 
         if (error.getErrorType() == IwlanError.NO_ERROR) {
             ret = DataFailCause.NONE;
-        } else if (error.getErrorType() == IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED
-                || error.getErrorType() == IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT) {
+        } else if (error.getErrorType() == IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED) {
             ret = DataFailCause.IWLAN_DNS_RESOLUTION_NAME_FAILURE;
+        } else if (error.getErrorType() == IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED) {
+            ret = DataFailCause.ONLY_IPV4_ALLOWED;
+        } else if (error.getErrorType() == IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED) {
+            ret = DataFailCause.ONLY_IPV6_ALLOWED;
         } else if (error.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.SIM_NOT_READY_EXCEPTION) {
@@ -314,6 +317,12 @@ public class ErrorPolicyManager {
             ret = DataFailCause.NETWORK_FAILURE;
         } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
             ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
+        } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+        } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+        } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
+            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
             Exception exception = error.getException();
             if (exception instanceof IkeProtocolException) {
@@ -1010,10 +1019,22 @@ public class ErrorPolicyManager {
                 case IwlanError.IKE_NETWORK_LOST_EXCEPTION:
                     ret = "IKE_NETWORK_LOST_EXCEPTION";
                     break;
-                case IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT:
-                    ret = "EPDG_IP_VERSION_PREFERENCE_CONFLICT";
+                case IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED:
+                    ret = "EPDG_ADDRESS_ONLY_IPV4_ALLOWED";
+                    break;
+                case IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED:
+                    ret = "EPDG_ADDRESS_ONLY_IPV6_ALLOWED";
                     break;
                     // TODO: Add TIMEOUT_EXCEPTION processing
+                case IwlanError.IKE_INIT_TIMEOUT:
+                    ret = "IKE_INIT_TIMEOUT";
+                    break;
+                case IwlanError.IKE_MOBILITY_TIMEOUT:
+                    ret = "IKE_MOBILITY_TIMEOUT";
+                    break;
+                case IwlanError.IKE_DPD_TIMEOUT:
+                    ret = "IKE_DPD_TIMEOUT";
+                    break;
             }
             return ret;
         }

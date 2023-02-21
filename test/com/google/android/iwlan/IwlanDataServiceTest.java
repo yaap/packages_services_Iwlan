@@ -62,6 +62,7 @@ import com.google.android.iwlan.epdg.TunnelSetupRequest;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -1228,6 +1229,7 @@ public class IwlanDataServiceTest {
     }
 
     @Test
+    @Ignore("b/266148049 - Flaky test")
     public void testIwlanTunnelStats() {
         DataProfile dp = buildImsDataProfile();
 

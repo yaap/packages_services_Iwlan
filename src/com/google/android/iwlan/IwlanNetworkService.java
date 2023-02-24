@@ -35,6 +35,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.support.annotation.NonNull;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.NetworkService;
@@ -46,9 +47,9 @@ import android.util.Log;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanNetworkService extends NetworkService {
@@ -76,7 +77,7 @@ public class IwlanNetworkService extends NetworkService {
     enum Transport {
         UNSPECIFIED_NETWORK,
         MOBILE,
-        WIFI;
+        WIFI
     }
 
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
@@ -91,10 +92,11 @@ public class IwlanNetworkService extends NetworkService {
 
         /**
          * Called when the network is about to be lost, typically because there are no outstanding
-         * requests left for it. This may be paired with a {@link NetworkCallback#onAvailable} call
-         * with the new replacement network for graceful handover. This method is not guaranteed to
-         * be called before {@link NetworkCallback#onLost} is called, for example in case a network
-         * is suddenly disconnected.
+         * requests left for it. This may be paired with a {@link
+         * ConnectivityManager.NetworkCallback#onAvailable} call with the new replacement network
+         * for graceful handover. This method is not guaranteed to be called before {@link
+         * ConnectivityManager.NetworkCallback#onLost} is called, for example in case a network is
+         * suddenly disconnected.
          */
         @Override
         public void onLosing(Network network, int maxMsToLive) {
@@ -151,7 +153,7 @@ public class IwlanNetworkService extends NetworkService {
     final class IwlanOnSubscriptionsChangedListener
             extends SubscriptionManager.OnSubscriptionsChangedListener {
         /**
-         * Callback invoked when there is any change to any SubscriptionInfo. Typically this method
+         * Callback invoked when there is any change to any SubscriptionInfo. Typically, this method
          * invokes {@link SubscriptionManager#getActiveSubscriptionInfoList}
          */
         @Override
@@ -208,11 +210,10 @@ public class IwlanNetworkService extends NetworkService {
 
         @VisibleForTesting
         void subscriptionChanged() {
-            boolean subActive = false;
-            SubscriptionManager sm = mContext.getSystemService(SubscriptionManager.class);
-            if (sm.getActiveSubscriptionInfoForSimSlotIndex(getSlotIndex()) != null) {
-                subActive = true;
-            }
+            boolean subActive =
+                    getSubscriptionManager()
+                                    .getActiveSubscriptionInfoForSimSlotIndex(getSlotIndex())
+                            != null;
             if (subActive == mIsSubActive) {
                 return;
             }
@@ -239,10 +240,6 @@ public class IwlanNetworkService extends NetworkService {
 
             switch (msg.what) {
                 case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
-                    iwlanNetworkServiceProvider = getNetworkServiceProvider(msg.arg1);
-                    iwlanNetworkServiceProvider.notifyNetworkRegistrationInfoChanged();
-                    break;
-
                 case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
                     iwlanNetworkServiceProvider = getNetworkServiceProvider(msg.arg1);
                     iwlanNetworkServiceProvider.notifyNetworkRegistrationInfoChanged();
@@ -270,7 +267,7 @@ public class IwlanNetworkService extends NetworkService {
                             new NetworkRegistrationInfo.Builder();
                     nriBuilder
                             .setAvailableServices(
-                                    Arrays.asList(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
+                                    List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
                             .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
                             .setEmergencyOnly(!iwlanNetworkServiceProvider.mIsSubActive)
                             .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
@@ -382,9 +379,9 @@ public class IwlanNetworkService extends NetworkService {
         NetworkSpecifier specifier = networkCapabilities.getNetworkSpecifier();
         TransportInfo transportInfo = networkCapabilities.getTransportInfo();
 
-        if (specifier != null && specifier instanceof TelephonyNetworkSpecifier) {
+        if (specifier instanceof TelephonyNetworkSpecifier) {
             connectedDataSub = ((TelephonyNetworkSpecifier) specifier).getSubscriptionId();
-        } else if (transportInfo != null && transportInfo instanceof VcnTransportInfo) {
+        } else if (transportInfo instanceof VcnTransportInfo) {
             connectedDataSub = ((VcnTransportInfo) transportInfo).getSubId();
         }
         return connectedDataSub;
@@ -398,7 +395,7 @@ public class IwlanNetworkService extends NetworkService {
     public static boolean isNetworkConnected(boolean isActiveDataOnOtherSub, boolean isCstEnabled) {
         if (isActiveDataOnOtherSub && isCstEnabled) {
             // For cross-SIM IWLAN (Transport.MOBILE), an active data PDN must be maintained on the
-            // other susbcription.
+            // other subscription.
             if (sNetworkConnected && (sDefaultDataTransport != Transport.MOBILE)) {
                 Log.e(TAG, "Internet is on other slot, but default transport is not MOBILE!");
             }
@@ -441,43 +438,33 @@ public class IwlanNetworkService extends NetworkService {
 
     void initCallback() {
         // register for default network callback
-        ConnectivityManager connectivityManager =
-                mContext.getSystemService(ConnectivityManager.class);
         mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
-        connectivityManager.registerSystemDefaultNetworkCallback(
-                mNetworkMonitorCallback, mIwlanNetworkServiceHandler);
+        getConnectivityManager()
+                .registerSystemDefaultNetworkCallback(
+                        mNetworkMonitorCallback, mIwlanNetworkServiceHandler);
         Log.d(TAG, "Registered with Connectivity Service");
 
         /* register with subscription manager */
-        SubscriptionManager subscriptionManager =
-                mContext.getSystemService(SubscriptionManager.class);
         mSubsChangeListener = new IwlanOnSubscriptionsChangedListener();
-        subscriptionManager.addOnSubscriptionsChangedListener(
-                new HandlerExecutor(mIwlanNetworkServiceHandler), mSubsChangeListener);
+        getSubscriptionManager()
+                .addOnSubscriptionsChangedListener(
+                        new HandlerExecutor(mIwlanNetworkServiceHandler), mSubsChangeListener);
         Log.d(TAG, "Registered with Subscription Service");
     }
 
     void deinitCallback() {
         // deinit network related stuff
-        ConnectivityManager connectivityManager =
-                mContext.getSystemService(ConnectivityManager.class);
-        connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
+        getConnectivityManager().unregisterNetworkCallback(mNetworkMonitorCallback);
         mNetworkMonitorCallback = null;
 
         // deinit subscription manager related stuff
-        SubscriptionManager subscriptionManager =
-                mContext.getSystemService(SubscriptionManager.class);
-        subscriptionManager.removeOnSubscriptionsChangedListener(mSubsChangeListener);
+        getSubscriptionManager().removeOnSubscriptionsChangedListener(mSubsChangeListener);
         mSubsChangeListener = null;
         if (mIwlanNetworkServiceHandlerThread != null) {
             mIwlanNetworkServiceHandlerThread.quit();
             mIwlanNetworkServiceHandlerThread = null;
         }
         mIwlanNetworkServiceHandler = null;
-    }
-
-    Context getContext() {
-        return getApplicationContext();
     }
 
     @VisibleForTesting
@@ -533,5 +520,15 @@ public class IwlanNetworkService extends NetworkService {
     public IBinder onBind(Intent intent) {
         Log.d(TAG, "IwlanNetworkService onBind");
         return super.onBind(intent);
+    }
+
+    @NonNull
+    ConnectivityManager getConnectivityManager() {
+        return Objects.requireNonNull(mContext.getSystemService(ConnectivityManager.class));
+    }
+
+    @NonNull
+    SubscriptionManager getSubscriptionManager() {
+        return Objects.requireNonNull(mContext.getSystemService(SubscriptionManager.class));
     }
 }

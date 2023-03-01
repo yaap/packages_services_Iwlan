@@ -50,6 +50,10 @@
 #         3.4.3. APM_ENABLE_EVENT: APM off to on toggle.
 #         3.4.4. WIFI_AP_CHANGED_EVENT: Wifi is connected to a AP with different SSID.
 #         3.4.5. WIFI_CALLING_DISABLE_EVENT: Wifi calling button on to off toggle.
+#    3.5. "HandoverAttemptCount": Integer to specify the number of handover request attempts before
+#         using initial attach instead. It is an optional field.
+#         Note: This should only be defined in the config when handover attempt count is enabled and
+#         "ErrorType" is explicitly defined as "IKE_PROTOCOL_ERROR_TYPE".
 #
 # Note: When the value is "*" for any of "ApnName" or "ErrorType" or "ErrorDetails",
 #       it means that the config definition applies to rest of the errors for which

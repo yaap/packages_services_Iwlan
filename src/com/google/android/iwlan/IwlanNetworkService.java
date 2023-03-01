@@ -185,15 +185,18 @@ public class IwlanNetworkService extends NetworkService {
             events.add(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT);
             IwlanEventListener.getInstance(mContext, slotIndex)
-                    .addEventListener(events, mIwlanNetworkServiceHandler);
+                    .addEventListener(events, getIwlanNetworkServiceHandler());
         }
 
         @Override
         public void requestNetworkRegistrationInfo(int domain, NetworkServiceCallback callback) {
-            mIwlanNetworkServiceHandler.sendMessage(
-                    mIwlanNetworkServiceHandler.obtainMessage(
-                            EVENT_NETWORK_REGISTRATION_INFO_REQUEST,
-                            new NetworkRegistrationInfoRequestData(domain, callback, this)));
+            getIwlanNetworkServiceHandler()
+                    .sendMessage(
+                            getIwlanNetworkServiceHandler()
+                                    .obtainMessage(
+                                            EVENT_NETWORK_REGISTRATION_INFO_REQUEST,
+                                            new NetworkRegistrationInfoRequestData(
+                                                    domain, callback, this)));
         }
 
         /**
@@ -205,7 +208,7 @@ public class IwlanNetworkService extends NetworkService {
         public void close() {
             mIwlanNetworkService.removeNetworkServiceProvider(this);
             IwlanEventListener.getInstance(mContext, getSlotIndex())
-                    .removeEventListener(mIwlanNetworkServiceHandler);
+                    .removeEventListener(getIwlanNetworkServiceHandler());
         }
 
         @VisibleForTesting
@@ -359,14 +362,11 @@ public class IwlanNetworkService extends NetworkService {
 
         // TODO: validity check slot index
 
-        if (mIwlanNetworkServiceHandler == null) {
-            initHandler();
-        }
-
         IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex, this);
-        mIwlanNetworkServiceHandler.sendMessage(
-                mIwlanNetworkServiceHandler.obtainMessage(
-                        EVENT_CREATE_NETWORK_SERVICE_PROVIDER, np));
+        getIwlanNetworkServiceHandler()
+                .sendMessage(
+                        getIwlanNetworkServiceHandler()
+                                .obtainMessage(EVENT_CREATE_NETWORK_SERVICE_PROVIDER, np));
         return np;
     }
 
@@ -431,9 +431,10 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     public void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
-        mIwlanNetworkServiceHandler.sendMessage(
-                mIwlanNetworkServiceHandler.obtainMessage(
-                        EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np));
+        getIwlanNetworkServiceHandler()
+                .sendMessage(
+                        getIwlanNetworkServiceHandler()
+                                .obtainMessage(EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np));
     }
 
     void initCallback() {
@@ -441,14 +442,14 @@ public class IwlanNetworkService extends NetworkService {
         mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
         getConnectivityManager()
                 .registerSystemDefaultNetworkCallback(
-                        mNetworkMonitorCallback, mIwlanNetworkServiceHandler);
+                        mNetworkMonitorCallback, getIwlanNetworkServiceHandler());
         Log.d(TAG, "Registered with Connectivity Service");
 
         /* register with subscription manager */
         mSubsChangeListener = new IwlanOnSubscriptionsChangedListener();
         getSubscriptionManager()
                 .addOnSubscriptionsChangedListener(
-                        new HandlerExecutor(mIwlanNetworkServiceHandler), mSubsChangeListener);
+                        new HandlerExecutor(getIwlanNetworkServiceHandler()), mSubsChangeListener);
         Log.d(TAG, "Registered with Subscription Service");
     }
 
@@ -483,8 +484,12 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     @VisibleForTesting
-    void initHandler() {
-        mIwlanNetworkServiceHandler = new IwlanNetworkServiceHandler(getLooper());
+    @NonNull
+    Handler getIwlanNetworkServiceHandler() {
+        if (mIwlanNetworkServiceHandler == null) {
+            mIwlanNetworkServiceHandler = new IwlanNetworkServiceHandler(getLooper());
+        }
+        return mIwlanNetworkServiceHandler;
     }
 
     @VisibleForTesting

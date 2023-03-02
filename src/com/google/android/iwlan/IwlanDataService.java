@@ -401,21 +401,30 @@ public class IwlanDataService extends DataService {
                 Log.d(
                         SUB_TAG,
                         "Tunnel opened!. APN: " + apnName + "linkproperties: " + linkProperties);
-                mIwlanDataServiceHandler.sendMessage(
-                        mIwlanDataServiceHandler.obtainMessage(
-                                EVENT_TUNNEL_OPENED,
-                                new TunnelOpenedData(
-                                        apnName, linkProperties, mIwlanDataServiceProvider)));
+                getIwlanDataServiceHandler()
+                        .sendMessage(
+                                getIwlanDataServiceHandler()
+                                        .obtainMessage(
+                                                EVENT_TUNNEL_OPENED,
+                                                new TunnelOpenedData(
+                                                        apnName,
+                                                        linkProperties,
+                                                        mIwlanDataServiceProvider)));
             }
 
             public void onClosed(String apnName, IwlanError error) {
                 Log.d(SUB_TAG, "Tunnel closed!. APN: " + apnName + " Error: " + error);
                 // this is called, when a tunnel that is up, is closed.
                 // the expectation is error==NO_ERROR for user initiated/normal close.
-                mIwlanDataServiceHandler.sendMessage(
-                        mIwlanDataServiceHandler.obtainMessage(
-                                EVENT_TUNNEL_CLOSED,
-                                new TunnelClosedData(apnName, error, mIwlanDataServiceProvider)));
+                getIwlanDataServiceHandler()
+                        .sendMessage(
+                                getIwlanDataServiceHandler()
+                                        .obtainMessage(
+                                                EVENT_TUNNEL_CLOSED,
+                                                new TunnelClosedData(
+                                                        apnName,
+                                                        error,
+                                                        mIwlanDataServiceProvider)));
             }
         }
 
@@ -571,7 +580,7 @@ public class IwlanDataService extends DataService {
             // get reference to resolver
             mIwlanDataService = iwlanDataService;
             mIwlanTunnelCallback = new IwlanTunnelCallback(this);
-            mIwlanTunnelMetrics = new IwlanTunnelMetricsImpl(this, mIwlanDataServiceHandler);
+            mIwlanTunnelMetrics = new IwlanTunnelMetricsImpl(this, getIwlanDataServiceHandler());
             mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, slotIndex);
             mCalendar = Calendar.getInstance();
             mTunnelStats = new IwlanDataTunnelStats();
@@ -585,7 +594,7 @@ public class IwlanDataService extends DataService {
             events.add(IwlanEventListener.CELLINFO_CHANGED_EVENT);
             events.add(IwlanEventListener.CALL_STATE_CHANGED_EVENT);
             IwlanEventListener.getInstance(mContext, slotIndex)
-                    .addEventListener(events, mIwlanDataServiceHandler);
+                    .addEventListener(events, getIwlanDataServiceHandler());
         }
 
         @VisibleForTesting
@@ -803,9 +812,10 @@ public class IwlanDataService extends DataService {
                         networkTransport);
             }
 
-            mIwlanDataServiceHandler.sendMessage(
-                    mIwlanDataServiceHandler.obtainMessage(
-                            EVENT_SETUP_DATA_CALL, setupDataCallData));
+            getIwlanDataServiceHandler()
+                    .sendMessage(
+                            getIwlanDataServiceHandler()
+                                    .obtainMessage(EVENT_SETUP_DATA_CALL, setupDataCallData));
         }
 
         /**
@@ -835,9 +845,11 @@ public class IwlanDataService extends DataService {
             DeactivateDataCallData deactivateDataCallData =
                     new DeactivateDataCallData(cid, reason, callback, this);
 
-            mIwlanDataServiceHandler.sendMessage(
-                    mIwlanDataServiceHandler.obtainMessage(
-                            EVENT_DEACTIVATE_DATA_CALL, deactivateDataCallData));
+            getIwlanDataServiceHandler()
+                    .sendMessage(
+                            getIwlanDataServiceHandler()
+                                    .obtainMessage(
+                                            EVENT_DEACTIVATE_DATA_CALL, deactivateDataCallData));
         }
 
         public void forceCloseTunnelsInDeactivatingState() {
@@ -872,10 +884,13 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void requestDataCallList(DataServiceCallback callback) {
-            mIwlanDataServiceHandler.sendMessage(
-                    mIwlanDataServiceHandler.obtainMessage(
-                            EVENT_DATA_CALL_LIST_REQUEST,
-                            new DataCallRequestData(callback, IwlanDataServiceProvider.this)));
+            getIwlanDataServiceHandler()
+                    .sendMessage(
+                            getIwlanDataServiceHandler()
+                                    .obtainMessage(
+                                            EVENT_DATA_CALL_LIST_REQUEST,
+                                            new DataCallRequestData(
+                                                    callback, IwlanDataServiceProvider.this)));
         }
 
         @VisibleForTesting
@@ -1073,7 +1088,7 @@ public class IwlanDataService extends DataService {
             mIwlanDataService.removeDataServiceProvider(this);
             IwlanEventListener iwlanEventListener =
                     IwlanEventListener.getInstance(mContext, getSlotIndex());
-            iwlanEventListener.removeEventListener(mIwlanDataServiceHandler);
+            iwlanEventListener.removeEventListener(getIwlanDataServiceHandler());
             iwlanEventListener.unregisterContentObserver();
         }
 
@@ -1950,10 +1965,6 @@ public class IwlanDataService extends DataService {
         // TODO: validity check on slot index
         Log.d(TAG, "Creating provider for " + slotIndex);
 
-        if (mIwlanDataServiceHandler == null) {
-            initHandler();
-        }
-
         if (mNetworkMonitorCallback == null) {
             // start monitoring network and register for default network callback
             ConnectivityManager connectivityManager =
@@ -1961,21 +1972,25 @@ public class IwlanDataService extends DataService {
             mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
             if (connectivityManager != null) {
                 connectivityManager.registerSystemDefaultNetworkCallback(
-                        mNetworkMonitorCallback, mIwlanDataServiceHandler);
+                        mNetworkMonitorCallback, getIwlanDataServiceHandler());
             }
             Log.d(TAG, "Registered with Connectivity Service");
         }
 
         IwlanDataServiceProvider dp = new IwlanDataServiceProvider(slotIndex, this);
 
-        mIwlanDataServiceHandler.sendMessage(
-                mIwlanDataServiceHandler.obtainMessage(EVENT_ADD_DATA_SERVICE_PROVIDER, dp));
+        getIwlanDataServiceHandler()
+                .sendMessage(
+                        getIwlanDataServiceHandler()
+                                .obtainMessage(EVENT_ADD_DATA_SERVICE_PROVIDER, dp));
         return dp;
     }
 
     public void removeDataServiceProvider(IwlanDataServiceProvider dp) {
-        mIwlanDataServiceHandler.sendMessage(
-                mIwlanDataServiceHandler.obtainMessage(EVENT_REMOVE_DATA_SERVICE_PROVIDER, dp));
+        getIwlanDataServiceHandler()
+                .sendMessage(
+                        getIwlanDataServiceHandler()
+                                .obtainMessage(EVENT_REMOVE_DATA_SERVICE_PROVIDER, dp));
     }
 
     @VisibleForTesting
@@ -2013,8 +2028,12 @@ public class IwlanDataService extends DataService {
     }
 
     @VisibleForTesting
-    void initHandler() {
-        mIwlanDataServiceHandler = new IwlanDataServiceHandler(getLooper());
+    @NonNull
+    Handler getIwlanDataServiceHandler() {
+        if (mIwlanDataServiceHandler == null) {
+            mIwlanDataServiceHandler = new IwlanDataServiceHandler(getLooper());
+        }
+        return mIwlanDataServiceHandler;
     }
 
     @VisibleForTesting
@@ -2077,15 +2096,15 @@ public class IwlanDataService extends DataService {
 
     @Override
     public IBinder onBind(Intent intent) {
-        Log.d(TAG, "Iwlanservice onBind");
+        Log.d(TAG, "IwlanDataService onBind");
         return super.onBind(intent);
     }
 
     @Override
     public boolean onUnbind(Intent intent) {
-        Log.d(TAG, "IwlanService onUnbind");
-        mIwlanDataServiceHandler.sendMessage(
-                mIwlanDataServiceHandler.obtainMessage(EVENT_FORCE_CLOSE_TUNNEL));
+        Log.d(TAG, "IwlanDataService onUnbind");
+        getIwlanDataServiceHandler()
+                .sendMessage(getIwlanDataServiceHandler().obtainMessage(EVENT_FORCE_CLOSE_TUNNEL));
         return super.onUnbind(intent);
     }
 

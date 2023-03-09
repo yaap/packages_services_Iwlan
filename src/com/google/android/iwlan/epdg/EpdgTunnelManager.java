@@ -76,10 +76,10 @@ import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 import com.google.android.iwlan.IwlanTunnelMetricsImpl;
-import com.google.android.iwlan.exceptions.IwlanSimNotReadyException;
 import com.google.android.iwlan.TunnelMetricsInterface;
-import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
 import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
+import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
+import com.google.android.iwlan.exceptions.IwlanSimNotReadyException;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -997,9 +997,13 @@ public class EpdgTunnelManager {
             }
         }
 
-        if (setupRequest.pduSessionId() != 0) {
-            builder3gppParams = new Ike3gppParams.Builder();
-            builder3gppParams.setPduSessionId((byte) setupRequest.pduSessionId());
+        if (isN1ModeSupported()) {
+            if (setupRequest.pduSessionId() != 0) {
+                // Configures the PduSession ID in N1_MODE_CAPABILITY payload
+                // to notify the server that UE supports N1_MODE
+                builder3gppParams = new Ike3gppParams.Builder();
+                builder3gppParams.setPduSessionId((byte) setupRequest.pduSessionId());
+            }
         }
 
         if (builder3gppParams != null) {
@@ -2238,6 +2242,17 @@ public class EpdgTunnelManager {
                         apnName, (apn, token) -> token == null ? 0 : token + 1);
         Log.d(TAG, "Added token: " + currentToken + " for apn: " + apnName);
         return currentToken;
+    }
+
+    @VisibleForTesting
+    boolean isN1ModeSupported() {
+        int[] nrCarrierCaps =
+                getConfig(CarrierConfigManager.KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY);
+        Log.d(TAG, "KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY : " + Arrays.toString(nrCarrierCaps));
+        if (Arrays.stream(nrCarrierCaps)
+                .anyMatch(cap -> cap == CarrierConfigManager.CARRIER_NR_AVAILABILITY_SA)) {
+            return true;
+        } else return false;
     }
 
     @VisibleForTesting

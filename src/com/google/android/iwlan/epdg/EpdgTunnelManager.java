@@ -1101,11 +1101,15 @@ public class EpdgTunnelManager {
             }
         }
 
-        if (setupRequest.pduSessionId() != 0) {
-            if (builder3gppParams == null) {
-                builder3gppParams = new Ike3gppParams.Builder();
+        if (isN1ModeSupported()) {
+            if (setupRequest.pduSessionId() != 0) {
+                // Configures the PduSession ID in N1_MODE_CAPABILITY payload
+                // to notify the server that UE supports N1_MODE
+                if (builder3gppParams == null) {
+                    builder3gppParams = new Ike3gppParams.Builder();
+                }
+                builder3gppParams.setPduSessionId((byte) setupRequest.pduSessionId());
             }
-            builder3gppParams.setPduSessionId((byte) setupRequest.pduSessionId());
         }
 
         if (builder3gppParams != null) {
@@ -2221,6 +2225,17 @@ public class EpdgTunnelManager {
                         apnName, (apn, token) -> token == null ? 0 : token + 1);
         Log.d(TAG, "Added token: " + currentToken + " for apn: " + apnName);
         return currentToken;
+    }
+
+    @VisibleForTesting
+    boolean isN1ModeSupported() {
+        int[] nrCarrierCaps =
+                getConfig(CarrierConfigManager.KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY);
+        Log.d(TAG, "KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY : " + Arrays.toString(nrCarrierCaps));
+        if (Arrays.stream(nrCarrierCaps)
+                .anyMatch(cap -> cap == CarrierConfigManager.CARRIER_NR_AVAILABILITY_SA)) {
+            return true;
+        } else return false;
     }
 
     @VisibleForTesting

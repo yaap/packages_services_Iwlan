@@ -2439,4 +2439,31 @@ public class EpdgTunnelManagerTest {
         verify(mEpdgTunnelManager, atLeastOnce()).reportIwlanError(eq(TEST_APN_NAME), eq(error));
         verify(mMockIwlanTunnelCallback, atLeastOnce()).onClosed(eq(TEST_APN_NAME), eq(error));
     }
+
+    private boolean testIsN1ModeSupported(int[] nrAvailability) {
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putIntArray(
+                CarrierConfigManager.KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY, nrAvailability);
+
+        setupMockForGetConfig(bundle);
+
+        return mEpdgTunnelManager.isN1ModeSupported();
+    }
+
+    @Test
+    public void testIsN1ModeSupportedTrue() throws Exception {
+        assertTrue(
+                testIsN1ModeSupported(
+                        new int[] {
+                            CarrierConfigManager.CARRIER_NR_AVAILABILITY_NSA,
+                            CarrierConfigManager.CARRIER_NR_AVAILABILITY_SA
+                        }));
+    }
+
+    @Test
+    public void testIsN1ModeSupportedFalse() throws Exception {
+        assertFalse(
+                testIsN1ModeSupported(
+                        new int[] {CarrierConfigManager.CARRIER_NR_AVAILABILITY_NSA}));
+    }
 }

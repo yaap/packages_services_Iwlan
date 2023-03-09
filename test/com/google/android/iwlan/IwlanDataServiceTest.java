@@ -234,6 +234,7 @@ public class IwlanDataServiceTest {
         when(mMockIPv6LinkAddress.getAddress()).thenReturn(mMockInet6Address);
 
         mIwlanDataService = spy(new IwlanDataService());
+        // Injects the test looper into the IwlanDataServiceHandler
         doReturn(mTestLooper.getLooper()).when(mIwlanDataService).getLooper();
         mIwlanDataService.setAppContext(mMockContext);
         mIwlanDataServiceProvider =
@@ -1355,6 +1356,12 @@ public class IwlanDataServiceTest {
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR));
         mTestLooper.dispatchAll();
+    }
+
+    @Test
+    public void testBackToBackOnBindAndOnUnbindDoesNotThrow() {
+        mIwlanDataService.onBind(null);
+        mIwlanDataService.onUnbind(null);
     }
 
     private void mockTunnelSetupFail(DataProfile dp) {

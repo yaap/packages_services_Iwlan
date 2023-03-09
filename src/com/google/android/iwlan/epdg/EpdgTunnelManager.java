@@ -50,6 +50,7 @@ import android.net.ipsec.ike.IkeTrafficSelector;
 import android.net.ipsec.ike.SaProposal;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
+import android.net.ipsec.ike.exceptions.IkeIOException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
 import android.net.ipsec.ike.ike3gpp.Ike3gppData;
@@ -214,6 +215,8 @@ public class EpdgTunnelManager {
                         SaProposal.PSEUDORANDOM_FUNCTION_SHA2_384,
                         SaProposal.PSEUDORANDOM_FUNCTION_SHA2_512);
     }
+
+    private IkeSessionState mIkeSessionState;
 
     private final EpdgSelector.EpdgSelectorCallback mSelectorCallback =
             new EpdgSelector.EpdgSelectorCallback() {
@@ -710,6 +713,8 @@ public class EpdgTunnelManager {
         TunnelRequestWrapper tunnelRequestWrapper =
                 new TunnelRequestWrapper(setupRequest, tunnelCallback, tunnelMetrics);
 
+        mIkeSessionState = IkeSessionState.NO_IKE_SESSION;
+
         mHandler.sendMessage(
                 mHandler.obtainMessage(EVENT_TUNNEL_BRINGUP_REQUEST, tunnelRequestWrapper));
 
@@ -752,7 +757,7 @@ public class EpdgTunnelManager {
                                 Executors.newSingleThreadExecutor(),
                                 getTmIkeSessionCallback(apnName, token),
                                 new TmChildSessionCallback(apnName, token));
-
+        mIkeSessionState = IkeSessionState.IKE_SESSION_INIT_IN_PROGRESS;
         boolean isSrcIpv6Present = setupRequest.srcIpv6Address().isPresent();
         putApnNameToTunnelConfig(
                 apnName,
@@ -1229,7 +1234,12 @@ public class EpdgTunnelManager {
 
     private void onSessionClosedWithException(
             IkeException exception, String apnName, int token, int sessionType) {
-        IwlanError error = new IwlanError(exception);
+        IwlanError error;
+        if (exception instanceof IkeIOException) {
+            error = new IwlanError(mIkeSessionState.getErrorType(), exception);
+        } else {
+            error = new IwlanError(exception);
+        }
         Log.e(
                 TAG,
                 "Closing tunnel with exception for apn: "
@@ -1239,7 +1249,9 @@ public class EpdgTunnelManager {
                         + " sessionType:"
                         + sessionType
                         + " error: "
-                        + error);
+                        + error
+                        + " state: "
+                        + mIkeSessionState);
         exception.printStackTrace();
 
         mHandler.sendMessage(
@@ -1423,6 +1435,7 @@ public class EpdgTunnelManager {
                     mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
+                    mIkeSessionState = IkeSessionState.CHILD_SESSION_OPENED;
                     break;
 
                 case EVENT_IKE_SESSION_CLOSED:
@@ -1497,6 +1510,9 @@ public class EpdgTunnelManager {
                     if (mApnNameToTunnelConfig.size() == 0 && mPendingBringUpRequests.isEmpty()) {
                         resetTunnelManagerState();
                     }
+
+                    mIkeSessionState = IkeSessionState.NO_IKE_SESSION;
+
                     break;
 
                 case EVENT_UPDATE_NETWORK:
@@ -1516,6 +1532,7 @@ public class EpdgTunnelManager {
                     } else {
                         Log.d(TAG, "Updating Network for apn: " + apnName + " Network: " + network);
                         tunnelConfig.getIkeSession().setNetwork(network);
+                        mIkeSessionState = IkeSessionState.IKE_MOBILITY_IN_PROGRESS;
                     }
                     break;
 
@@ -1604,6 +1621,9 @@ public class EpdgTunnelManager {
                         Log.e(TAG, "Failed to apply tunnel transform." + e);
                         closeIkeSession(
                                 apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
+                    }
+                    if (mIkeSessionState == IkeSessionState.IKE_MOBILITY_IN_PROGRESS) {
+                        mIkeSessionState = IkeSessionState.CHILD_SESSION_OPENED;
                     }
                     break;
 
@@ -1741,11 +1761,11 @@ public class EpdgTunnelManager {
                         mContext,
                         mSlotId);
 
-        if (isIpPreferenceConflictsWithNetwork(ipPreference)) {
+        IpPreferenceConflict ipPreferenceConflict =
+                isIpPreferenceConflictsWithNetwork(ipPreference);
+        if (ipPreferenceConflict.mIsConflict) {
             sendSelectionRequestComplete(
-                    null,
-                    new IwlanError(IwlanError.EPDG_IP_VERSION_PREFERENCE_CONFLICT),
-                    mTransactionId);
+                    null, new IwlanError(ipPreferenceConflict.mErrorType), mTransactionId);
             return;
         }
 
@@ -2106,6 +2126,21 @@ public class EpdgTunnelManager {
         }
     }
 
+    private static class IpPreferenceConflict {
+        final boolean mIsConflict;
+        final int mErrorType;
+
+        private IpPreferenceConflict(boolean isConflict, int errorType) {
+            mIsConflict = isConflict;
+            mErrorType = errorType;
+        }
+
+        private IpPreferenceConflict() {
+            mIsConflict = false;
+            mErrorType = IwlanError.NO_ERROR;
+        }
+    }
+
     private int[] getRetransmissionTimeoutsFromConfig() {
         int[] timeList = getConfig(CarrierConfigManager.Iwlan.KEY_RETRANSMIT_TIMER_MSEC_INT_ARRAY);
         boolean isValid =
@@ -2326,32 +2361,22 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    boolean isIpPreferenceConflictsWithNetwork(
+    IpPreferenceConflict isIpPreferenceConflictsWithNetwork(
             @CarrierConfigManager.Iwlan.EpdgAddressIpPreference int ipPreference) {
         mLocalAddresses = getAddressForNetwork(mNetwork, mContext);
         if (mLocalAddresses == null || mLocalAddresses.size() == 0) {
             Log.e(TAG, "No local addresses available.");
-            return true;
-        }
-
-        int sourceIpType = EpdgSelector.PROTO_FILTER_IPV4V6;
-        if (!IwlanHelper.hasIpv6Address(mLocalAddresses)) {
-            sourceIpType = EpdgSelector.PROTO_FILTER_IPV4;
-        }
-        if (!IwlanHelper.hasIpv4Address(mLocalAddresses)) {
-            sourceIpType = EpdgSelector.PROTO_FILTER_IPV6;
-        }
-
-        if (sourceIpType == EpdgSelector.PROTO_FILTER_IPV4
+            return new IpPreferenceConflict(true, IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
+        } else if (!IwlanHelper.hasIpv6Address(mLocalAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY) {
             Log.e(
                     TAG,
                     "ePDG IP preference: "
                             + ipPreference
                             + " conflicts with source IP type: "
-                            + sourceIpType);
-            return true;
-        } else if (sourceIpType == EpdgSelector.PROTO_FILTER_IPV6
+                            + EpdgSelector.PROTO_FILTER_IPV4);
+            return new IpPreferenceConflict(true, IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED);
+        } else if (!IwlanHelper.hasIpv4Address(mLocalAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY) {
             // b/209938719 allows Iwlan to support VoWiFi for IPv4 ePDG server while on IPv6 WiFi.
             // Iwlan will receive a IPv4 address which is embedded in stacked IPv6 address. By using
@@ -2363,10 +2388,10 @@ public class EpdgTunnelManager {
                     "ePDG IP preference: "
                             + ipPreference
                             + " conflicts with source IP type: "
-                            + sourceIpType);
-            return true;
+                            + EpdgSelector.PROTO_FILTER_IPV6);
+            return new IpPreferenceConflict(true, IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED);
         }
-        return false;
+        return new IpPreferenceConflict();
     }
 
     public void dump(PrintWriter pw) {

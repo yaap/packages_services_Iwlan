@@ -319,7 +319,7 @@ public class ErrorPolicyManager {
         } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {
             ret = DataFailCause.IWLAN_IKE_INIT_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
-            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            ret = DataFailCause.IWLAN_IKE_MOBILITY_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.TUNNEL_TRANSFORM_FAILED) {

@@ -317,7 +317,7 @@ public class ErrorPolicyManager {
         } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
             ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
         } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {
-            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            ret = DataFailCause.IWLAN_IKE_INIT_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {

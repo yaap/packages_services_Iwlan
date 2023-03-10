@@ -313,8 +313,7 @@ public class ErrorPolicyManager {
             ret = DataFailCause.SIM_CARD_CHANGED;
         } else if (error.getErrorType()
                 == IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED) {
-            // TODO(b/265215821): Add new DataFailCause to match with IwlanError when possible.
-            ret = DataFailCause.NETWORK_FAILURE;
+            ret = DataFailCause.IWLAN_IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED;
         } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
             ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
         } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {

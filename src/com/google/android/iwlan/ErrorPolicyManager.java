@@ -334,6 +334,9 @@ public class ErrorPolicyManager {
                     case IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED:
                         ret = DataFailCause.IWLAN_IKEV2_AUTH_FAILURE;
                         break;
+                    case IkeProtocolException.ERROR_TYPE_INTERNAL_ADDRESS_FAILURE:
+                        ret = DataFailCause.IWLAN_EPDG_INTERNAL_ADDRESS_FAILURE;
+                        break;
                     case IKE_PROTOCOL_ERROR_PDN_CONNECTION_REJECTION:
                         ret = DataFailCause.IWLAN_PDN_CONNECTION_REJECTION;
                         break;

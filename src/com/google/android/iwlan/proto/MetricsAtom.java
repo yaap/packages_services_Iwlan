@@ -41,7 +41,8 @@ public class MetricsAtom {
     private int mHandoverFailureMode;
     private int mRetryDurationMillis;
     private int mWifiSignalValue;
-    private String mIwlanErrorWrappedClassnameAndStack;
+    private String mIwlanErrorWrappedClassname;
+    private String mIwlanErrorWrappedStackFirstFrame;
 
     public void setMessageId(int messageId) {
         this.mMessageId = messageId;
@@ -123,23 +124,26 @@ public class MetricsAtom {
         }
 
         if (iwlanErrorWrapped == null) {
-            this.mIwlanErrorWrappedClassnameAndStack = null;
+            this.mIwlanErrorWrappedClassname = null;
+            this.mIwlanErrorWrappedStackFirstFrame = null;
             return;
         }
 
-        StackTraceElement[] iwlanErrorWrappedStackTraceElements = iwlanErrorWrapped.getStackTrace();
-        String iwlanErrorWrappedFirstLineStrackTrace =
-                iwlanErrorWrappedStackTraceElements.length == 0
-                        ? ""
-                        : "\n" + iwlanErrorWrappedStackTraceElements[0].toString();
+        this.mIwlanErrorWrappedClassname = iwlanErrorWrapped.getClass().getCanonicalName();
 
-        this.mIwlanErrorWrappedClassnameAndStack =
-                iwlanErrorWrapped.getClass().getCanonicalName()
-                        + iwlanErrorWrappedFirstLineStrackTrace;
+        StackTraceElement[] iwlanErrorWrappedStackTraceElements = iwlanErrorWrapped.getStackTrace();
+        this.mIwlanErrorWrappedStackFirstFrame =
+                iwlanErrorWrappedStackTraceElements.length != 0
+                        ? iwlanErrorWrappedStackTraceElements[0].toString()
+                        : null;
     }
 
-    public String getIwlanErrorWrappedClassnameAndStack() {
-        return mIwlanErrorWrappedClassnameAndStack;
+    public String getIwlanErrorWrappedClassname() {
+        return mIwlanErrorWrappedClassname;
+    }
+
+    public String getIwlanErrorWrappedStackFirstFrame() {
+        return mIwlanErrorWrappedStackFirstFrame;
     }
 
     public void sendMetricsData() {
@@ -162,7 +166,8 @@ public class MetricsAtom {
                     mTunnelState,
                     mHandoverFailureMode,
                     mRetryDurationMillis,
-                    mIwlanErrorWrappedClassnameAndStack);
+                    mIwlanErrorWrappedClassname,
+                    mIwlanErrorWrappedStackFirstFrame);
             return;
         } else if (mMessageId == IwlanStatsLog.IWLAN_PDN_DISCONNECTED_REASON_REPORTED) {
             IwlanStatsLog.write(

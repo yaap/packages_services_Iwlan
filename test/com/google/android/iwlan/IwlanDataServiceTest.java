@@ -1416,10 +1416,8 @@ public class IwlanDataServiceTest {
 
         mTestLooper.dispatchAll();
 
-        var expectedClassNameAndStack =
-                mockException.getClass().getCanonicalName()
-                        + "\n"
-                        + firstDeclaringClassName
+        var expectedStackFirstFrame =
+                firstDeclaringClassName
                         + "."
                         + firstMethodName
                         + "("
@@ -1429,7 +1427,10 @@ public class IwlanDataServiceTest {
                         + ")";
 
         assertEquals(
-                expectedClassNameAndStack, metricsAtom.getIwlanErrorWrappedClassnameAndStack());
+                mockException.getClass().getCanonicalName(),
+                metricsAtom.getIwlanErrorWrappedClassname());
+
+        assertEquals(expectedStackFirstFrame, metricsAtom.getIwlanErrorWrappedStackFirstFrame());
     }
 
     @Test
@@ -1471,7 +1472,8 @@ public class IwlanDataServiceTest {
 
         mTestLooper.dispatchAll();
 
-        assertEquals(null, metricsAtom.getIwlanErrorWrappedClassnameAndStack());
+        assertEquals(null, metricsAtom.getIwlanErrorWrappedClassname());
+        assertEquals(null, metricsAtom.getIwlanErrorWrappedStackFirstFrame());
     }
 
     private void mockTunnelSetupFail(DataProfile dp) {

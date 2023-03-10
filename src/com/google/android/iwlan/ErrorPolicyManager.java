@@ -383,7 +383,7 @@ public class ErrorPolicyManager {
                         ret = DataFailCause.IWLAN_CONGESTION;
                         break;
                     default:
-                        ret = DataFailCause.IWLAN_NETWORK_FAILURE;
+                        ret = DataFailCause.IWLAN_IKE_PRIVATE_PROTOCOL_ERROR;
                         break;
                 }
             }

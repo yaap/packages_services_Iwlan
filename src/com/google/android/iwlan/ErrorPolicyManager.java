@@ -321,7 +321,7 @@ public class ErrorPolicyManager {
         } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
             ret = DataFailCause.IWLAN_IKE_MOBILITY_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
-            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            ret = DataFailCause.IWLAN_IKE_DPD_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.TUNNEL_TRANSFORM_FAILED) {
             ret = DataFailCause.IWLAN_TUNNEL_TRANSFORM_FAILED;
         } else if (error.getErrorType() == IwlanError.IKE_NETWORK_LOST_EXCEPTION) {

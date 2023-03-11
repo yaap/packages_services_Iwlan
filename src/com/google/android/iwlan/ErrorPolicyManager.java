@@ -313,8 +313,7 @@ public class ErrorPolicyManager {
             ret = DataFailCause.SIM_CARD_CHANGED;
         } else if (error.getErrorType()
                 == IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED) {
-            // TODO(b/265215821): Add new DataFailCause to match with IwlanError when possible.
-            ret = DataFailCause.NETWORK_FAILURE;
+            ret = DataFailCause.IWLAN_IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED;
         } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
             ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
         } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {
@@ -323,6 +322,10 @@ public class ErrorPolicyManager {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
             ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+        } else if (error.getErrorType() == IwlanError.TUNNEL_TRANSFORM_FAILED) {
+            ret = DataFailCause.IWLAN_TUNNEL_TRANSFORM_FAILED;
+        } else if (error.getErrorType() == IwlanError.IKE_NETWORK_LOST_EXCEPTION) {
+            ret = DataFailCause.IWLAN_IKE_NETWORK_LOST_EXCEPTION;
         } else if (error.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
             Exception exception = error.getException();
             if (exception instanceof IkeProtocolException) {
@@ -383,7 +386,7 @@ public class ErrorPolicyManager {
                         ret = DataFailCause.IWLAN_CONGESTION;
                         break;
                     default:
-                        ret = DataFailCause.IWLAN_NETWORK_FAILURE;
+                        ret = DataFailCause.IWLAN_IKE_PRIVATE_PROTOCOL_ERROR;
                         break;
                 }
             }

@@ -317,11 +317,11 @@ public class ErrorPolicyManager {
         } else if (error.getErrorType() == IwlanError.TUNNEL_NOT_FOUND) {
             ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
         } else if (error.getErrorType() == IwlanError.IKE_INIT_TIMEOUT) {
-            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            ret = DataFailCause.IWLAN_IKE_INIT_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_MOBILITY_TIMEOUT) {
-            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            ret = DataFailCause.IWLAN_IKE_MOBILITY_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.IKE_DPD_TIMEOUT) {
-            ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            ret = DataFailCause.IWLAN_IKE_DPD_TIMEOUT;
         } else if (error.getErrorType() == IwlanError.TUNNEL_TRANSFORM_FAILED) {
             ret = DataFailCause.IWLAN_TUNNEL_TRANSFORM_FAILED;
         } else if (error.getErrorType() == IwlanError.IKE_NETWORK_LOST_EXCEPTION) {
@@ -333,6 +333,9 @@ public class ErrorPolicyManager {
                 switch (protocolErrorType) {
                     case IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED:
                         ret = DataFailCause.IWLAN_IKEV2_AUTH_FAILURE;
+                        break;
+                    case IkeProtocolException.ERROR_TYPE_INTERNAL_ADDRESS_FAILURE:
+                        ret = DataFailCause.IWLAN_EPDG_INTERNAL_ADDRESS_FAILURE;
                         break;
                     case IKE_PROTOCOL_ERROR_PDN_CONNECTION_REJECTION:
                         ret = DataFailCause.IWLAN_PDN_CONNECTION_REJECTION;

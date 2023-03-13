@@ -59,7 +59,7 @@ public class IwlanEventListener {
 
     /** Airplane mode turned off or disabled. */
     public static final int APM_DISABLE_EVENT = 3;
-    /** Airplame mode turned on or enabled */
+    /** Airplane mode turned on or enabled */
     public static final int APM_ENABLE_EVENT = 4;
 
     /** Wifi AccessPoint changed. */
@@ -92,12 +92,8 @@ public class IwlanEventListener {
     /* Events used and handled by IwlanDataService internally */
     public static final int DATA_SERVICE_INTERNAL_EVENT_BASE = 100;
 
-    public static final int DATA_SERVICE_INTERNAL_EVENT_END = 200;
-
     /* Events used and handled by IwlanNetworkService internally */
     public static final int NETWORK_SERVICE_INTERNAL_EVENT_BASE = 200;
-
-    public static final int NETWORK_SERVICE_INTERNAL_EVENT_END = 300;
 
     @IntDef({
         CARRIER_CONFIG_CHANGED_EVENT,
@@ -113,25 +109,24 @@ public class IwlanEventListener {
         CELLINFO_CHANGED_EVENT,
         CALL_STATE_CHANGED_EVENT
     })
-    @interface IwlanEventType {};
+    @interface IwlanEventType {}
 
-    private static String LOG_TAG = IwlanEventListener.class.getSimpleName();
+    private static final String LOG_TAG = IwlanEventListener.class.getSimpleName();
 
     private final String SUB_TAG;
 
     private static Boolean sIsAirplaneModeOn;
 
-    private static String sWifiSSID = new String();
+    private static String sWifiSSID = "";
 
-    private static Map<Integer, IwlanEventListener> mInstances = new ConcurrentHashMap<>();
+    private static final Map<Integer, IwlanEventListener> mInstances = new ConcurrentHashMap<>();
 
-    private Context mContext;
-    private int mSlotId;
+    private final Context mContext;
+    private final int mSlotId;
     private int mSubId;
     private Uri mCrossSimCallingUri;
     private Uri mWfcEnabledUri;
     private UserSettingContentObserver mUserSettingContentObserver;
-    private HandlerThread mUserSettingHandlerThread;
     private RadioInfoTelephonyCallback mTelephonyCallback;
 
     SparseArray<Set<Handler>> eventHandlers = new SparseArray<>();
@@ -159,11 +154,10 @@ public class IwlanEventListener {
         public void onCellInfoChanged(List<CellInfo> arrayCi) {
             Log.d(LOG_TAG, "Cellinfo changed");
 
-            int event = CELLINFO_CHANGED_EVENT;
             for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
                 IwlanEventListener instance = entry.getValue();
                 if (instance != null) {
-                    instance.updateHandlers(event, arrayCi);
+                    instance.updateHandlers(arrayCi);
                 }
             }
         }
@@ -257,7 +251,7 @@ public class IwlanEventListener {
      * Report a Broadcast received. Mainly used by IwlanBroadcastReceiver to report the following
      * broadcasts CARRIER_CONFIG_CHANGED
      *
-     * @param Intent intent
+     * @param intent intent
      */
     public static synchronized void onBroadcastReceived(Intent intent) {
         int event = UNKNOWN_EVENT;
@@ -273,11 +267,11 @@ public class IwlanEventListener {
                                 TelephonyManager.UNKNOWN_CARRIER_ID);
                 Context context = IwlanDataService.getContext();
                 if (slotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX && context != null) {
-                    getInstance(context, slotId).onCarrierConfigChanged(slotId, carrierId);
+                    getInstance(context, slotId).onCarrierConfigChanged(carrierId);
                 }
                 break;
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
-                Boolean isAirplaneModeOn = new Boolean(intent.getBooleanExtra("state", false));
+                Boolean isAirplaneModeOn = intent.getBooleanExtra("state", false);
                 if (sIsAirplaneModeOn != null && sIsAirplaneModeOn.equals(isAirplaneModeOn)) {
                     // no change in apm state
                     break;
@@ -307,7 +301,7 @@ public class IwlanEventListener {
     /**
      * Broadcast WIFI_AP_CHANGED_EVENT if Wifi SSID changed after Wifi connected.
      *
-     * @param Context context
+     * @param context context
      */
     public static void onWifiConnected(Context context) {
         WifiManager wifiManager = context.getSystemService(WifiManager.class);
@@ -330,11 +324,10 @@ public class IwlanEventListener {
         // Wifi.
         if (sWifiSSID.length() > 0 && !sWifiSSID.equals(wifiSSID)) {
             Log.d(LOG_TAG, "Wifi SSID changed");
-            int event = WIFI_AP_CHANGED_EVENT;
             for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
                 IwlanEventListener instance = entry.getValue();
                 if (instance != null) {
-                    instance.updateHandlers(event);
+                    instance.updateHandlers(WIFI_AP_CHANGED_EVENT);
                 }
             }
         }
@@ -345,7 +338,6 @@ public class IwlanEventListener {
      * Returns the Event id of the String. String that matches the name of the event
      *
      * @param event String form of the event.
-     * @param int form of the event.
      */
     public static int getUnthrottlingEvent(String event) {
         int ret = UNKNOWN_EVENT;
@@ -395,7 +387,7 @@ public class IwlanEventListener {
         sIsAirplaneModeOn = null;
     }
 
-    private void onCarrierConfigChanged(int slotId, int carrierId) {
+    private void onCarrierConfigChanged(int carrierId) {
         Log.d(SUB_TAG, "onCarrierConfigChanged");
         int subId = IwlanHelper.getSubId(mContext, mSlotId);
         if (subId != mSubId) {
@@ -428,10 +420,10 @@ public class IwlanEventListener {
     /** Initiate ContentObserver if it is not created. And, register it with the current sub id. */
     private void registerContentObserver() {
         if (mUserSettingContentObserver == null) {
-            mUserSettingHandlerThread =
+            HandlerThread userSettingHandlerThread =
                     new HandlerThread(IwlanNetworkService.class.getSimpleName());
-            mUserSettingHandlerThread.start();
-            Looper looper = mUserSettingHandlerThread.getLooper();
+            userSettingHandlerThread.start();
+            Looper looper = userSettingHandlerThread.getLooper();
             Handler handler = new Handler(looper);
             mUserSettingContentObserver = new UserSettingContentObserver(handler);
         }
@@ -486,7 +478,12 @@ public class IwlanEventListener {
                 Log.e(SUB_TAG, "Could not find  ImsMmTelManager");
                 return;
             }
-            boolean wfcEnabled = imsMmTelManager.isVoWiFiSettingEnabled();
+            boolean wfcEnabled = false;
+            try {
+                wfcEnabled = imsMmTelManager.isVoWiFiSettingEnabled();
+            } catch (IllegalArgumentException e) {
+                Log.w(SUB_TAG, e.getMessage());
+            }
             int event = (wfcEnabled) ? WIFI_CALLING_ENABLE_EVENT : WIFI_CALLING_DISABLE_EVENT;
             getInstance(mContext, slotIndex).updateHandlers(event);
         } else {
@@ -499,9 +496,10 @@ public class IwlanEventListener {
         Log.d(SUB_TAG, "registerTelephonyCallback");
         TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
         telephonyManager =
-                telephonyManager.createForSubscriptionId(IwlanHelper.getSubId(mContext, mSlotId));
+                Objects.requireNonNull(telephonyManager)
+                        .createForSubscriptionId(IwlanHelper.getSubId(mContext, mSlotId));
         mTelephonyCallback = new RadioInfoTelephonyCallback();
-        telephonyManager.registerTelephonyCallback(r -> r.run(), mTelephonyCallback);
+        telephonyManager.registerTelephonyCallback(Runnable::run, mTelephonyCallback);
     }
 
     @VisibleForTesting
@@ -528,7 +526,8 @@ public class IwlanEventListener {
         }
     }
 
-    private synchronized void updateHandlers(int event, List<CellInfo> arrayCi) {
+    private synchronized void updateHandlers(List<CellInfo> arrayCi) {
+        int event = IwlanEventListener.CELLINFO_CHANGED_EVENT;
         if (eventHandlers.contains(event)) {
             Log.d(SUB_TAG, "Updating handlers for the event: " + event);
             for (Handler handler : eventHandlers.get(event)) {

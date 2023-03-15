@@ -16,6 +16,10 @@
 
 package com.google.android.iwlan.proto;
 
+import android.net.ipsec.ike.exceptions.IkeIOException;
+import android.net.ipsec.ike.exceptions.IkeInternalException;
+
+import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanStatsLog;
 
 public class MetricsAtom {
@@ -37,6 +41,7 @@ public class MetricsAtom {
     private int mHandoverFailureMode;
     private int mRetryDurationMillis;
     private int mWifiSignalValue;
+    private String mIwlanErrorWrappedClassnameAndStack;
 
     public void setMessageId(int messageId) {
         this.mMessageId = messageId;
@@ -110,6 +115,33 @@ public class MetricsAtom {
         this.mWifiSignalValue = wifiSignalValue;
     }
 
+    public void setIwlanErrorWrappedClassnameAndStack(IwlanError iwlanError) {
+        Throwable iwlanErrorWrapped = iwlanError.getException();
+        if (iwlanErrorWrapped instanceof IkeInternalException
+                || iwlanErrorWrapped instanceof IkeIOException) {
+            iwlanErrorWrapped = iwlanErrorWrapped.getCause();
+        }
+
+        if (iwlanErrorWrapped == null) {
+            this.mIwlanErrorWrappedClassnameAndStack = null;
+            return;
+        }
+
+        StackTraceElement[] iwlanErrorWrappedStackTraceElements = iwlanErrorWrapped.getStackTrace();
+        String iwlanErrorWrappedFirstLineStrackTrace =
+                iwlanErrorWrappedStackTraceElements.length == 0
+                        ? ""
+                        : "\n" + iwlanErrorWrappedStackTraceElements[0].toString();
+
+        this.mIwlanErrorWrappedClassnameAndStack =
+                iwlanErrorWrapped.getClass().getCanonicalName()
+                        + iwlanErrorWrappedFirstLineStrackTrace;
+    }
+
+    public String getIwlanErrorWrappedClassnameAndStack() {
+        return mIwlanErrorWrappedClassnameAndStack;
+    }
+
     public void sendMetricsData() {
         if (mMessageId == IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED) {
             IwlanStatsLog.write(
@@ -129,7 +161,8 @@ public class MetricsAtom {
                     mIkeTunnelEstablishmentDurationMillis,
                     mTunnelState,
                     mHandoverFailureMode,
-                    mRetryDurationMillis);
+                    mRetryDurationMillis,
+                    mIwlanErrorWrappedClassnameAndStack);
             return;
         } else if (mMessageId == IwlanStatsLog.IWLAN_PDN_DISCONNECTED_REASON_REPORTED) {
             IwlanStatsLog.write(

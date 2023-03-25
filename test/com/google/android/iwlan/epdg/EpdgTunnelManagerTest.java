@@ -27,6 +27,7 @@ import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
@@ -202,10 +203,10 @@ public class EpdgTunnelManagerTest {
         when(mMockChildSessionConfiguration.getInternalAddresses())
                 .thenReturn(EXPECTED_INTERNAL_ADDRESSES);
 
-        when(mMockIpSecManager.createIpSecTunnelInterface(any(), any(), any()))
+        when(mMockIpSecManager.createIpSecTunnelInterface(
+                        any(InetAddress.class), any(InetAddress.class), any(Network.class)))
                 .thenReturn(mMockIpSecTunnelInterface);
-
-        when(mMockIpSecTunnelInterface.getInterfaceName()).thenReturn("wlan0");
+        when(mMockIpSecTunnelInterface.getInterfaceName()).thenReturn("ipsec10");
 
         when(mMockIkeSessionConnectionInfo.getNetwork()).thenReturn(mMockNetwork);
 
@@ -1224,7 +1225,6 @@ public class EpdgTunnelManagerTest {
                 mMockIwlanTunnelMetrics,
                 null,
                 0);
-        setVariable(mEpdgTunnelManager, "mLocalAddresses", EXPECTED_LOCAL_ADDRESSES);
         mEpdgTunnelManager.validateAndSetEpdgAddress(EXPECTED_EPDG_ADDRESSES);
         mEpdgTunnelManager.setHasConnectedToEpdg(true);
     }
@@ -1303,7 +1303,9 @@ public class EpdgTunnelManagerTest {
         return ikeSessionArgumentCaptors;
     }
 
-    private void verifyTunnelOnOpened(String apnName, ChildSessionCallback childSessionCallback) {
+    private void verifyTunnelOnOpened(String apnName, ChildSessionCallback childSessionCallback)
+            throws Exception {
+        clearInvocations(mMockIpSecManager);
         doReturn(0L)
                 .when(mEpdgTunnelManager)
                 .reportIwlanError(eq(apnName), eq(new IwlanError(IwlanError.NO_ERROR)));
@@ -1318,9 +1320,12 @@ public class EpdgTunnelManagerTest {
         childSessionCallback.onIpSecTransformCreated(
                 mMockedIpSecTransformOut, IpSecManager.DIRECTION_OUT);
         mTestLooper.dispatchAll();
+        verify(mMockIpSecManager, times(1))
+                .createIpSecTunnelInterface(
+                        any(InetAddress.class), any(InetAddress.class), eq(mMockNetwork));
+
         childSessionCallback.onOpened(mMockChildSessionConfiguration);
         mTestLooper.dispatchAll();
-
         verify(mEpdgTunnelManager, times(1))
                 .reportIwlanError(eq(apnName), eq(new IwlanError(IwlanError.NO_ERROR)));
         verify(mMockIwlanTunnelCallback, times(1)).onOpened(eq(apnName), any());
@@ -1332,6 +1337,12 @@ public class EpdgTunnelManagerTest {
         final String toBeOpenedApnName = "mms";
 
         setOneTunnelOpened(openedApnName);
+
+        // FIXME: Since the network from bringUpTunnel() will only be stored for the first request,
+        // and we are skipping the first tunnel setup procedure in this test case, it is necessary
+        // to set the network instance directly.
+        mEpdgTunnelManager.updateNetwork(mMockNetwork, openedApnName);
+        mTestLooper.dispatchAll();
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
                 verifyBringUpTunnel(toBeOpenedApnName, false /* needPendingBringUpReq */);
@@ -2345,7 +2356,7 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
-    public void testOnOpenedTunnelMetricsData() {
+    public void testOnOpenedTunnelMetricsData() throws Exception {
         doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
         mEpdgTunnelManager.bringUpTunnel(
                 getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),

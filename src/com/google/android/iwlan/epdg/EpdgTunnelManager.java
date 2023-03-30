@@ -666,13 +666,10 @@ public class EpdgTunnelManager {
      * Update the local Network. This will trigger a revaluation for every tunnel for which tunnel
      * manager has state.
      *
-     * <p>Tunnels in bringup state will be for closed since IKE currently keeps retrying.
-     *
-     * <p>For rest of the tunnels, update IKE session wth new network. This will either result in
-     * MOBIKE callflow or just a rekey over new Network
+     * @param network the new network to be updated
      */
-    public void updateNetwork(@NonNull Network network, String apnName) {
-        UpdateNetworkWrapper updateNetworkWrapper = new UpdateNetworkWrapper(network, apnName);
+    public void updateNetwork(Network network) {
+        UpdateNetworkWrapper updateNetworkWrapper = new UpdateNetworkWrapper(network);
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_UPDATE_NETWORK, updateNetworkWrapper));
     }
     /**
@@ -1273,7 +1270,6 @@ public class EpdgTunnelManager {
     }
 
     private final class TmHandler extends Handler {
-        private final String TAG = TmHandler.class.getSimpleName();
 
         @Override
         public void handleMessage(Message msg) {
@@ -1307,6 +1303,7 @@ public class EpdgTunnelManager {
                 case EVENT_TUNNEL_BRINGUP_REQUEST:
                     TunnelRequestWrapper tunnelRequestWrapper = (TunnelRequestWrapper) msg.obj;
                     TunnelSetupRequest setupRequest = tunnelRequestWrapper.getSetupRequest();
+                    IwlanError bringUpError = null;
 
                     onClosedMetricsBuilder =
                             new OnClosedMetrics.Builder().setApnName(setupRequest.apnName());
@@ -1314,24 +1311,21 @@ public class EpdgTunnelManager {
                     if (IwlanHelper.getSubId(mContext, mSlotId)
                             == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
                         Log.e(TAG, "SIM isn't ready");
-                        IwlanError iwlanError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
-                        reportIwlanError(setupRequest.apnName(), iwlanError);
-                        tunnelRequestWrapper
-                                .getTunnelCallback()
-                                .onClosed(setupRequest.apnName(), iwlanError);
-                        tunnelRequestWrapper
-                                .getTunnelMetrics()
-                                .onClosed(onClosedMetricsBuilder.build());
-                        return;
+                        bringUpError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
+                        reportIwlanError(setupRequest.apnName(), bringUpError);
+                    } else if (Objects.isNull(mNetwork)) {
+                        Log.e(TAG, "The underlying network is not ready");
+                        bringUpError = new IwlanError(IwlanError.IKE_INTERNAL_IO_EXCEPTION);
+                        reportIwlanError(setupRequest.apnName(), bringUpError);
+                    } else if (!canBringUpTunnel(setupRequest.apnName())) {
+                        Log.d(TAG, "Cannot bring up tunnel as retry time has not passed");
+                        bringUpError = getLastError(setupRequest.apnName());
                     }
 
-                    if (!canBringUpTunnel(setupRequest.apnName())) {
-                        Log.d(TAG, "Cannot bring up tunnel as retry time has not passed");
+                    if (Objects.nonNull(bringUpError)) {
                         tunnelRequestWrapper
                                 .getTunnelCallback()
-                                .onClosed(
-                                        setupRequest.apnName(),
-                                        getLastError(setupRequest.apnName()));
+                                .onClosed(setupRequest.apnName(), bringUpError);
                         tunnelRequestWrapper
                                 .getTunnelMetrics()
                                 .onClosed(onClosedMetricsBuilder.build());
@@ -1349,7 +1343,6 @@ public class EpdgTunnelManager {
 
                     if (!isEpdgSelectionOrFirstTunnelBringUpInProgress()) {
                         // No tunnel bring-up in progress. Select the ePDG address first
-                        mNetwork = setupRequest.network();
                         selectEpdgAddress(setupRequest);
                     }
 
@@ -1513,7 +1506,7 @@ public class EpdgTunnelManager {
 
                     mApnNameToTunnelConfig.remove(apnName);
                     if (mApnNameToTunnelConfig.size() == 0 && mPendingBringUpRequests.isEmpty()) {
-                        resetTunnelManagerState();
+                        setHasConnectedToEpdg(false);
                     }
 
                     mIkeSessionState = IkeSessionState.NO_IKE_SESSION;
@@ -1522,23 +1515,32 @@ public class EpdgTunnelManager {
 
                 case EVENT_UPDATE_NETWORK:
                     UpdateNetworkWrapper updatedNetwork = (UpdateNetworkWrapper) msg.obj;
-                    apnName = updatedNetwork.getApnName();
                     Network network = updatedNetwork.getNetwork();
-                    tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                    String paraString = "Network: " + network;
 
-                    // Update the global cache if they aren't equal
-                    if (mNetwork == null || !mNetwork.equals(network)) {
-                        Log.d(TAG, "Updating mNetwork to " + network);
-                        mNetwork = network;
+                    if (Objects.nonNull(network) && network.equals(mNetwork)) {
+                        Log.w(TAG, "The Underlying Network has not changed. " + paraString);
+                        break;
                     }
 
-                    if (tunnelConfig == null) {
-                        Log.d(TAG, "Update Network request: No tunnel exists for apn: " + apnName);
-                    } else {
-                        Log.d(TAG, "Updating Network for apn: " + apnName + " Network: " + network);
-                        tunnelConfig.getIkeSession().setNetwork(network);
-                        mIkeSessionState = IkeSessionState.IKE_MOBILITY_IN_PROGRESS;
+                    mNetwork = network;
+                    if (Objects.isNull(network)) {
+                        Log.w(TAG, "The Underlying Network has been removed.");
+                        break;
                     }
+
+                    mIkeSessionState = IkeSessionState.IKE_MOBILITY_IN_PROGRESS;
+
+                    mApnNameToTunnelConfig.forEach(
+                            (apn, config) -> {
+                                Log.d(
+                                        TAG,
+                                        "The Underlying Network is updating for APN (+"
+                                                + apn
+                                                + "). "
+                                                + paraString);
+                                config.getIkeSession().setNetwork(network);
+                            });
                     break;
 
                 case EVENT_TUNNEL_BRINGDOWN_REQUEST:
@@ -1849,16 +1851,6 @@ public class EpdgTunnelManager {
         mValidEpdgInfo.incrementIndex();
     }
 
-    @VisibleForTesting
-    void resetTunnelManagerState() {
-        Log.d(TAG, "resetTunnelManagerState");
-        mEpdgAddress = null;
-        setHasConnectedToEpdg(false);
-        mNetwork = null;
-        mPendingBringUpRequests = new LinkedList<>();
-        mApnNameToTunnelConfig = new ConcurrentHashMap<>();
-    }
-
     private void serviceAllPendingRequests() {
         while (!mPendingBringUpRequests.isEmpty()) {
             Log.d(TAG, "serviceAllPendingRequests");
@@ -1897,15 +1889,9 @@ public class EpdgTunnelManager {
     // Update Network wrapper
     private static final class UpdateNetworkWrapper {
         private final Network mNetwork;
-        private final String mApnName;
 
-        private UpdateNetworkWrapper(Network network, String apnName) {
+        private UpdateNetworkWrapper(Network network) {
             mNetwork = network;
-            mApnName = apnName;
-        }
-
-        public String getApnName() {
-            return mApnName;
         }
 
         public Network getNetwork() {

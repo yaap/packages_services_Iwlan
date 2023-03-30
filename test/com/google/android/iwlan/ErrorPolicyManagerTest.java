@@ -195,7 +195,7 @@ public class ErrorPolicyManagerTest {
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(10, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(10, time);
+        assertEquals(20, time);
     }
 
     @Test
@@ -228,6 +228,10 @@ public class ErrorPolicyManagerTest {
         // parsing (or lack of explicit carrier-defined policy).
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(5, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(10, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(10, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(20, time);
@@ -235,13 +239,13 @@ public class ErrorPolicyManagerTest {
         assertEquals(40, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(80, time);
-        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(160, time);
-        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(86400, time);
 
         iwlanError = buildIwlanIkeProtocolError(9002);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(5, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(10, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(10, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(20, time);
@@ -249,10 +253,6 @@ public class ErrorPolicyManagerTest {
         assertEquals(40, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(80, time);
-        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(160, time);
-        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(86400, time);
     }
 
     @Test

@@ -1118,7 +1118,7 @@ public class EpdgTunnelManagerTest {
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
-        mEpdgTunnelManager.setHasConnectedToEpdg(true);
+        mEpdgTunnelManager.onConnectedToEpdg(true);
         mEpdgTunnelManager.setEpdgAddress(InetAddresses.parseNumericAddress(EPDG_ADDRESS));
 
         mEpdgTunnelManager.getTmIkeSessionCallback(testApnName, token).onClosed();
@@ -1152,7 +1152,7 @@ public class EpdgTunnelManagerTest {
                 EXPECTED_EPDG_ADDRESSES, new IwlanError(IwlanError.NO_ERROR), 1);
         mTestLooper.dispatchAll();
 
-        mEpdgTunnelManager.setHasConnectedToEpdg(false);
+        mEpdgTunnelManager.onConnectedToEpdg(false);
 
         mEpdgTunnelManager.getTmIkeSessionCallback(testApnName, DEFAULT_TOKEN).onClosed();
         mTestLooper.dispatchAll();
@@ -1170,7 +1170,7 @@ public class EpdgTunnelManagerTest {
                 null,
                 0);
         mEpdgTunnelManager.validateAndSetEpdgAddress(EXPECTED_EPDG_ADDRESSES);
-        mEpdgTunnelManager.setHasConnectedToEpdg(true);
+        mEpdgTunnelManager.onConnectedToEpdg(true);
     }
 
     private IkeSessionArgumentCaptors verifyBringUpTunnelWithDnsQuery(String apnName) {
@@ -1330,7 +1330,7 @@ public class EpdgTunnelManagerTest {
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
-        mEpdgTunnelManager.setHasConnectedToEpdg(true);
+        mEpdgTunnelManager.onConnectedToEpdg(true);
         mEpdgTunnelManager.setEpdgAddress(InetAddresses.parseNumericAddress(EPDG_ADDRESS));
 
         mEpdgTunnelManager
@@ -1365,7 +1365,7 @@ public class EpdgTunnelManagerTest {
                 EXPECTED_EPDG_ADDRESSES, new IwlanError(IwlanError.NO_ERROR), 1);
         mTestLooper.dispatchAll();
 
-        mEpdgTunnelManager.setHasConnectedToEpdg(false);
+        mEpdgTunnelManager.onConnectedToEpdg(false);
 
         mEpdgTunnelManager
                 .getTmIkeSessionCallback(testApnName, DEFAULT_TOKEN)
@@ -1630,7 +1630,7 @@ public class EpdgTunnelManagerTest {
                 0);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
-        mEpdgTunnelManager.setHasConnectedToEpdg(true);
+        mEpdgTunnelManager.onConnectedToEpdg(true);
         mEpdgTunnelManager.setEpdgAddress(InetAddresses.parseNumericAddress(EPDG_ADDRESS));
 
         mEpdgTunnelManager
@@ -1664,7 +1664,7 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.sendSelectionRequestComplete(null, error, 1);
         mTestLooper.dispatchAll();
 
-        mEpdgTunnelManager.setHasConnectedToEpdg(false);
+        mEpdgTunnelManager.onConnectedToEpdg(false);
 
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
     }
@@ -2046,7 +2046,7 @@ public class EpdgTunnelManagerTest {
 
         // testApnName with token 0
         setupTunnelBringup(TEST_APN_NAME, ++transactionId);
-        mEpdgTunnelManager.setHasConnectedToEpdg(true);
+        mEpdgTunnelManager.onConnectedToEpdg(true);
 
         IwlanError error = new IwlanError(mMockIkeException);
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(TEST_APN_NAME), eq(error));
@@ -2060,7 +2060,7 @@ public class EpdgTunnelManagerTest {
 
         // testApnName1 with token 1
         setupTunnelBringup(TEST_APN_NAME, ++transactionId);
-        mEpdgTunnelManager.setHasConnectedToEpdg(true);
+        mEpdgTunnelManager.onConnectedToEpdg(true);
 
         // signal from obsolete callback (token 0), ignore it
         reset(mMockIwlanTunnelCallback);
@@ -2385,6 +2385,7 @@ public class EpdgTunnelManagerTest {
                 mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
         mTestLooper.dispatchAll();
 
+        mEpdgTunnelManager.onConnectedToEpdg(true);
         Network newNetwork = mock(Network.class);
         mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
@@ -2467,6 +2468,7 @@ public class EpdgTunnelManagerTest {
                 mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
         mTestLooper.dispatchAll();
 
+        mEpdgTunnelManager.onConnectedToEpdg(true);
         Network newNetwork = mock(Network.class);
         LinkProperties mockUnreachableLinkProperties = mock(LinkProperties.class);
         when(mockUnreachableLinkProperties.isReachable(any())).thenReturn(false);

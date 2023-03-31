@@ -28,6 +28,7 @@ import android.net.IpPrefix;
 import android.net.IpSecManager;
 import android.net.IpSecTransform;
 import android.net.LinkAddress;
+import android.net.LinkProperties;
 import android.net.Network;
 import android.net.eap.EapAkaInfo;
 import android.net.eap.EapInfo;
@@ -666,10 +667,12 @@ public class EpdgTunnelManager {
      * Update the local Network. This will trigger a revaluation for every tunnel for which tunnel
      * manager has state.
      *
-     * @param network the new network to be updated
+     * @param network the network to be updated
+     * @param network the linkProperties to be updated
      */
-    public void updateNetwork(Network network) {
-        UpdateNetworkWrapper updateNetworkWrapper = new UpdateNetworkWrapper(network);
+    public void updateNetwork(Network network, LinkProperties linkProperties) {
+        UpdateNetworkWrapper updateNetworkWrapper =
+                new UpdateNetworkWrapper(network, linkProperties);
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_UPDATE_NETWORK, updateNetworkWrapper));
     }
     /**
@@ -1516,6 +1519,7 @@ public class EpdgTunnelManager {
                 case EVENT_UPDATE_NETWORK:
                     UpdateNetworkWrapper updatedNetwork = (UpdateNetworkWrapper) msg.obj;
                     Network network = updatedNetwork.getNetwork();
+                    LinkProperties link = updatedNetwork.getLinkProperties();
                     String paraString = "Network: " + network;
 
                     if (Objects.nonNull(network) && network.equals(mNetwork)) {
@@ -1523,11 +1527,22 @@ public class EpdgTunnelManager {
                         break;
                     }
 
-                    mNetwork = network;
                     if (Objects.isNull(network)) {
                         Log.w(TAG, "The Underlying Network has been removed.");
+                        mNetwork = null;
                         break;
                     }
+
+                    if (Objects.isNull(link)) {
+                        Log.w(TAG, "The Underlying Network's linkProperties is not ready");
+                        break;
+                    }
+                    if (Objects.nonNull(mEpdgAddress) && !link.isReachable(mEpdgAddress)) {
+                        Log.w(TAG, "The Underlying Network doesn't have a route to the ePDG");
+                        break;
+                    }
+
+                    mNetwork = network;
 
                     mIkeSessionState = IkeSessionState.IKE_MOBILITY_IN_PROGRESS;
 
@@ -1889,13 +1904,19 @@ public class EpdgTunnelManager {
     // Update Network wrapper
     private static final class UpdateNetworkWrapper {
         private final Network mNetwork;
+        private final LinkProperties mLinkProperties;
 
-        private UpdateNetworkWrapper(Network network) {
+        private UpdateNetworkWrapper(Network network, LinkProperties linkProperties) {
             mNetwork = network;
+            mLinkProperties = linkProperties;
         }
 
         public Network getNetwork() {
             return mNetwork;
+        }
+
+        public LinkProperties getLinkProperties() {
+            return mLinkProperties;
         }
     }
 

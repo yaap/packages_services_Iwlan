@@ -90,6 +90,7 @@ public class IwlanDataService extends DataService {
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private static boolean sNetworkConnected = false;
     private static Network sNetwork = null;
+    private static LinkProperties sLinkProperties = null;
     @VisibleForTesting Handler mIwlanDataServiceHandler;
     private HandlerThread mIwlanDataServiceHandlerThread;
     private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
@@ -169,9 +170,19 @@ public class IwlanDataService extends DataService {
         public void onLinkPropertiesChanged(
                 @NonNull Network network, @NonNull LinkProperties linkProperties) {
             Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
+
+            if (!sNetwork.equals(network)) {
+                Log.d(TAG, "Ignore LinkProperties changes for unused Network.");
+                return;
+            }
+
             if (isLinkProtocolTypeChanged(linkProperties)) {
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
+                    if (!sLinkProperties.equals(linkProperties)) {
+                        sLinkProperties = linkProperties;
+                        dp.updateNetwork(network, linkProperties);
+                    }
                 }
             }
         }
@@ -952,11 +963,12 @@ public class IwlanDataService extends DataService {
             return mTunnelStats;
         }
 
-        private void updateNetwork(@NonNull Network network) {
+        private void updateNetwork(
+                @NonNull Network network, @Nullable LinkProperties linkProperties) {
             if (mIwlanDataService.isNetworkConnected(
                     isActiveDataOnOtherSub(getSlotIndex()),
                     IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
-                getTunnelManager().updateNetwork(network);
+                getTunnelManager().updateNetwork(network, linkProperties);
             }
 
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
@@ -1892,9 +1904,13 @@ public class IwlanDataService extends DataService {
             }
             // only prefetch dns and updateNetwork if Network has changed
             if (hasNetworkChanged) {
+                ConnectivityManager connectivityManager =
+                        mContext.getSystemService(ConnectivityManager.class);
+                LinkProperties linkProperties = connectivityManager.getLinkProperties(network);
+                sLinkProperties = linkProperties;
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
-                    dp.updateNetwork(sNetwork);
+                    dp.updateNetwork(sNetwork, linkProperties);
                 }
                 IwlanHelper.updateCountryCodeWhenNetworkConnected();
             }

@@ -68,19 +68,19 @@
       {
         "ErrorType": "*",
         "ErrorDetails": ["*"],
-        "RetryArray": ["5", "10", "-1"],
+        "RetryArray": ["1", "2", "2", "10", "20", "40", "80", "160", "320", "640", "1280", "1800", "3600", "-1"],
         "UnthrottlingEvents": ["APM_ENABLE_EVENT", "APM_DISABLE_EVENT", "WIFI_DISABLE_EVENT", "WIFI_AP_CHANGED_EVENT"]
       },
       {
         "ErrorType": "GENERIC_ERROR_TYPE",
         "ErrorDetails": ["IO_EXCEPTION"],
-        "RetryArray": ["0", "0", "0", "60+r15", "120", "-1"],
+        "RetryArray": ["0", "0", "0", "30", "60+r15", "120", "-1"],
         "UnthrottlingEvents": ["APM_ENABLE_EVENT", "APM_DISABLE_EVENT", "WIFI_DISABLE_EVENT", "WIFI_AP_CHANGED_EVENT"]
       },
       {
         "ErrorType": "IKE_PROTOCOL_ERROR_TYPE",
-        "ErrorDetails": ["24", "9002"],
-        "RetryArray": ["10", "20", "40", "80", "160"],
+        "ErrorDetails": ["*"],
+        "RetryArray": ["5", "10", "10", "20", "40", "80", "160", "320", "640", "1280", "1800", "3600", "-1"],
         "UnthrottlingEvents": ["APM_ENABLE_EVENT", "WIFI_DISABLE_EVENT", "WIFI_CALLING_DISABLE_EVENT"]
       }
     ]

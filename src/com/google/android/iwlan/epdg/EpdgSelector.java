@@ -80,7 +80,9 @@ public class EpdgSelector {
     private byte[] mV6PcoData = null;
     @NonNull private final ErrorPolicyManager mErrorPolicyManager;
 
-    private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 5L;
+    // The default DNS timeout in the DNS module is set to 5 seconds. To account for IPC overhead,
+    // IWLAN applies an internal timeout of 6 seconds, slightly longer than the default timeout
+    private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 6L;
 
     private static final long PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC = 20L;
     private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.

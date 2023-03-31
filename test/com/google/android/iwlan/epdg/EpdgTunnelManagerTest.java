@@ -213,7 +213,8 @@ public class EpdgTunnelManagerTest {
                 .when(mEpdgTunnelManager)
                 .getAddressForNetwork(any(), any());
 
-        mEpdgTunnelManager.updateNetwork(mMockDefaultNetwork);
+        when(mMockLinkProperties.isReachable(any())).thenReturn(true);
+        mEpdgTunnelManager.updateNetwork(mMockDefaultNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
     }
 
@@ -1284,7 +1285,7 @@ public class EpdgTunnelManagerTest {
         // FIXME: Since the network from bringUpTunnel() will only be stored for the first request,
         // and we are skipping the first tunnel setup procedure in this test case, it is necessary
         // to set the network instance directly.
-        mEpdgTunnelManager.updateNetwork(mMockDefaultNetwork);
+        mEpdgTunnelManager.updateNetwork(mMockDefaultNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
@@ -2335,7 +2336,7 @@ public class EpdgTunnelManagerTest {
         setOneTunnelOpened(TEST_APN_NAME);
 
         Network newNetwork = mock(Network.class);
-        mEpdgTunnelManager.updateNetwork(newNetwork);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
 
         EpdgTunnelManager.TunnelConfig testApnTunnelConfig =
@@ -2395,7 +2396,7 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         Network newNetwork = mock(Network.class);
-        mEpdgTunnelManager.updateNetwork(newNetwork);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
         verify(mMockIkeSession, times(1)).setNetwork(eq(newNetwork));
     }
@@ -2405,7 +2406,7 @@ public class EpdgTunnelManagerTest {
         String apnName = "ims";
         Network newNetwork = mock(Network.class);
 
-        mEpdgTunnelManager.updateNetwork(newNetwork);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
@@ -2442,7 +2443,7 @@ public class EpdgTunnelManagerTest {
                 mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
         mTestLooper.dispatchAll();
 
-        mEpdgTunnelManager.updateNetwork(null);
+        mEpdgTunnelManager.updateNetwork(null, null);
         mTestLooper.dispatchAll();
         verify(mMockIkeSession, never()).setNetwork(any());
     }
@@ -2453,7 +2454,7 @@ public class EpdgTunnelManagerTest {
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(apnName), any(IwlanError.class));
 
-        mEpdgTunnelManager.updateNetwork(null);
+        mEpdgTunnelManager.updateNetwork(null, null);
         mTestLooper.dispatchAll();
 
         mEpdgTunnelManager.bringUpTunnel(
@@ -2462,5 +2463,29 @@ public class EpdgTunnelManagerTest {
                 mMockIwlanTunnelMetrics);
         mTestLooper.dispatchAll();
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(apnName), any(IwlanError.class));
+    }
+
+    @Test
+    public void testUpdateUnreachableLinkProperties() throws Exception {
+        String apnName = "ims";
+
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+
+        Network newNetwork = mock(Network.class);
+        LinkProperties mockUnreachableLinkProperties = mock(LinkProperties.class);
+        when(mockUnreachableLinkProperties.isReachable(any())).thenReturn(false);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mockUnreachableLinkProperties);
+        mTestLooper.dispatchAll();
+        verify(mMockIkeSession, never()).setNetwork(eq(newNetwork));
+
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
+        mTestLooper.dispatchAll();
+        verify(mMockIkeSession, times(1)).setNetwork(eq(newNetwork));
     }
 }

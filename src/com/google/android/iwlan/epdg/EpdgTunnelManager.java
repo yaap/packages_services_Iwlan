@@ -218,8 +218,6 @@ public class EpdgTunnelManager {
                         SaProposal.PSEUDORANDOM_FUNCTION_SHA2_512);
     }
 
-    private IkeSessionState mIkeSessionState;
-
     private final EpdgSelector.EpdgSelectorCallback mSelectorCallback =
             new EpdgSelector.EpdgSelectorCallback() {
                 @Override
@@ -249,6 +247,16 @@ public class EpdgTunnelManager {
         private NetworkSliceInfo mSliceInfo;
         private boolean mIsBackoffTimeValid = false;
         private long mBackoffTime;
+
+        private IkeSessionState mIkeSessionState;
+
+        public IkeSessionState getIkeSessionState() {
+            return mIkeSessionState;
+        }
+
+        public void setIkeSessionState(IkeSessionState ikeSessionState) {
+            mIkeSessionState = ikeSessionState;
+        }
 
         public NetworkSliceInfo getSliceInfo() {
             return mSliceInfo;
@@ -287,6 +295,8 @@ public class EpdgTunnelManager {
             mError = new IwlanError(IwlanError.NO_ERROR);
             mSrcIpv6Address = srcIpv6Addr;
             mSrcIpv6AddressPrefixLen = srcIpv6PrefixLength;
+
+            setIkeSessionState(IkeSessionState.IKE_SESSION_INIT_IN_PROGRESS);
         }
 
         @NonNull
@@ -429,8 +439,7 @@ public class EpdgTunnelManager {
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IKE_SESSION_CLOSED,
-                            new SessionClosedData(
-                                    mApnName, mToken, new IwlanError(IwlanError.NO_ERROR))));
+                            new SessionClosedData(mApnName, mToken, null /* ikeException */)));
         }
 
         @Override
@@ -522,8 +531,7 @@ public class EpdgTunnelManager {
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_CLOSED,
-                            new SessionClosedData(
-                                    mApnName, mToken, new IwlanError(IwlanError.NO_ERROR))));
+                            new SessionClosedData(mApnName, mToken, null /* ikeException */)));
         }
 
         @Override
@@ -714,8 +722,6 @@ public class EpdgTunnelManager {
         TunnelRequestWrapper tunnelRequestWrapper =
                 new TunnelRequestWrapper(setupRequest, tunnelCallback, tunnelMetrics);
 
-        mIkeSessionState = IkeSessionState.NO_IKE_SESSION;
-
         mHandler.sendMessage(
                 mHandler.obtainMessage(EVENT_TUNNEL_BRINGUP_REQUEST, tunnelRequestWrapper));
 
@@ -758,7 +764,6 @@ public class EpdgTunnelManager {
                                 Executors.newSingleThreadExecutor(),
                                 getTmIkeSessionCallback(apnName, token),
                                 new TmChildSessionCallback(apnName, token));
-        mIkeSessionState = IkeSessionState.IKE_SESSION_INIT_IN_PROGRESS;
         boolean isSrcIpv6Present = setupRequest.srcIpv6Address().isPresent();
         putApnNameToTunnelConfig(
                 apnName,
@@ -1239,12 +1244,6 @@ public class EpdgTunnelManager {
 
     private void onSessionClosedWithException(
             IkeException exception, String apnName, int token, int sessionType) {
-        IwlanError error;
-        if (exception instanceof IkeIOException) {
-            error = new IwlanError(mIkeSessionState.getErrorType(), exception);
-        } else {
-            error = new IwlanError(exception);
-        }
         Log.e(
                 TAG,
                 "Closing tunnel with exception for apn: "
@@ -1252,15 +1251,12 @@ public class EpdgTunnelManager {
                         + " with token: "
                         + token
                         + " sessionType:"
-                        + sessionType
-                        + " error: "
-                        + error
-                        + " state: "
-                        + mIkeSessionState);
+                        + sessionType);
         exception.printStackTrace();
 
         mHandler.sendMessage(
-                mHandler.obtainMessage(sessionType, new SessionClosedData(apnName, token, error)));
+                mHandler.obtainMessage(
+                        sessionType, new SessionClosedData(apnName, token, exception)));
     }
 
     private boolean isEpdgSelectionOrFirstTunnelBringUpInProgress() {
@@ -1270,6 +1266,18 @@ public class EpdgTunnelManager {
         // progress
         return (!mHasConnectedToEpdg && !mApnNameToTunnelConfig.isEmpty())
                 || !mPendingBringUpRequests.isEmpty();
+    }
+
+    private IwlanError getErrorFromIkeException(
+            IkeException ikeException, IkeSessionState ikeSessionState) {
+        IwlanError error;
+        if (ikeException instanceof IkeIOException) {
+            error = new IwlanError(ikeSessionState.getErrorType(), ikeException);
+        } else {
+            error = new IwlanError(ikeException);
+        }
+        Log.e(TAG, "Closing tunnel: error: " + error + " state: " + ikeSessionState);
+        return error;
     }
 
     private final class TmHandler extends Handler {
@@ -1436,7 +1444,7 @@ public class EpdgTunnelManager {
                     mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
-                    mIkeSessionState = IkeSessionState.CHILD_SESSION_OPENED;
+                    tunnelConfig.setIkeSessionState(IkeSessionState.CHILD_SESSION_OPENED);
                     break;
 
                 case EVENT_IKE_SESSION_CLOSED:
@@ -1456,8 +1464,11 @@ public class EpdgTunnelManager {
                     // the Child session closed exceptionally; in which case, we attempt to retrieve
                     // the stored error (if any) from TunnelConfig.
                     IwlanError iwlanError;
-                    if (sessionClosedData.mIwlanError.getErrorType() != IwlanError.NO_ERROR) {
-                        iwlanError = sessionClosedData.mIwlanError;
+                    if (sessionClosedData.mIkeException != null) {
+                        iwlanError =
+                                getErrorFromIkeException(
+                                        sessionClosedData.mIkeException,
+                                        tunnelConfig.getIkeSessionState());
                     } else {
                         // If IKE session opened, then closed before child session (and IWLAN
                         // tunnel) opened.
@@ -1485,6 +1496,7 @@ public class EpdgTunnelManager {
                     }
 
                     Log.d(TAG, "Tunnel Closed: " + iwlanError);
+                    tunnelConfig.setIkeSessionState(IkeSessionState.NO_IKE_SESSION);
                     tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
                     onClosedMetricsBuilder = new OnClosedMetrics.Builder().setApnName(apnName);
 
@@ -1511,8 +1523,6 @@ public class EpdgTunnelManager {
                     if (mApnNameToTunnelConfig.size() == 0 && mPendingBringUpRequests.isEmpty()) {
                         setHasConnectedToEpdg(false);
                     }
-
-                    mIkeSessionState = IkeSessionState.NO_IKE_SESSION;
 
                     break;
 
@@ -1544,8 +1554,6 @@ public class EpdgTunnelManager {
 
                     mNetwork = network;
 
-                    mIkeSessionState = IkeSessionState.IKE_MOBILITY_IN_PROGRESS;
-
                     mApnNameToTunnelConfig.forEach(
                             (apn, config) -> {
                                 Log.d(
@@ -1555,6 +1563,7 @@ public class EpdgTunnelManager {
                                                 + "). "
                                                 + paraString);
                                 config.getIkeSession().setNetwork(network);
+                                config.setIkeSessionState(IkeSessionState.IKE_MOBILITY_IN_PROGRESS);
                             });
                     break;
 
@@ -1626,8 +1635,9 @@ public class EpdgTunnelManager {
                         closeIkeSession(
                                 apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
                     }
-                    if (mIkeSessionState == IkeSessionState.IKE_MOBILITY_IN_PROGRESS) {
-                        mIkeSessionState = IkeSessionState.CHILD_SESSION_OPENED;
+                    if (tunnelConfig.getIkeSessionState()
+                            == IkeSessionState.IKE_MOBILITY_IN_PROGRESS) {
+                        tunnelConfig.setIkeSessionState(IkeSessionState.CHILD_SESSION_OPENED);
                     }
                     break;
 
@@ -1646,7 +1656,12 @@ public class EpdgTunnelManager {
                         Log.d(TAG, "No tunnel callback for apn: " + apnName);
                         return;
                     }
-                    tunnelConfig.setError(sessionClosedData.mIwlanError);
+                    if (sessionClosedData.mIkeException != null) {
+                        tunnelConfig.setError(
+                                getErrorFromIkeException(
+                                        sessionClosedData.mIkeException,
+                                        tunnelConfig.getIkeSessionState()));
+                    }
                     tunnelConfig.getIkeSession().close();
                     break;
 
@@ -2042,11 +2057,11 @@ public class EpdgTunnelManager {
     // Data received from IkeSessionStateMachine if either IKE session or Child session have been
     // closed, normally or exceptionally.
     private static final class SessionClosedData extends IkeEventData {
-        final IwlanError mIwlanError;
+        final IkeException mIkeException;
 
-        private SessionClosedData(String apnName, int token, IwlanError iwlanError) {
+        private SessionClosedData(String apnName, int token, IkeException ikeException) {
             super(apnName, token);
-            mIwlanError = iwlanError;
+            mIkeException = ikeException;
         }
     }
 

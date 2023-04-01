@@ -60,13 +60,13 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
+import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
 import com.google.android.iwlan.epdg.EpdgSelector;
 import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelSetupRequest;
 import com.google.android.iwlan.proto.MetricsAtom;
-import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
-import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -90,6 +90,7 @@ public class IwlanDataService extends DataService {
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private static boolean sNetworkConnected = false;
     private static Network sNetwork = null;
+    private static LinkProperties sLinkProperties = null;
     @VisibleForTesting Handler mIwlanDataServiceHandler;
     private HandlerThread mIwlanDataServiceHandlerThread;
     private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
@@ -137,7 +138,7 @@ public class IwlanDataService extends DataService {
 
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
-        public void onAvailable(Network network) {
+        public void onAvailable(@NonNull Network network) {
             Log.d(TAG, "onAvailable: " + network);
         }
 
@@ -149,7 +150,7 @@ public class IwlanDataService extends DataService {
          * is suddenly disconnected.
          */
         @Override
-        public void onLosing(Network network, int maxMsToLive) {
+        public void onLosing(@NonNull Network network, int maxMsToLive) {
             Log.d(TAG, "onLosing: maxMsToLive: " + maxMsToLive + " network: " + network);
         }
 
@@ -158,7 +159,7 @@ public class IwlanDataService extends DataService {
          * callback.
          */
         @Override
-        public void onLost(Network network) {
+        public void onLost(@NonNull Network network) {
             Log.d(TAG, "onLost: " + network);
             IwlanDataService.setConnectedDataSub(INVALID_SUB_ID);
             IwlanDataService.setNetworkConnected(false, network, Transport.UNSPECIFIED_NETWORK);
@@ -166,25 +167,36 @@ public class IwlanDataService extends DataService {
 
         /** Called when the network corresponding to this request changes {@link LinkProperties}. */
         @Override
-        public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
+        public void onLinkPropertiesChanged(
+                @NonNull Network network, @NonNull LinkProperties linkProperties) {
             Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
+
+            if (!sNetwork.equals(network)) {
+                Log.d(TAG, "Ignore LinkProperties changes for unused Network.");
+                return;
+            }
+
             if (isLinkProtocolTypeChanged(linkProperties)) {
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
+                    if (!sLinkProperties.equals(linkProperties)) {
+                        sLinkProperties = linkProperties;
+                        dp.updateNetwork(network, linkProperties);
+                    }
                 }
             }
         }
 
         /** Called when access to the specified network is blocked or unblocked. */
         @Override
-        public void onBlockedStatusChanged(Network network, boolean blocked) {
+        public void onBlockedStatusChanged(@NonNull Network network, boolean blocked) {
             // TODO: check if we need to handle this
             Log.d(TAG, "onBlockedStatusChanged: " + network + " BLOCKED:" + blocked);
         }
 
         @Override
         public void onCapabilitiesChanged(
-                Network network, NetworkCapabilities networkCapabilities) {
+                @NonNull Network network, @NonNull NetworkCapabilities networkCapabilities) {
             // onCapabilitiesChanged is guaranteed to be called immediately after onAvailable per
             // API
             Log.d(TAG, "onCapabilitiesChanged: " + network + " " + networkCapabilities);
@@ -597,8 +609,7 @@ public class IwlanDataService extends DataService {
                     .addEventListener(events, getIwlanDataServiceHandler());
         }
 
-        @VisibleForTesting
-        EpdgTunnelManager getTunnelManager() {
+        private EpdgTunnelManager getTunnelManager() {
             return EpdgTunnelManager.getInstance(mContext, getSlotIndex());
         }
 
@@ -952,29 +963,28 @@ public class IwlanDataService extends DataService {
             return mTunnelStats;
         }
 
-        private void updateNetwork(Network network) {
-            if (network != null) {
-                for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
-                    TunnelState tunnelState = entry.getValue();
-                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
-                        // force close tunnels in bringup since IKE lib only supports
-                        // updating network for tunnels that are already up.
-                        // This may not result in actual closing of Ike Session since
-                        // epdg selection may not be complete yet.
-                        tunnelState.setState(TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP);
+        private void updateNetwork(
+                @NonNull Network network, @Nullable LinkProperties linkProperties) {
+            if (mIwlanDataService.isNetworkConnected(
+                    isActiveDataOnOtherSub(getSlotIndex()),
+                    IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
+                getTunnelManager().updateNetwork(network, linkProperties);
+            }
+
+            for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
+                TunnelState tunnelState = entry.getValue();
+                if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                    // force close tunnels in bringup since IKE lib only supports
+                    // updating network for tunnels that are already up.
+                    // This may not result in actual closing of Ike Session since
+                    // epdg selection may not be complete yet.
+                    tunnelState.setState(TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP);
                         getTunnelManager()
                                 .closeTunnel(
                                         entry.getKey(),
                                         true /* forceClose */,
                                         getIwlanTunnelCallback(),
                                         getIwlanTunnelMetrics());
-                    } else {
-                        if (mIwlanDataService.isNetworkConnected(
-                                isActiveDataOnOtherSub(getSlotIndex()),
-                                IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
-                            getTunnelManager().updateNetwork(network, entry.getKey());
-                        }
-                    }
                 }
             }
         }
@@ -1481,7 +1491,6 @@ public class IwlanDataService extends DataService {
                     TunnelSetupRequest.Builder tunnelReqBuilder =
                             TunnelSetupRequest.builder()
                                     .setApnName(dataProfile.getApnSetting().getApnName())
-                                    .setNetwork(sNetwork)
                                     .setIsRoaming(isRoaming)
                                     .setPduSessionId(pduSessionId)
                                     .setApnIpProtocol(
@@ -1827,10 +1836,9 @@ public class IwlanDataService extends DataService {
         }
     }
 
-    @VisibleForTesting
     /* Note: this api should have valid transport if networkConnected==true */
     static void setNetworkConnected(
-            boolean networkConnected, Network network, Transport transport) {
+            boolean networkConnected, @NonNull Network network, Transport transport) {
 
         boolean hasNetworkChanged = false;
         boolean hasTransportChanged = false;
@@ -1896,9 +1904,13 @@ public class IwlanDataService extends DataService {
             }
             // only prefetch dns and updateNetwork if Network has changed
             if (hasNetworkChanged) {
+                ConnectivityManager connectivityManager =
+                        mContext.getSystemService(ConnectivityManager.class);
+                LinkProperties linkProperties = connectivityManager.getLinkProperties(network);
+                sLinkProperties = linkProperties;
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
-                    dp.updateNetwork(sNetwork);
+                    dp.updateNetwork(sNetwork, linkProperties);
                 }
                 IwlanHelper.updateCountryCodeWhenNetworkConnected();
             }

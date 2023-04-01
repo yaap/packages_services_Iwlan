@@ -135,11 +135,11 @@ public class EpdgTunnelManagerTest {
     private TestLooper mTestLooper = new TestLooper();
 
     @Mock private Context mMockContext;
+    @Mock private Network mMockDefaultNetwork;
     @Mock private IwlanTunnelCallback mMockIwlanTunnelCallback;
     @Mock private IwlanTunnelMetricsImpl mMockIwlanTunnelMetrics;
     @Mock private IkeSession mMockIkeSession;
     @Mock private EpdgSelector mMockEpdgSelector;
-    @Mock private Network mMockNetwork;
     @Mock CarrierConfigManager mMockCarrierConfigManager;
     @Mock ConnectivityManager mMockConnectivityManager;
     @Mock SubscriptionManager mMockSubscriptionManager;
@@ -178,7 +178,6 @@ public class EpdgTunnelManagerTest {
         doReturn(mTestLooper.getLooper()).when(mEpdgTunnelManager).getLooper();
         setVariable(mEpdgTunnelManager, "mContext", mMockContext);
         mEpdgTunnelManager.initHandler();
-        mEpdgTunnelManager.resetTunnelManagerState();
         doReturn(mMockEpdgSelector).when(mEpdgTunnelManager).getEpdgSelector();
         when(mEpdgTunnelManager.getIkeSessionCreator()).thenReturn(mMockIkeSessionCreator);
 
@@ -188,7 +187,7 @@ public class EpdgTunnelManagerTest {
                         anyInt(),
                         anyBoolean(),
                         anyBoolean(),
-                        eq(mMockNetwork),
+                        any(Network.class),
                         any(EpdgSelector.EpdgSelectorCallback.class)))
                 .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
@@ -208,11 +207,15 @@ public class EpdgTunnelManagerTest {
                 .thenReturn(mMockIpSecTunnelInterface);
         when(mMockIpSecTunnelInterface.getInterfaceName()).thenReturn("ipsec10");
 
-        when(mMockIkeSessionConnectionInfo.getNetwork()).thenReturn(mMockNetwork);
+        when(mMockIkeSessionConnectionInfo.getNetwork()).thenReturn(mMockDefaultNetwork);
 
         doReturn(EXPECTED_LOCAL_ADDRESSES)
                 .when(mEpdgTunnelManager)
                 .getAddressForNetwork(any(), any());
+
+        when(mMockLinkProperties.isReachable(any())).thenReturn(true);
+        mEpdgTunnelManager.updateNetwork(mMockDefaultNetwork, mMockLinkProperties);
+        mTestLooper.dispatchAll();
     }
 
     @Test
@@ -347,7 +350,7 @@ public class EpdgTunnelManagerTest {
                         anyInt(),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
     }
 
@@ -629,16 +632,6 @@ public class EpdgTunnelManagerTest {
 
         setupMockForGetConfig(bundle);
 
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
-
         doReturn(null)
                 .when(mMockIkeSessionCreator)
                 .createIkeSession(
@@ -697,16 +690,6 @@ public class EpdgTunnelManagerTest {
 
         setupMockForGetConfig(bundle);
 
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
-
         doReturn(null)
                 .when(mMockIkeSessionCreator)
                 .createIkeSession(
@@ -756,15 +739,6 @@ public class EpdgTunnelManagerTest {
         bundle.putInt(CarrierConfigManager.Iwlan.KEY_DPD_TIMER_SEC_INT, testDpdDelay);
 
         setupMockForGetConfig(bundle);
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
         doReturn(null)
                 .when(mMockIkeSessionCreator)
@@ -816,15 +790,6 @@ public class EpdgTunnelManagerTest {
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
         setupMockForGetConfig(null);
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
         doReturn(null)
                 .doReturn(null)
@@ -875,15 +840,6 @@ public class EpdgTunnelManagerTest {
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
         setupMockForGetConfig(null);
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
         doReturn(null)
                 .doReturn(null)
@@ -1001,15 +957,7 @@ public class EpdgTunnelManagerTest {
         }
 
         setupMockForGetConfig(null);
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
+
         doReturn(null)
                 .doReturn(null)
                 .when(mMockIkeSessionCreator)
@@ -1079,7 +1027,6 @@ public class EpdgTunnelManagerTest {
         TunnelSetupRequest ret =
                 TunnelSetupRequest.builder()
                         .setApnName(apnName)
-                        .setNetwork(mMockNetwork)
                         .setIsRoaming(false /*isRoaming*/)
                         .setIsEmergency(false /*IsEmergency*/)
                         .setRequestPcscf(false /*requestPcscf*/)
@@ -1092,7 +1039,6 @@ public class EpdgTunnelManagerTest {
     private TunnelSetupRequest getHandoverTunnelSetupRequest(String apnName, int apnIpProtocol) {
         TunnelSetupRequest.Builder bld = TunnelSetupRequest.builder();
         bld.setApnName(apnName)
-                .setNetwork(mMockNetwork)
                 .setIsRoaming(false /*isRoaming*/)
                 .setIsEmergency(false /*IsEmergency*/)
                 .setRequestPcscf(false /*requestPcscf*/)
@@ -1179,7 +1125,6 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
-        verify(mEpdgTunnelManager, times(2)).resetTunnelManagerState();
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
     }
 
@@ -1213,7 +1158,6 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
-        verify(mEpdgTunnelManager, times(2)).resetTunnelManagerState();
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
     }
 
@@ -1322,7 +1266,7 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
         verify(mMockIpSecManager, times(1))
                 .createIpSecTunnelInterface(
-                        any(InetAddress.class), any(InetAddress.class), eq(mMockNetwork));
+                        any(InetAddress.class), any(InetAddress.class), eq(mMockDefaultNetwork));
 
         childSessionCallback.onOpened(mMockChildSessionConfiguration);
         mTestLooper.dispatchAll();
@@ -1341,7 +1285,7 @@ public class EpdgTunnelManagerTest {
         // FIXME: Since the network from bringUpTunnel() will only be stored for the first request,
         // and we are skipping the first tunnel setup procedure in this test case, it is necessary
         // to set the network instance directly.
-        mEpdgTunnelManager.updateNetwork(mMockNetwork, openedApnName);
+        mEpdgTunnelManager.updateNetwork(mMockDefaultNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
@@ -1395,7 +1339,6 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
-        verify(mEpdgTunnelManager, times(2)).resetTunnelManagerState();
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
     }
 
@@ -1430,7 +1373,6 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), any(IwlanError.class));
-        verify(mEpdgTunnelManager, times(2)).resetTunnelManagerState();
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
     }
 
@@ -1496,7 +1438,7 @@ public class EpdgTunnelManagerTest {
                 .onIkeSessionConnectionInfoChanged(mMockIkeSessionConnectionInfo);
         mTestLooper.dispatchAll();
 
-        verify(mMockIpSecTunnelInterface, times(1)).setUnderlyingNetwork(mMockNetwork);
+        verify(mMockIpSecTunnelInterface, times(1)).setUnderlyingNetwork(mMockDefaultNetwork);
     }
 
     @Test
@@ -1555,16 +1497,6 @@ public class EpdgTunnelManagerTest {
 
         PersistableBundle bundle = new PersistableBundle();
         setupMockForGetConfig(bundle);
-
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
         doReturn(null)
                 .when(mMockIkeSessionCreator)
@@ -1707,7 +1639,6 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
-        verify(mEpdgTunnelManager, times(2)).resetTunnelManagerState();
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
     }
 
@@ -1790,16 +1721,6 @@ public class EpdgTunnelManagerTest {
         PersistableBundle bundle = new PersistableBundle();
         setupMockForGetConfig(bundle);
 
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
-
         doReturn(null)
                 .when(mMockIkeSessionCreator)
                 .createIkeSession(
@@ -1862,15 +1783,6 @@ public class EpdgTunnelManagerTest {
         bundle.putInt(CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT, nattTimer);
 
         setupMockForGetConfig(bundle);
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(false),
-                        eq(false),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
         doReturn(null)
                 .when(mMockIkeSessionCreator)
@@ -1925,7 +1837,6 @@ public class EpdgTunnelManagerTest {
         TunnelSetupRequest tsr =
                 TunnelSetupRequest.builder()
                         .setApnName(testApnName)
-                        .setNetwork(mMockNetwork)
                         .setApnIpProtocol(ApnSetting.PROTOCOL_IPV4V6)
                         .setSrcIpv6Address(testAddressV6)
                         .setSrcIpv6AddressPrefixLength(ipv6AddressLen)
@@ -1937,15 +1848,6 @@ public class EpdgTunnelManagerTest {
                         .build();
 
         setupMockForGetConfig(null);
-        when(mMockEpdgSelector.getValidatedServerList(
-                        anyInt(),
-                        anyInt(),
-                        anyInt(),
-                        eq(isRoaming),
-                        eq(isEmergency),
-                        eq(mMockNetwork),
-                        any(EpdgSelector.EpdgSelectorCallback.class)))
-                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
         doReturn(null)
                 .when(mMockIkeSessionCreator)
@@ -1972,7 +1874,7 @@ public class EpdgTunnelManagerTest {
                         anyInt(),
                         eq(isRoaming),
                         eq(isEmergency),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any(EpdgSelector.EpdgSelectorCallback.class));
 
         mEpdgTunnelManager.sendSelectionRequestComplete(
@@ -2002,7 +1904,7 @@ public class EpdgTunnelManagerTest {
         assertEquals(ikeId.fqdn, testApnName);
 
         // verify Network
-        assertEquals(ikeSessionParams.getNetwork(), mMockNetwork);
+        assertEquals(ikeSessionParams.getNetwork(), mMockDefaultNetwork);
 
         // verify requestPcscf (true) with Apn protocol IPV6
         // it should add the pcscf config requests of type ConfigRequestIpv6PcscfServer and
@@ -2202,7 +2104,7 @@ public class EpdgTunnelManagerTest {
                         eq(EpdgSelector.IPV4_PREFERRED),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
     }
 
@@ -2230,7 +2132,7 @@ public class EpdgTunnelManagerTest {
                         eq(EpdgSelector.IPV6_PREFERRED),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
     }
 
@@ -2258,7 +2160,7 @@ public class EpdgTunnelManagerTest {
                         eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
     }
 
@@ -2290,7 +2192,7 @@ public class EpdgTunnelManagerTest {
                         eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
     }
 
@@ -2321,7 +2223,7 @@ public class EpdgTunnelManagerTest {
                         anyInt(),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(TEST_APN_NAME), eq(error));
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(TEST_APN_NAME), eq(error));
@@ -2351,7 +2253,7 @@ public class EpdgTunnelManagerTest {
                         eq(EpdgSelector.SYSTEM_PREFERRED),
                         eq(false),
                         eq(false),
-                        eq(mMockNetwork),
+                        eq(mMockDefaultNetwork),
                         any());
     }
 
@@ -2403,42 +2305,34 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testCloseTunnelWithIkeDpdTimeout() throws Exception {
         IwlanError error = new IwlanError(IwlanError.IKE_DPD_TIMEOUT, mMockIkeIoException);
-        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(TEST_APN_NAME), eq(error));
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
                 verifyBringUpTunnelWithDnsQuery(TEST_APN_NAME);
         ChildSessionCallback childSessionCallback =
                 ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
         verifyTunnelOnOpened(TEST_APN_NAME, childSessionCallback);
-        setOneTunnelOpened(TEST_APN_NAME);
         mEpdgTunnelManager
                 .getTmIkeSessionCallback(
                         TEST_APN_NAME, mEpdgTunnelManager.getCurrentTokenForApn(TEST_APN_NAME))
                 .onClosedWithException(mMockIkeIoException);
         mTestLooper.dispatchAll();
 
-        verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(TEST_APN_NAME), eq(error));
-        verify(mMockIwlanTunnelCallback, atLeastOnce()).onClosed(eq(TEST_APN_NAME), eq(error));
+        verify(mEpdgTunnelManager, never()).reportIwlanError(eq(TEST_APN_NAME), eq(error));
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(TEST_APN_NAME), eq(error));
     }
 
     @Test
     public void testCloseTunnelWithIkeMobilityTimeout() throws Exception {
         IwlanError error = new IwlanError(IwlanError.IKE_MOBILITY_TIMEOUT, mMockIkeIoException);
-        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(TEST_APN_NAME), eq(error));
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
-                verifyBringUpTunnelWithDnsQuery(TEST_APN_NAME);
+                verifyBringUpTunnelWithDnsQuery(TEST_APN_NAME, mMockIkeSession);
         ChildSessionCallback childSessionCallback =
                 ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
         verifyTunnelOnOpened(TEST_APN_NAME, childSessionCallback);
-        setOneTunnelOpened(TEST_APN_NAME);
 
-        mEpdgTunnelManager.updateNetwork(mMockNetwork, TEST_APN_NAME);
-        mTestLooper.dispatchAll();
-
-        EpdgTunnelManager.TunnelConfig testApnTunnelConfig =
-                mEpdgTunnelManager.getTunnelConfigForApn(TEST_APN_NAME);
-        testApnTunnelConfig.getIkeSession().setNetwork(mMockNetwork);
+        Network newNetwork = mock(Network.class);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
 
         mEpdgTunnelManager
@@ -2447,8 +2341,9 @@ public class EpdgTunnelManagerTest {
                 .onClosedWithException(mMockIkeIoException);
         mTestLooper.dispatchAll();
 
-        verify(mEpdgTunnelManager, atLeastOnce()).reportIwlanError(eq(TEST_APN_NAME), eq(error));
-        verify(mMockIwlanTunnelCallback, atLeastOnce()).onClosed(eq(TEST_APN_NAME), eq(error));
+        verify(mMockIkeSession, times(1)).setNetwork(eq(newNetwork));
+        verify(mEpdgTunnelManager, never()).reportIwlanError(eq(TEST_APN_NAME), eq(error));
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(TEST_APN_NAME), eq(error));
     }
 
     private boolean testIsN1ModeSupported(int[] nrAvailability) {
@@ -2476,5 +2371,111 @@ public class EpdgTunnelManagerTest {
         assertFalse(
                 testIsN1ModeSupported(
                         new int[] {CarrierConfigManager.CARRIER_NR_AVAILABILITY_NSA}));
+    }
+
+    @Test
+    public void testUpdateNetworkToOpenedTunnel() throws Exception {
+        String apnName = "ims";
+
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+
+        Network newNetwork = mock(Network.class);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
+        mTestLooper.dispatchAll();
+        verify(mMockIkeSession, times(1)).setNetwork(eq(newNetwork));
+    }
+
+    @Test
+    public void testUpdateNetworkForIncomingSetupRequest() throws Exception {
+        String apnName = "ims";
+        Network newNetwork = mock(Network.class);
+
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
+        mTestLooper.dispatchAll();
+
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+
+        verify(mMockEpdgSelector, times(1))
+                .getValidatedServerList(
+                        anyInt(), /* transactionId */
+                        anyInt(), /* filter */
+                        anyInt(), /* order */
+                        eq(false), /* isRoaming */
+                        eq(false), /* isEmergency */
+                        eq(newNetwork),
+                        any(EpdgSelector.EpdgSelectorCallback.class));
+        IkeSessionParams ikeSessionParams =
+                ikeSessionArgumentCaptors.mIkeSessionParamsCaptor.getValue();
+        assertEquals(ikeSessionParams.getNetwork(), newNetwork);
+    }
+
+    @Test
+    public void testUpdateNullNetworkToOpenedTunnel() throws Exception {
+        String apnName = "ims";
+
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+
+        mEpdgTunnelManager.updateNetwork(null, null);
+        mTestLooper.dispatchAll();
+        verify(mMockIkeSession, never()).setNetwork(any());
+    }
+
+    @Test
+    public void testUpdateNullNetworkAndRejectIncomingSetupRequest() throws Exception {
+        String apnName = "ims";
+
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(apnName), any(IwlanError.class));
+
+        mEpdgTunnelManager.updateNetwork(null, null);
+        mTestLooper.dispatchAll();
+
+        mEpdgTunnelManager.bringUpTunnel(
+                getBasicTunnelSetupRequest(apnName, ApnSetting.PROTOCOL_IP),
+                mMockIwlanTunnelCallback,
+                mMockIwlanTunnelMetrics);
+        mTestLooper.dispatchAll();
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(apnName), any(IwlanError.class));
+    }
+
+    @Test
+    public void testUpdateUnreachableLinkProperties() throws Exception {
+        String apnName = "ims";
+
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+
+        Network newNetwork = mock(Network.class);
+        LinkProperties mockUnreachableLinkProperties = mock(LinkProperties.class);
+        when(mockUnreachableLinkProperties.isReachable(any())).thenReturn(false);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mockUnreachableLinkProperties);
+        mTestLooper.dispatchAll();
+        verify(mMockIkeSession, never()).setNetwork(eq(newNetwork));
+
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
+        mTestLooper.dispatchAll();
+        verify(mMockIkeSession, times(1)).setNetwork(eq(newNetwork));
     }
 }

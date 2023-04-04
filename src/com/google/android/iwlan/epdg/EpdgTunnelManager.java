@@ -156,8 +156,13 @@ public class EpdgTunnelManager {
     private Queue<TunnelRequestWrapper> mPendingBringUpRequests = new LinkedList<>();
 
     private final EpdgInfo mValidEpdgInfo = new EpdgInfo();
-    private InetAddress mEpdgAddress;
-    private Network mNetwork;
+    @Nullable private InetAddress mEpdgAddress;
+
+    // The most recently updated system default network as seen by IwlanDataService.
+    @Nullable private Network mDefaultNetwork;
+    // The latest Network provided to the IKE session. Only for debugging purposes.
+    @Nullable private Network mIkeSessionNetwork;
+
     private int mTransactionId = 0;
     private boolean mHasConnectedToEpdg;
     private final IkeSessionCreator mIkeSessionCreator;
@@ -764,6 +769,7 @@ public class EpdgTunnelManager {
                                 Executors.newSingleThreadExecutor(),
                                 getTmIkeSessionCallback(apnName, token),
                                 new TmChildSessionCallback(apnName, token));
+
         boolean isSrcIpv6Present = setupRequest.srcIpv6Address().isPresent();
         putApnNameToTunnelConfig(
                 apnName,
@@ -960,7 +966,7 @@ public class EpdgTunnelManager {
                         .setRemoteIdentification(getId(setupRequest.apnName(), false))
                         .setAuthEap(null, getEapConfig())
                         .addIkeSaProposal(buildIkeSaProposal())
-                        .setNetwork(mNetwork)
+                        .setNetwork(mDefaultNetwork)
                         .addIkeOption(IkeSessionParams.IKE_OPTION_ACCEPT_ANY_REMOTE_ID)
                         .addIkeOption(IkeSessionParams.IKE_OPTION_MOBIKE)
                         .addIkeOption(IkeSessionParams.IKE_OPTION_REKEY_MOBILITY)
@@ -1324,8 +1330,8 @@ public class EpdgTunnelManager {
                         Log.e(TAG, "SIM isn't ready");
                         bringUpError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
                         reportIwlanError(setupRequest.apnName(), bringUpError);
-                    } else if (Objects.isNull(mNetwork)) {
-                        Log.e(TAG, "The underlying network is not ready");
+                    } else if (Objects.isNull(mDefaultNetwork)) {
+                        Log.e(TAG, "The default network is not ready");
                         bringUpError = new IwlanError(IwlanError.IKE_INTERNAL_IO_EXCEPTION);
                         reportIwlanError(setupRequest.apnName(), bringUpError);
                     } else if (!canBringUpTunnel(setupRequest.apnName())) {
@@ -1440,7 +1446,7 @@ public class EpdgTunnelManager {
                                                     (int) mIkeTunnelEstablishmentDuration)
                                             .build());
 
-                    setHasConnectedToEpdg(true);
+                    onConnectedToEpdg(true);
                     mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
@@ -1521,50 +1527,55 @@ public class EpdgTunnelManager {
 
                     mApnNameToTunnelConfig.remove(apnName);
                     if (mApnNameToTunnelConfig.size() == 0 && mPendingBringUpRequests.isEmpty()) {
-                        setHasConnectedToEpdg(false);
+                        onConnectedToEpdg(false);
                     }
 
                     break;
 
                 case EVENT_UPDATE_NETWORK:
                     UpdateNetworkWrapper updatedNetwork = (UpdateNetworkWrapper) msg.obj;
-                    Network network = updatedNetwork.getNetwork();
-                    LinkProperties link = updatedNetwork.getLinkProperties();
-                    String paraString = "Network: " + network;
+                    mDefaultNetwork = updatedNetwork.getNetwork();
+                    LinkProperties defaultLinkProperties = updatedNetwork.getLinkProperties();
+                    String paraString = "Network: " + mDefaultNetwork;
 
-                    if (Objects.nonNull(network) && network.equals(mNetwork)) {
-                        Log.w(TAG, "The Underlying Network has not changed. " + paraString);
-                        break;
+                    if (mHasConnectedToEpdg) {
+                        if (Objects.isNull(mDefaultNetwork)) {
+                            Log.w(TAG, "The default network has been removed.");
+                        } else if (Objects.isNull(defaultLinkProperties)) {
+                            Log.w(
+                                    TAG,
+                                    "The default network's LinkProperties is not ready ."
+                                            + paraString);
+                        } else if (!defaultLinkProperties.isReachable(mEpdgAddress)) {
+                            Log.w(
+                                    TAG,
+                                    "The default network link "
+                                            + defaultLinkProperties
+                                            + " doesn't have a route to the ePDG "
+                                            + mEpdgAddress
+                                            + paraString);
+                        } else if (Objects.equals(mDefaultNetwork, mIkeSessionNetwork)) {
+                            Log.w(
+                                    TAG,
+                                    "The default network has not changed from the IKE session"
+                                            + " network. "
+                                            + paraString);
+                        } else {
+                            mApnNameToTunnelConfig.forEach(
+                                    (apn, config) -> {
+                                        Log.d(
+                                                TAG,
+                                                "The Underlying Network is updating for APN (+"
+                                                        + apn
+                                                        + "). "
+                                                        + paraString);
+                                        config.getIkeSession().setNetwork(mDefaultNetwork);
+                                        config.setIkeSessionState(
+                                                IkeSessionState.IKE_MOBILITY_IN_PROGRESS);
+                                    });
+                            mIkeSessionNetwork = mDefaultNetwork;
+                        }
                     }
-
-                    if (Objects.isNull(network)) {
-                        Log.w(TAG, "The Underlying Network has been removed.");
-                        mNetwork = null;
-                        break;
-                    }
-
-                    if (Objects.isNull(link)) {
-                        Log.w(TAG, "The Underlying Network's linkProperties is not ready");
-                        break;
-                    }
-                    if (Objects.nonNull(mEpdgAddress) && !link.isReachable(mEpdgAddress)) {
-                        Log.w(TAG, "The Underlying Network doesn't have a route to the ePDG");
-                        break;
-                    }
-
-                    mNetwork = network;
-
-                    mApnNameToTunnelConfig.forEach(
-                            (apn, config) -> {
-                                Log.d(
-                                        TAG,
-                                        "The Underlying Network is updating for APN (+"
-                                                + apn
-                                                + "). "
-                                                + paraString);
-                                config.getIkeSession().setNetwork(network);
-                                config.setIkeSessionState(IkeSessionState.IKE_MOBILITY_IN_PROGRESS);
-                            });
                     break;
 
                 case EVENT_TUNNEL_BRINGDOWN_REQUEST:
@@ -1613,7 +1624,7 @@ public class EpdgTunnelManager {
                                     ipSecManager.createIpSecTunnelInterface(
                                             DUMMY_ADDR /* unused */,
                                             DUMMY_ADDR /* unused */,
-                                            mNetwork));
+                                            mDefaultNetwork));
                         } catch (IpSecManager.ResourceUnavailableException | IOException e) {
                             Log.e(TAG, "Failed to create tunnel interface. " + e);
                             closeIkeSession(
@@ -1697,7 +1708,8 @@ public class EpdgTunnelManager {
                 case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED:
                     IkeSessionConnectionInfoData ikeSessionConnectionInfoData =
                             (IkeSessionConnectionInfoData) msg.obj;
-                    network = ikeSessionConnectionInfoData.mIkeSessionConnectionInfo.getNetwork();
+                    Network network =
+                            ikeSessionConnectionInfoData.mIkeSessionConnectionInfo.getNetwork();
                     apnName = ikeSessionConnectionInfoData.mApnName;
 
                     ConnectivityManager connectivityManager =
@@ -1817,7 +1829,7 @@ public class EpdgTunnelManager {
                         epdgAddressOrder,
                         setupRequest.isRoaming(),
                         setupRequest.isEmergency(),
-                        mNetwork,
+                        mDefaultNetwork,
                         mSelectorCallback);
 
         if (epdgError.getErrorType() != IwlanError.NO_ERROR) {
@@ -2336,8 +2348,14 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    void setHasConnectedToEpdg(boolean value) {
-        mHasConnectedToEpdg = value;
+    void onConnectedToEpdg(boolean hasConnected) {
+        mHasConnectedToEpdg = hasConnected;
+        if (mHasConnectedToEpdg) {
+            mIkeSessionNetwork = mDefaultNetwork;
+        } else {
+            mIkeSessionNetwork = null;
+            mEpdgAddress = null;
+        }
     }
 
     @VisibleForTesting
@@ -2382,9 +2400,9 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     IpPreferenceConflict isIpPreferenceConflictsWithNetwork(
             @CarrierConfigManager.Iwlan.EpdgAddressIpPreference int ipPreference) {
-        List<InetAddress> localAddresses = getAddressForNetwork(mNetwork, mContext);
+        List<InetAddress> localAddresses = getAddressForNetwork(mDefaultNetwork, mContext);
         if (localAddresses == null || localAddresses.size() == 0) {
-            Log.e(TAG, "No local addresses available.");
+            Log.e(TAG, "No local addresses available for Network " + mDefaultNetwork);
             return new IpPreferenceConflict(true, IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
         } else if (!IwlanHelper.hasIpv6Address(localAddresses)
                 && ipPreference == CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY) {
@@ -2416,6 +2434,7 @@ public class EpdgTunnelManager {
     public void dump(PrintWriter pw) {
         pw.println("---- EpdgTunnelManager ----");
         pw.println("mHasConnectedToEpdg: " + mHasConnectedToEpdg);
+        pw.println("mIkeSessionNetwork: " + mIkeSessionNetwork);
         if (mEpdgAddress != null) {
             pw.println("mEpdgAddress: " + mEpdgAddress);
         }

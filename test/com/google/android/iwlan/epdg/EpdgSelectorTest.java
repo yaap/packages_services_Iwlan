@@ -329,6 +329,81 @@ public class EpdgSelectorTest {
     }
 
     @Test
+    public void testPlmnResolutionMethodWithInvalidLengthPlmns() throws Exception {
+        when(mMockSubscriptionInfo.getMccString()).thenReturn("31");
+        when(mMockSubscriptionInfo.getMncString()).thenReturn("12");
+
+        when(mMockTelephonyManager.getNetworkOperator()).thenReturn("300");
+        ehplmnList.add("3001");
+        ehplmnList.add("3");
+
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN});
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_PLMN_PRIORITY_INT_ARRAY,
+                new int[] {
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_RPLMN,
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_HPLMN,
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_ALL,
+                });
+
+        ArrayList<InetAddress> testInetAddresses = getValidatedServerListWithDefaultParams(false);
+
+        assertEquals(0, testInetAddresses.size());
+    }
+
+    @Test
+    public void testPlmnResolutionMethodWithInvalidCharacterPlmns() throws Exception {
+        when(mMockSubscriptionInfo.getMccString()).thenReturn("a b");
+        when(mMockSubscriptionInfo.getMncString()).thenReturn("!@#");
+
+        when(mMockTelephonyManager.getNetworkOperator()).thenReturn("a cde#");
+        ehplmnList.add("abcdef");
+        ehplmnList.add("1 23456");
+        ehplmnList.add("1 2345");
+
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN});
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_PLMN_PRIORITY_INT_ARRAY,
+                new int[] {
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_RPLMN,
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_HPLMN,
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_ALL,
+                });
+
+        ArrayList<InetAddress> testInetAddresses = getValidatedServerListWithDefaultParams(false);
+
+        assertEquals(0, testInetAddresses.size());
+    }
+
+    @Test
+    public void testPlmnResolutionMethodWithEmptyPlmns() throws Exception {
+        when(mMockSubscriptionInfo.getMccString()).thenReturn(null);
+        when(mMockSubscriptionInfo.getMncString()).thenReturn(null);
+
+        when(mMockTelephonyManager.getNetworkOperator()).thenReturn("");
+        ehplmnList.add("");
+
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN});
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_PLMN_PRIORITY_INT_ARRAY,
+                new int[] {
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_RPLMN,
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_HPLMN,
+                    CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_ALL,
+                });
+
+        ArrayList<InetAddress> testInetAddresses = getValidatedServerListWithDefaultParams(false);
+
+        assertEquals(0, testInetAddresses.size());
+    }
+
+    @Test
     public void testPlmnResolutionMethodWithFirstEhplmn() throws Exception {
         String fqdnFromEhplmn1 = "epdg.epc.mnc120.mcc300.pub.3gppnetwork.org";
         String fqdnFromEhplmn2 = "epdg.epc.mnc121.mcc300.pub.3gppnetwork.org";

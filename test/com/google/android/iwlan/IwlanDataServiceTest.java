@@ -23,6 +23,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSess
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
@@ -87,11 +89,13 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
+import java.lang.reflect.Method;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.LongSummaryStatistics;
@@ -124,13 +128,14 @@ public class IwlanDataServiceTest {
     @Mock private ImsMmTelManager mMockImsMmTelManager;
     @Mock private TelephonyManager mMockTelephonyManager;
     @Mock private EpdgSelector mMockEpdgSelector;
-    @Mock private LinkProperties mMockLinkProperties;
     @Mock private LinkAddress mMockIPv4LinkAddress;
     @Mock private LinkAddress mMockIPv6LinkAddress;
     @Mock private Inet4Address mMockInet4Address;
     @Mock private Inet6Address mMockInet6Address;
+
     MockitoSession mStaticMockSession;
 
+    private LinkProperties mLinkProperties;
     private List<DataCallResponse> mResultDataCallList;
     private @DataServiceCallback.ResultCode int mResultCode;
     private CountDownLatch latch;
@@ -257,8 +262,12 @@ public class IwlanDataServiceTest {
 
         when(Calendar.getInstance().getTime()).thenAnswer(i -> mMockedCalendarTime);
 
+        mLinkProperties = new LinkProperties();
+        mLinkProperties.setInterfaceName("wlan0");
+        mLinkProperties.addLinkAddress(mMockIPv4LinkAddress);
+
         when(mMockConnectivityManager.getLinkProperties(eq(mMockNetwork)))
-                .thenReturn(mMockLinkProperties);
+                .thenReturn(mLinkProperties);
     }
 
     @After
@@ -295,8 +304,8 @@ public class IwlanDataServiceTest {
     }
 
     private void onSystemDefaultNetworkConnected(int transportType) {
-        Network newNetwork = createMockNetwork(mMockLinkProperties);
-        onSystemDefaultNetworkConnected(newNetwork, mMockLinkProperties, transportType);
+        Network newNetwork = createMockNetwork(mLinkProperties);
+        onSystemDefaultNetworkConnected(newNetwork, mLinkProperties, transportType);
     }
 
     private void onSystemDefaultNetworkLost() {
@@ -329,29 +338,28 @@ public class IwlanDataServiceTest {
 
     @Test
     public void testWifiOnReConnected() {
-        Network newNetwork = createMockNetwork(mMockLinkProperties);
-        onSystemDefaultNetworkConnected(newNetwork, mMockLinkProperties, TRANSPORT_WIFI);
-        verify(mMockEpdgTunnelManager, times(1))
-                .updateNetwork(eq(newNetwork), eq(mMockLinkProperties));
+        Network newNetwork = createMockNetwork(mLinkProperties);
+        onSystemDefaultNetworkConnected(newNetwork, mLinkProperties, TRANSPORT_WIFI);
+        verify(mMockEpdgTunnelManager, times(1)).updateNetwork(eq(newNetwork), eq(mLinkProperties));
 
         onSystemDefaultNetworkLost();
 
-        newNetwork = createMockNetwork(mMockLinkProperties);
-        onSystemDefaultNetworkConnected(newNetwork, mMockLinkProperties, TRANSPORT_WIFI);
-        verify(mMockEpdgTunnelManager, times(1))
-                .updateNetwork(eq(newNetwork), eq(mMockLinkProperties));
+        newNetwork = createMockNetwork(mLinkProperties);
+        onSystemDefaultNetworkConnected(newNetwork, mLinkProperties, TRANSPORT_WIFI);
+        verify(mMockEpdgTunnelManager, times(1)).updateNetwork(eq(newNetwork), eq(mLinkProperties));
     }
 
     @Test
     public void testOnLinkPropertiesChangedForConnectedNetwork() {
         NetworkCallback networkCallback = getNetworkMonitorCallback();
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
-        List<LinkAddress> linkAddresses = new ArrayList<>();
-        linkAddresses.add(mMockIPv4LinkAddress);
+        clearInvocations(mMockEpdgTunnelManager);
 
-        LinkProperties newLinkProperties = mock(LinkProperties.class);
-        when(newLinkProperties.getLinkAddresses()).thenReturn(linkAddresses);
+        LinkProperties newLinkProperties = new LinkProperties(mLinkProperties);
+        newLinkProperties.setInterfaceName("wlan0");
+        newLinkProperties.addLinkAddress(mMockIPv6LinkAddress);
+
         networkCallback.onLinkPropertiesChanged(mMockNetwork, newLinkProperties);
         verify(mMockEpdgTunnelManager, times(1))
                 .updateNetwork(eq(mMockNetwork), eq(newLinkProperties));
@@ -360,17 +368,43 @@ public class IwlanDataServiceTest {
     @Test
     public void testOnLinkPropertiesChangedForNonConnectedNetwork() {
         NetworkCallback networkCallback = getNetworkMonitorCallback();
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
-        List<LinkAddress> linkAddresses = new ArrayList<>();
-        linkAddresses.add(mMockIPv4LinkAddress);
+        clearInvocations(mMockEpdgTunnelManager);
 
-        LinkProperties newLinkProperties = mock(LinkProperties.class);
+        LinkProperties newLinkProperties = new LinkProperties();
+        newLinkProperties.setInterfaceName("wlan0");
+        newLinkProperties.addLinkAddress(mMockIPv6LinkAddress);
         Network newNetwork = createMockNetwork(newLinkProperties);
-        when(newLinkProperties.getLinkAddresses()).thenReturn(linkAddresses);
+
         networkCallback.onLinkPropertiesChanged(newNetwork, newLinkProperties);
         verify(mMockEpdgTunnelManager, never())
-                .updateNetwork(eq(newNetwork), eq(newLinkProperties));
+                .updateNetwork(eq(newNetwork), any(LinkProperties.class));
+    }
+
+    @Test
+    public void testOnLinkPropertiesChangedWithClatInstalled() throws Exception {
+        NetworkCallback networkCallback = getNetworkMonitorCallback();
+        mLinkProperties.setLinkAddresses(
+                new ArrayList<>(Collections.singletonList(mMockIPv6LinkAddress)));
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
+
+        clearInvocations(mMockEpdgTunnelManager);
+
+        // LinkProperties#addStackedLink() is marked with @UnsupportedAppUsage
+        LinkProperties newLinkProperties = new LinkProperties(mLinkProperties);
+        newLinkProperties.setInterfaceName("wlan0");
+        LinkProperties stackedLink = new LinkProperties();
+        stackedLink.setInterfaceName("v4-wlan0");
+        stackedLink.addLinkAddress(mMockIPv4LinkAddress);
+        Class<?>[] parameterTypes = new Class<?>[] {LinkProperties.class};
+        Object[] args = new Object[] {stackedLink};
+        callUnsupportedAppUsageMethod(newLinkProperties, "addStackedLink", parameterTypes, args);
+        assertNotEquals(mLinkProperties, newLinkProperties);
+
+        networkCallback.onLinkPropertiesChanged(mMockNetwork, newLinkProperties);
+        verify(mMockEpdgTunnelManager, times(1))
+                .updateNetwork(eq(mMockNetwork), eq(newLinkProperties));
     }
 
     @Test
@@ -450,13 +484,13 @@ public class IwlanDataServiceTest {
 
         latch = new CountDownLatch(1);
         IwlanDataServiceCallback callback = new IwlanDataServiceCallback("requestDataCallList");
-        TunnelLinkProperties mMockLinkProperties =
+        TunnelLinkProperties mLinkProperties =
                 TunnelLinkPropertiesTest.createTestTunnelLinkProperties();
         mSpyIwlanDataServiceProvider.setTunnelState(
                 dp,
                 new DataServiceCallback(callback),
                 TunnelState.TUNNEL_UP,
-                mMockLinkProperties,
+                mLinkProperties,
                 false, /* isHandover */
                 1, /* pduSessionId */
                 true /* isImsOrEmergency */);
@@ -578,7 +612,7 @@ public class IwlanDataServiceTest {
         DataProfile dp = buildImsDataProfile();
 
         /* Wifi is connected */
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
         mSpyIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
@@ -616,7 +650,7 @@ public class IwlanDataServiceTest {
         DataProfile dp = buildImsDataProfile();
 
         /* Wifi is connected */
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
         mSpyIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
@@ -1069,13 +1103,8 @@ public class IwlanDataServiceTest {
     public void testDnsPrefetching() throws Exception {
         NetworkCallback networkCallback = getNetworkMonitorCallback();
         /* Wifi is connected */
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
-
-        List<LinkAddress> linkAddresses = new ArrayList<>();
-        linkAddresses.add(mMockIPv4LinkAddress);
-
-        when(mMockLinkProperties.getLinkAddresses()).thenReturn(linkAddresses);
-        networkCallback.onLinkPropertiesChanged(mMockNetwork, mMockLinkProperties);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
+        networkCallback.onLinkPropertiesChanged(mMockNetwork, mLinkProperties);
 
         mIwlanDataService
                 .mIwlanDataServiceHandler
@@ -1094,10 +1123,12 @@ public class IwlanDataServiceTest {
                 .sendToTarget();
         mTestLooper.dispatchAll();
 
-        linkAddresses.add(mMockIPv6LinkAddress);
+        LinkProperties newLinkProperties = new LinkProperties();
+        newLinkProperties.setInterfaceName("wlan0");
+        newLinkProperties.addLinkAddress(mMockIPv4LinkAddress);
+        newLinkProperties.addLinkAddress(mMockIPv6LinkAddress);
 
-        when(mMockLinkProperties.getLinkAddresses()).thenReturn(linkAddresses);
-        networkCallback.onLinkPropertiesChanged(mMockNetwork, mMockLinkProperties);
+        networkCallback.onLinkPropertiesChanged(mMockNetwork, newLinkProperties);
 
         /* Prefetching will be triggered twice.
            1. Network connected, CarrierConfig ready, WifiCallingSetting enabled
@@ -1281,7 +1312,7 @@ public class IwlanDataServiceTest {
     public void testIwlanTunnelStatsFailureCounts() {
         DataProfile dp = buildImsDataProfile();
 
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
         when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
                 .thenReturn(mMockErrorPolicyManager);
@@ -1307,7 +1338,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
                 .thenReturn(DataFailCause.ERROR_UNSPECIFIED);
 
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
         long count = 3L;
         for (int i = 0; i < count; i++) {
@@ -1328,7 +1359,7 @@ public class IwlanDataServiceTest {
         when(calendar.getTime()).thenAnswer(i -> new Date(mMockedCalendarTime));
 
         mSpyIwlanDataServiceProvider.setCalendar(calendar);
-        onSystemDefaultNetworkConnected(mMockNetwork, mMockLinkProperties, TRANSPORT_WIFI);
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
 
         LongSummaryStatistics tunnelSetupSuccessStats = new LongSummaryStatistics();
         LongSummaryStatistics tunnelUpStats = new LongSummaryStatistics();
@@ -1629,5 +1660,13 @@ public class IwlanDataServiceTest {
         mTestLooper.dispatchAll();
         verify(mMockDataServiceCallback, atLeastOnce())
                 .onDeactivateDataCallComplete(eq(DataServiceCallback.RESULT_SUCCESS));
+    }
+
+    private Object callUnsupportedAppUsageMethod(
+            Object target, String methodName, Class<?>[] parameterTypes, Object[] args)
+            throws Exception {
+        Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
+        method.setAccessible(true);
+        return method.invoke(target, args);
     }
 }

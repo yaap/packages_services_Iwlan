@@ -129,8 +129,6 @@ public class IwlanDataService extends DataService {
         IPV4V6
     }
 
-    private static LinkProtocolType sLinkProtocolType = LinkProtocolType.UNKNOWN;
-
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
     // This callback runs in the same thread as IwlanDataServiceHandler
@@ -1883,10 +1881,6 @@ public class IwlanDataService extends DataService {
         sNetworkConnected = networkConnected;
         sDefaultDataTransport = transport;
         sNetwork = network;
-        if (!networkConnected) {
-            // reset link protocol type
-            sLinkProtocolType = LinkProtocolType.UNKNOWN;
-        }
 
         if (networkConnected) {
             if (hasTransportChanged) {

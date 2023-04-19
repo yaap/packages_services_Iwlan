@@ -197,6 +197,10 @@ public class ErrorPolicyManagerTest {
         return buildIwlanIkeProtocolError(IkeProtocolException.ERROR_TYPE_CHILD_SA_NOT_FOUND);
     }
 
+    private static IwlanError buildIwlanIkeInternalAddressFailure() {
+        return buildIwlanIkeProtocolError(IkeProtocolException.ERROR_TYPE_INTERNAL_ADDRESS_FAILURE);
+    }
+
     @Test
     public void testValidCarrierConfig() throws Exception {
         String apn = "ims";
@@ -336,6 +340,16 @@ public class ErrorPolicyManagerTest {
         assertEquals(40, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(80, time);
+
+        iwlanError = buildIwlanIkeInternalAddressFailure();
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(10, time);
     }
 
     @Test

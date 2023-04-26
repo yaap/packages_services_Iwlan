@@ -86,6 +86,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class IwlanDataService extends DataService {
 
     private static final String TAG = IwlanDataService.class.getSimpleName();
+
+    private static final String CONTEXT_ATTRIBUTION_TAG = "IWLAN";
     private static Context mContext;
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private static boolean sNetworkConnected = false;
@@ -2055,7 +2057,8 @@ public class IwlanDataService extends DataService {
 
     @Override
     public void onCreate() {
-        setAppContext(getApplicationContext());
+        Context context = getApplicationContext().createAttributionContext(CONTEXT_ATTRIBUTION_TAG);
+        setAppContext(context);
         IwlanBroadcastReceiver.startListening(mContext);
         IwlanHelper.startCountryDetector(mContext);
     }

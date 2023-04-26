@@ -969,6 +969,9 @@ public class IwlanDataService extends DataService {
                 getTunnelManager().updateNetwork(network, linkProperties);
             }
 
+            if (network.equals(sNetwork)) {
+                return;
+            }
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
                 TunnelState tunnelState = entry.getValue();
                 if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {

@@ -129,8 +129,6 @@ public class IwlanDataService extends DataService {
         IPV4V6
     }
 
-    private static LinkProtocolType sLinkProtocolType = LinkProtocolType.UNKNOWN;
-
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
     // This callback runs in the same thread as IwlanDataServiceHandler
@@ -176,13 +174,11 @@ public class IwlanDataService extends DataService {
                 return;
             }
 
-            if (isLinkProtocolTypeChanged(linkProperties)) {
+            if (!sLinkProperties.equals(linkProperties)) {
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
-                    if (!sLinkProperties.equals(linkProperties)) {
-                        sLinkProperties = linkProperties;
-                        dp.updateNetwork(network, linkProperties);
-                    }
+                    sLinkProperties = linkProperties;
+                    dp.updateNetwork(network, linkProperties);
                 }
             }
         }
@@ -1885,10 +1881,6 @@ public class IwlanDataService extends DataService {
         sNetworkConnected = networkConnected;
         sDefaultDataTransport = transport;
         sNetwork = network;
-        if (!networkConnected) {
-            // reset link protocol type
-            sLinkProtocolType = LinkProtocolType.UNKNOWN;
-        }
 
         if (networkConnected) {
             if (hasTransportChanged) {
@@ -1923,48 +1915,6 @@ public class IwlanDataService extends DataService {
                 dp.forceCloseTunnelsInDeactivatingState();
             }
         }
-    }
-
-    static boolean isLinkProtocolTypeChanged(LinkProperties linkProperties) {
-        boolean hasIPV4 = false;
-        boolean hasIPV6 = false;
-
-        LinkProtocolType linkProtocolType = null;
-        if (linkProperties != null) {
-            for (LinkAddress linkAddress : linkProperties.getLinkAddresses()) {
-                InetAddress inetaddr = linkAddress.getAddress();
-                // skip linklocal and loopback addresses
-                if (!inetaddr.isLoopbackAddress() && !inetaddr.isLinkLocalAddress()) {
-                    if (inetaddr instanceof Inet4Address) {
-                        hasIPV4 = true;
-                    } else if (inetaddr instanceof Inet6Address) {
-                        hasIPV6 = true;
-                    }
-                }
-            }
-
-            if (hasIPV4 && hasIPV6) {
-                linkProtocolType = LinkProtocolType.IPV4V6;
-            } else if (hasIPV4) {
-                linkProtocolType = LinkProtocolType.IPV4;
-            } else if (hasIPV6) {
-                linkProtocolType = LinkProtocolType.IPV6;
-            }
-
-            if (sLinkProtocolType != linkProtocolType) {
-                Log.d(
-                        TAG,
-                        "LinkProtocolType was changed from "
-                                + sLinkProtocolType
-                                + " to "
-                                + linkProtocolType);
-                sLinkProtocolType = linkProtocolType;
-                return true;
-            }
-            return false;
-        }
-        Log.w(TAG, "linkProperties is NULL.");
-        return false;
     }
 
     /**

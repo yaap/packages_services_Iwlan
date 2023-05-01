@@ -80,7 +80,9 @@ public class EpdgSelector {
     private byte[] mV6PcoData = null;
     @NonNull private final ErrorPolicyManager mErrorPolicyManager;
 
-    private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 5L;
+    // The default DNS timeout in the DNS module is set to 5 seconds. To account for IPC overhead,
+    // IWLAN applies an internal timeout of 6 seconds, slightly longer than the default timeout
+    private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 6L;
 
     private static final long PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC = 20L;
     private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.
@@ -398,15 +400,7 @@ public class EpdgSelector {
     }
 
     private String[] getPlmnList() {
-        List<String> plmnsFromSubInfo = new ArrayList<>();
-
-        List<String> plmnsFromCarrierConfig =
-                new ArrayList<>(
-                        Arrays.asList(
-                                IwlanHelper.getConfig(
-                                        CarrierConfigManager.Iwlan.KEY_MCC_MNCS_STRING_ARRAY,
-                                        mContext,
-                                        mSlotId)));
+        List<String> plmnsFromCarrierConfig = getPlmnsFromCarrierConfig();
         Log.d(TAG, "plmnsFromCarrierConfig:" + plmnsFromCarrierConfig);
 
         // Get Ehplmns & mccmnc from SubscriptionManager
@@ -424,46 +418,66 @@ public class EpdgSelector {
             return plmnsFromCarrierConfig.toArray(new String[plmnsFromCarrierConfig.size()]);
         }
 
-        // There are three sources of plmns - sim plmn, plmn list from carrier config and
-        // Ehplmn list from subscription info.
-        // The plmns are prioritized as follows:
-        // 1. Sim plmn
-        // 2. Plmns common to both lists.
-        // 3. Remaining plmns in the lists.
-        List<String> combinedList = new ArrayList<>();
         // Get MCCMNC from IMSI
-        String plmnFromImsi = subInfo.getMccString() + "-" + subInfo.getMncString();
-        combinedList.add(plmnFromImsi);
+        String plmnFromImsi = subInfo.getMccString() + subInfo.getMncString();
 
-        // Get Ehplmns from TelephonyManager
-        for (String ehplmn : getEhplmns()) {
-            if (ehplmn.length() == 5 || ehplmn.length() == 6) {
-                StringBuilder str = new StringBuilder(ehplmn);
-                str.insert(3, "-");
-                plmnsFromSubInfo.add(str.toString());
+        int[] prioritizedPlmnTypes =
+                IwlanHelper.getConfig(
+                        CarrierConfigManager.Iwlan.KEY_EPDG_PLMN_PRIORITY_INT_ARRAY,
+                        mContext,
+                        mSlotId);
+
+        List<String> ehplmns = getEhplmns();
+        String registeredPlmn = getRegisteredPlmn();
+
+        List<String> combinedList = new ArrayList<>();
+        for (int plmnType : prioritizedPlmnTypes) {
+            switch (plmnType) {
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_RPLMN:
+                    if (isInEpdgSelectionInfo(registeredPlmn)) {
+                        combinedList.add(registeredPlmn);
+                    }
+                    break;
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_HPLMN:
+                    combinedList.add(plmnFromImsi);
+                    break;
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_ALL:
+                    combinedList.addAll(getEhplmns());
+                    break;
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_FIRST:
+                    if (!ehplmns.isEmpty()) {
+                        combinedList.add(ehplmns.get(0));
+                    }
+                    break;
+                default:
+                    Log.e(TAG, "Unknown PLMN type: " + plmnType);
+                    break;
             }
         }
 
-        Log.d(TAG, "plmnsFromSubInfo:" + plmnsFromSubInfo);
-
-        // To avoid double adding plmn from imsi
-        plmnsFromCarrierConfig.removeIf(i -> i.equals(plmnFromImsi));
-        plmnsFromSubInfo.removeIf(i -> i.equals(plmnFromImsi));
-
-        for (Iterator<String> iterator = plmnsFromCarrierConfig.iterator(); iterator.hasNext(); ) {
-            String plmn = iterator.next();
-            if (plmnsFromSubInfo.contains(plmn)) {
-                combinedList.add(plmn);
-                plmnsFromSubInfo.remove(plmn);
-                iterator.remove();
-            }
-        }
-
-        combinedList.addAll(plmnsFromSubInfo);
-        combinedList.addAll(plmnsFromCarrierConfig);
+        combinedList =
+                combinedList.stream()
+                        .distinct()
+                        .filter(EpdgSelector::isValidPlmn)
+                        .map(plmn -> new StringBuilder(plmn).insert(3, "-").toString())
+                        .toList();
 
         Log.d(TAG, "Final plmn list:" + combinedList);
         return combinedList.toArray(new String[combinedList.size()]);
+    }
+
+    private List<String> getPlmnsFromCarrierConfig() {
+        return Arrays.asList(
+                IwlanHelper.getConfig(
+                        CarrierConfigManager.Iwlan.KEY_MCC_MNCS_STRING_ARRAY, mContext, mSlotId));
+    }
+
+    private boolean isInEpdgSelectionInfo(String plmn) {
+        if (!isValidPlmn(plmn)) {
+            return false;
+        }
+        List<String> plmnsFromCarrierConfig = getPlmnsFromCarrierConfig();
+        return plmnsFromCarrierConfig.contains(new StringBuilder(plmn).insert(3, "-").toString());
     }
 
     private ArrayList<InetAddress> removeDuplicateIp(List<InetAddress> validIpList) {
@@ -497,6 +511,25 @@ public class EpdgSelector {
         String[] mccmnc = plmn.split("-");
         mccmnc[1] = String.format("%03d", Integer.parseInt(mccmnc[1]));
         return mccmnc;
+    }
+
+    /**
+     * @return the registered PLMN, null if not registered with 3gpp or failed to get telephony
+     *     manager
+     */
+    @Nullable
+    private String getRegisteredPlmn() {
+        TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
+        if (telephonyManager == null) {
+            Log.e(TAG, "TelephonyManager is NULL");
+            return null;
+        }
+
+        telephonyManager =
+                telephonyManager.createForSubscriptionId(IwlanHelper.getSubId(mContext, mSlotId));
+
+        String registeredPlmn = telephonyManager.getNetworkOperator();
+        return registeredPlmn.isEmpty() ? null : registeredPlmn;
     }
 
     private List<String> getEhplmns() {
@@ -1179,5 +1212,15 @@ public class EpdgSelector {
         trySubmitEpdgSelectionExecutor(epdgSelectionRunnable, isPrefetch, isEmergency);
 
         return new IwlanError(IwlanError.NO_ERROR);
+    }
+
+    /**
+     * Validates a PLMN (Public Land Mobile Network) identifier string.
+     *
+     * @param plmn The PLMN identifier string to validate.
+     * @return True if the PLMN identifier is valid, false otherwise.
+     */
+    private static boolean isValidPlmn(String plmn) {
+        return plmn != null && plmn.matches("\\d{5,6}");
     }
 }

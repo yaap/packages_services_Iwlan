@@ -226,8 +226,7 @@ public class EpdgTunnelManager {
     private final EpdgSelector.EpdgSelectorCallback mSelectorCallback =
             new EpdgSelector.EpdgSelectorCallback() {
                 @Override
-                public void onServerListChanged(
-                        int transactionId, ArrayList<InetAddress> validIPList) {
+                public void onServerListChanged(int transactionId, List<InetAddress> validIPList) {
                     sendSelectionRequestComplete(
                             validIPList, new IwlanError(IwlanError.NO_ERROR), transactionId);
                 }
@@ -744,7 +743,7 @@ public class EpdgTunnelManager {
                 TAG,
                 "Bringing up tunnel for apn: "
                         + apnName
-                        + "ePDG : "
+                        + " ePDG: "
                         + mEpdgAddress.getHostAddress());
 
         final int token = incrementAndGetCurrentTokenForApn(apnName);
@@ -992,6 +991,12 @@ public class EpdgTunnelManager {
             if (proto == ApnSetting.PROTOCOL_IPV6 || proto == ApnSetting.PROTOCOL_IPV4V6) {
                 builder.addPcscfServerRequest(AF_INET6);
             }
+        }
+
+        // If MOBIKE is configured, ePDGs may force IPv6 UDP encapsulation- as specified by
+        // RFC 4555- which Android connectivity stack presently does not support.
+        if (mEpdgAddress instanceof Inet6Address) {
+            builder.removeIkeOption(IkeSessionParams.IKE_OPTION_MOBIKE);
         }
 
         Ike3gppParams.Builder builder3gppParams = null;
@@ -2288,7 +2293,7 @@ public class EpdgTunnelManager {
 
     @VisibleForTesting
     void sendSelectionRequestComplete(
-            ArrayList<InetAddress> validIPList, IwlanError result, int transactionId) {
+            List<InetAddress> validIPList, IwlanError result, int transactionId) {
         mEpdgServerSelectionDuration = System.currentTimeMillis() - mEpdgServerSelectionStartTime;
         mEpdgServerSelectionStartTime = 0;
         EpdgSelectorResult epdgSelectorResult =

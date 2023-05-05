@@ -408,6 +408,34 @@ public class IwlanDataServiceTest {
     }
 
     @Test
+    public void testOnLinkPropertiesChangedForBringingUpIkeSession() {
+        DataProfile dp = buildImsDataProfile();
+
+        NetworkCallback networkCallback = getNetworkMonitorCallback();
+        onSystemDefaultNetworkConnected(mMockNetwork, mLinkProperties, TRANSPORT_WIFI);
+
+        clearInvocations(mMockEpdgTunnelManager);
+
+        mSpyIwlanDataServiceProvider.setTunnelState(
+                dp,
+                mMockDataServiceCallback,
+                TunnelState.TUNNEL_IN_BRINGUP,
+                null, /* linkProperties */
+                false /* isHandover */,
+                1 /* pduSessionId */,
+                true /* isImsOrEmergency */);
+
+        LinkProperties newLinkProperties = new LinkProperties(mLinkProperties);
+        newLinkProperties.setInterfaceName("wlan0");
+        newLinkProperties.addLinkAddress(mMockIPv6LinkAddress);
+
+        networkCallback.onLinkPropertiesChanged(mMockNetwork, newLinkProperties);
+        verify(mMockEpdgTunnelManager, times(1))
+                .updateNetwork(eq(mMockNetwork), eq(newLinkProperties));
+        verify(mMockEpdgTunnelManager, never()).closeTunnel(any(), anyBoolean(), any(), any());
+    }
+
+    @Test
     public void testNetworkNotConnectedWithCellularAndCrossSimDisabled()
             throws InterruptedException {
         NetworkCapabilities nc =

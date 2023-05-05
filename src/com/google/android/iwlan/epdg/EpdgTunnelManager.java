@@ -2283,7 +2283,7 @@ public class EpdgTunnelManager {
 
     @VisibleForTesting
     List<InetAddress> getAddressForNetwork(Network network, Context context) {
-        return IwlanHelper.getAddressesForNetwork(network, context);
+        return IwlanHelper.getAllAddressesForNetwork(network, context);
     }
 
     @VisibleForTesting

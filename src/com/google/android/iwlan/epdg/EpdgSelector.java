@@ -144,7 +144,7 @@ public class EpdgSelector {
 
     public interface EpdgSelectorCallback {
         /*gives priority ordered list of addresses*/
-        void onServerListChanged(int transactionId, ArrayList<InetAddress> validIPList);
+        void onServerListChanged(int transactionId, List<InetAddress> validIPList);
 
         void onError(int transactionId, IwlanError error);
     }

@@ -514,7 +514,7 @@ public class EpdgSelectorTest {
                         new EpdgSelector.EpdgSelectorCallback() {
                             @Override
                             public void onServerListChanged(
-                                    int transactionId, ArrayList<InetAddress> validIPList) {
+                                    int transactionId, List<InetAddress> validIPList) {
                                 assertEquals(transactionId, 1234);
 
                                 for (InetAddress mInetAddress : validIPList) {

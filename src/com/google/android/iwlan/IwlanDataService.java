@@ -124,13 +124,6 @@ public class IwlanDataService extends DataService {
 
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
-    enum LinkProtocolType {
-        UNKNOWN,
-        IPV4,
-        IPV6,
-        IPV4V6
-    }
-
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
     // This callback runs in the same thread as IwlanDataServiceHandler
@@ -601,6 +594,7 @@ public class IwlanDataService extends DataService {
             events.add(IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT);
+            events.add(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.CELLINFO_CHANGED_EVENT);
             events.add(IwlanEventListener.CALL_STATE_CHANGED_EVENT);
             IwlanEventListener.getInstance(mContext, slotIndex)
@@ -1364,6 +1358,12 @@ public class IwlanDataService extends DataService {
                     iwlanDataServiceProvider.mWfcEnabled = false;
                     break;
 
+                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+                    iwlanDataServiceProvider.updateNetwork(sNetwork, sLinkProperties);
+                    break;
+
                 case IwlanEventListener.CELLINFO_CHANGED_EVENT:
                     List<CellInfo> cellInfolist = (List<CellInfo>) msg.obj;
                     iwlanDataServiceProvider =
@@ -2045,6 +2045,8 @@ public class IwlanDataService extends DataService {
                 return "WIFI_CALLING_ENABLE_EVENT";
             case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
                 return "WIFI_CALLING_DISABLE_EVENT";
+            case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                return "CROSS_SIM_CALLING_ENABLE_EVENT";
             case IwlanEventListener.CELLINFO_CHANGED_EVENT:
                 return "CELLINFO_CHANGED_EVENT";
             case EVENT_TUNNEL_OPENED_METRICS:

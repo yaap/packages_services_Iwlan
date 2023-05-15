@@ -84,7 +84,8 @@ public class EpdgSelector {
     // IWLAN applies an internal timeout of 6 seconds, slightly longer than the default timeout
     private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 6L;
 
-    private static final long PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC = 20L;
+    private static final long PARALLEL_STATIC_RESOLUTION_TIMEOUT_DURATION_SEC = 6L;
+    private static final long PARALLEL_PLMN_RESOLUTION_TIMEOUT_DURATION_SEC = 20L;
     private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.
     private static final int MAX_EPDG_SELECTION_THREADS = 2; // 1 each for prefetch, tunnel bringup.
     private static final int MAX_DNS_RESOLVER_THREADS = 25; // Do not expect > 25 FQDNs per carrier.
@@ -206,7 +207,7 @@ public class EpdgSelector {
     }
 
     private CompletableFuture<Map.Entry<String, List<InetAddress>>> submitDnsResolverQuery(
-            String domainName, Network network, Executor executor) {
+            String domainName, Network network, int queryType, Executor executor) {
         CompletableFuture<Map.Entry<String, List<InetAddress>>> result = new CompletableFuture();
 
         final DnsResolver.Callback<List<InetAddress>> cb =
@@ -234,7 +235,7 @@ public class EpdgSelector {
                     }
                 };
         DnsResolver.getInstance()
-                .query(network, domainName, DnsResolver.FLAG_EMPTY, executor, null, cb);
+                .query(network, domainName, queryType, DnsResolver.FLAG_EMPTY, executor, null, cb);
         return result;
     }
 
@@ -280,6 +281,16 @@ public class EpdgSelector {
                                 .collect(Collectors.<T>toList()));
     }
 
+    @VisibleForTesting
+    protected boolean hasIpv4Address(Network network) {
+        return IwlanHelper.hasIpv4Address(IwlanHelper.getAllAddressesForNetwork(network, mContext));
+    }
+
+    @VisibleForTesting
+    protected boolean hasIpv6Address(Network network) {
+        return IwlanHelper.hasIpv6Address(IwlanHelper.getAllAddressesForNetwork(network, mContext));
+    }
+
     /**
      * Returns a list of unique IP addresses corresponding to the given domain names, in the same
      * order of the input. Runs DNS resolution across parallel threads.
@@ -287,10 +298,11 @@ public class EpdgSelector {
      * @param domainNames Domain names for which DNS resolution needs to be performed.
      * @param filter Selects for IPv4, IPv6 (or both) addresses from the resulting DNS records
      * @param network {@link Network} Network on which to run the DNS query.
+     * @param timeout timeout in seconds.
      * @return List of unique IP addresses corresponding to the domainNames.
      */
     private LinkedHashMap<String, List<InetAddress>> getIP(
-            List<String> domainNames, int filter, Network network) {
+            List<String> domainNames, int filter, Network network, long timeout) {
         // LinkedHashMap preserves insertion order (and hence priority) of domain names passed in.
         LinkedHashMap<String, List<InetAddress>> domainNameToIpAddr = new LinkedHashMap<>();
 
@@ -298,16 +310,27 @@ public class EpdgSelector {
                 new ArrayList<>();
         for (String domainName : domainNames) {
             domainNameToIpAddr.put(domainName, new ArrayList<>());
-            futuresList.add(submitDnsResolverQuery(domainName, network, mDnsResolutionExecutor));
+            // Dispatches separate IPv4 and IPv6 queries to avoid being blocked on either result.
+            if (hasIpv4Address(network)) {
+                futuresList.add(
+                        submitDnsResolverQuery(
+                                domainName, network, DnsResolver.TYPE_A, mDnsResolutionExecutor));
+            }
+            if (hasIpv6Address(network)) {
+                futuresList.add(
+                        submitDnsResolverQuery(
+                                domainName,
+                                network,
+                                DnsResolver.TYPE_AAAA,
+                                mDnsResolutionExecutor));
+            }
         }
         CompletableFuture<List<Map.Entry<String, List<InetAddress>>>> allFuturesResult =
                 allOf(futuresList);
 
         List<Map.Entry<String, List<InetAddress>>> resultList = null;
         try {
-            resultList =
-                    allFuturesResult.get(
-                            PARALLEL_DNS_RESOLVER_TIMEOUT_DURATION_SEC, TimeUnit.SECONDS);
+            resultList = allFuturesResult.get(timeout, TimeUnit.SECONDS);
         } catch (ExecutionException e) {
             Log.e(TAG, "Cause of ExecutionException: ", e.getCause());
         } catch (InterruptedException e) {
@@ -320,8 +343,17 @@ public class EpdgSelector {
                 Log.w(TAG, "No IP addresses in parallel DNS query!");
             } else {
                 for (Map.Entry<String, List<InetAddress>> entry : resultList) {
-                    domainNameToIpAddr.put(
-                            entry.getKey(), v4v6ProtocolFilter(entry.getValue(), filter));
+                    String resultDomainName = entry.getKey();
+                    List<InetAddress> resultIpAddr = v4v6ProtocolFilter(entry.getValue(), filter);
+
+                    if (!domainNameToIpAddr.containsKey(resultDomainName)) {
+                        Log.w(
+                                TAG,
+                                "Unexpected domain name in DnsResolver result: "
+                                        + resultDomainName);
+                        continue;
+                    }
+                    domainNameToIpAddr.get(resultDomainName).addAll(resultIpAddr);
                 }
             }
         }
@@ -570,9 +602,13 @@ public class EpdgSelector {
         }
 
         Log.d(TAG, "Static Domain Names: " + Arrays.toString(domainNames));
-        for (String domainName : domainNames) {
-            getIP(domainName, filter, validIpList, network);
-        }
+        LinkedHashMap<String, List<InetAddress>> domainNameToIpAddr =
+                getIP(
+                        Arrays.asList(domainNames),
+                        filter,
+                        network,
+                        PARALLEL_STATIC_RESOLUTION_TIMEOUT_DURATION_SEC);
+        domainNameToIpAddr.values().forEach(validIpList::addAll);
     }
 
     private String[] getDomainNames(String key) {
@@ -647,7 +683,7 @@ public class EpdgSelector {
         }
 
         LinkedHashMap<String, List<InetAddress>> domainNameToIpAddr =
-                getIP(domainNames, filter, network);
+                getIP(domainNames, filter, network, PARALLEL_PLMN_RESOLUTION_TIMEOUT_DURATION_SEC);
         domainNameToIpAddr.values().forEach(validIpList::addAll);
         return domainNameToIpAddr;
     }

@@ -195,8 +195,24 @@ public class EpdgSelectorTest {
 
         InetAddress expectedAddress = InetAddress.getByName(TEST_IP_ADDRESS);
 
-        assertEquals(testInetAddresses.size(), 1);
-        assertEquals(testInetAddresses.get(0), expectedAddress);
+        assertEquals(1, testInetAddresses.size());
+        assertEquals(expectedAddress, testInetAddresses.get(0));
+    }
+
+    @Test
+    public void testStaticMethodDirectIpAddress_noDnsResolution() throws Exception {
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        // Carrier config directly contains the ePDG IP address.
+        mTestBundle.putString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, TEST_IP_ADDRESS);
+
+        ArrayList<InetAddress> testInetAddresses =
+                getValidatedServerListWithDefaultParams(false /*isEmergency*/);
+
+        assertEquals(1, testInetAddresses.size());
+        assertEquals(InetAddresses.parseNumericAddress(TEST_IP_ADDRESS), testInetAddresses.get(0));
     }
 
     @Test
@@ -222,8 +238,8 @@ public class EpdgSelectorTest {
 
         InetAddress expectedAddress = InetAddress.getByName(TEST_IP_ADDRESS);
 
-        assertEquals(testInetAddresses.size(), 1);
-        assertEquals(testInetAddresses.get(0), expectedAddress);
+        assertEquals(1, testInetAddresses.size());
+        assertEquals(expectedAddress, testInetAddresses.get(0));
     }
 
     @Test
@@ -252,7 +268,7 @@ public class EpdgSelectorTest {
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(false /*isEmergency*/);
 
-        assertEquals(testInetAddresses.size(), 2);
+        assertEquals(2, testInetAddresses.size());
         assertTrue(testInetAddresses.contains(InetAddress.getByName(TEST_IP_ADDRESS_1)));
         assertTrue(testInetAddresses.contains(InetAddress.getByName(TEST_IP_ADDRESS_2)));
     }
@@ -506,7 +522,7 @@ public class EpdgSelectorTest {
         doReturn(true).when(mEpdgSelector).hasIpv4Address(mMockNetwork);
         doReturn(true).when(mEpdgSelector).hasIpv6Address(mMockNetwork);
 
-        // Set Network.getAllByName mock
+        // Set DnsResolver query mock
         final String addr1 = "epdg.epc.mnc480.mcc310.pub.3gppnetwork.org";
         final String addr2 = "epdg.epc.mnc120.mcc300.pub.3gppnetwork.org";
         final String addr3 = "epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
@@ -526,10 +542,10 @@ public class EpdgSelectorTest {
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(false /*isEmergency*/);
 
-        assertEquals(testInetAddresses.size(), 3);
-        assertEquals(testInetAddresses.get(0), InetAddress.getByName(TEST_IP_ADDRESS_1));
-        assertEquals(testInetAddresses.get(1), InetAddress.getByName(TEST_IP_ADDRESS_2));
-        assertEquals(testInetAddresses.get(2), InetAddress.getByName(TEST_IP_ADDRESS));
+        assertEquals(3, testInetAddresses.size());
+        assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_1), testInetAddresses.get(0));
+        assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_2), testInetAddresses.get(1));
+        assertEquals(InetAddress.getByName(TEST_IP_ADDRESS), testInetAddresses.get(2));
     }
 
     private ArrayList<InetAddress> getValidatedServerListWithDefaultParams(boolean isEmergency)
@@ -609,7 +625,7 @@ public class EpdgSelectorTest {
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(false /* isEmergency */);
 
-        assertEquals(testInetAddresses.size(), 2);
+        assertEquals(2, testInetAddresses.size());
         assertTrue(testInetAddresses.contains(InetAddress.getByName(TEST_IP_ADDRESS)));
         assertTrue(testInetAddresses.contains(InetAddress.getByName(TEST_IPV6_ADDRESS)));
     }
@@ -683,10 +699,10 @@ public class EpdgSelectorTest {
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(isEmergency);
 
-        assertEquals(testInetAddresses.size(), 3);
-        assertEquals(testInetAddresses.get(0), InetAddress.getByName(TEST_IP_ADDRESS));
-        assertEquals(testInetAddresses.get(1), InetAddress.getByName(TEST_IP_ADDRESS_1));
-        assertEquals(testInetAddresses.get(2), InetAddress.getByName(TEST_IP_ADDRESS_2));
+        assertEquals(3, testInetAddresses.size());
+        assertEquals(InetAddress.getByName(TEST_IP_ADDRESS), testInetAddresses.get(0));
+        assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_1), testInetAddresses.get(1));
+        assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_2), testInetAddresses.get(2));
     }
 
     private void setAnswerForCellularMethod(boolean isEmergency, int mcc, int mnc)

@@ -81,6 +81,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanDataService extends DataService {
@@ -956,14 +957,14 @@ public class IwlanDataService extends DataService {
         }
 
         private void updateNetwork(
-                @NonNull Network network, @Nullable LinkProperties linkProperties) {
+                @Nullable Network network, @Nullable LinkProperties linkProperties) {
             if (mIwlanDataService.isNetworkConnected(
                     isActiveDataOnOtherSub(getSlotIndex()),
                     IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
                 getTunnelManager().updateNetwork(network, linkProperties);
             }
 
-            if (network.equals(sNetwork)) {
+            if (Objects.equals(network, sNetwork)) {
                 return;
             }
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {

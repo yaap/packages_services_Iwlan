@@ -17,6 +17,7 @@
 package com.google.android.iwlan;
 
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_ETHERNET;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
@@ -532,6 +533,30 @@ public class IwlanDataServiceTest {
                 .sendToTarget();
         mTestLooper.dispatchAll();
         verify(mMockEpdgTunnelManager, times(2)).updateNetwork(eq(newNetwork), eq(mLinkProperties));
+    }
+
+    @Test
+    public void testOnCrossSimCallingEnable_doNotUpdateTunnelManagerIfNoNetwork() throws Exception {
+        when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
+        mIwlanDataService
+                .mIwlanDataServiceHandler
+                .obtainMessage(
+                        IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT,
+                        DEFAULT_SLOT_INDEX,
+                        0 /* unused */)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+        verify(mMockEpdgTunnelManager, never())
+                .updateNetwork(any(Network.class), any(LinkProperties.class));
+    }
+
+    @Test
+    public void testOnEthernetConnection_doNotUpdateTunnelManager() throws Exception {
+        Network newNetwork = createMockNetwork(mLinkProperties);
+        onSystemDefaultNetworkConnected(
+                newNetwork, mLinkProperties, TRANSPORT_ETHERNET, DEFAULT_SUB_INDEX);
+        verify(mMockEpdgTunnelManager, never())
+                .updateNetwork(eq(newNetwork), any(LinkProperties.class));
     }
 
     @Test

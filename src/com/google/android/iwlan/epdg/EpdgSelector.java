@@ -89,6 +89,7 @@ public class EpdgSelector {
     private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.
     private static final int MAX_EPDG_SELECTION_THREADS = 2; // 1 each for prefetch, tunnel bringup.
     private static final int MAX_DNS_RESOLVER_THREADS = 25; // Do not expect > 25 FQDNs per carrier.
+    private static final String NO_DOMAIN = "NO_DOMAIN";
 
     BlockingQueue<Runnable> dnsResolutionQueue =
             new ArrayBlockingQueue<>(
@@ -291,6 +292,12 @@ public class EpdgSelector {
         return IwlanHelper.hasIpv6Address(IwlanHelper.getAllAddressesForNetwork(network, mContext));
     }
 
+    private void printParallelDnsResult(Map<String, List<InetAddress>> domainNameToIpAddresses) {
+        Log.d(TAG, "Parallel DNS resolution result:");
+        for (String domain : domainNameToIpAddresses.keySet()) {
+            Log.d(TAG, domain + ": " + domainNameToIpAddresses.get(domain));
+        }
+    }
     /**
      * Returns a list of unique IP addresses corresponding to the given domain names, in the same
      * order of the input. Runs DNS resolution across parallel threads.
@@ -309,6 +316,13 @@ public class EpdgSelector {
         List<CompletableFuture<Map.Entry<String, List<InetAddress>>>> futuresList =
                 new ArrayList<>();
         for (String domainName : domainNames) {
+            if (InetAddresses.isNumericAddress(domainName)) {
+                Log.d(TAG, domainName + " is a numeric IP address!");
+                InetAddress inetAddr = InetAddresses.parseNumericAddress(domainName);
+                domainNameToIpAddr.put(NO_DOMAIN, new ArrayList<>(List.of(inetAddr)));
+                continue;
+            }
+
             domainNameToIpAddr.put(domainName, new ArrayList<>());
             // Dispatches separate IPv4 and IPv6 queries to avoid being blocked on either result.
             if (hasIpv4Address(network)) {
@@ -377,12 +391,8 @@ public class EpdgSelector {
         Log.d(TAG, "Input domainName : " + domainName);
 
         if (InetAddresses.isNumericAddress(domainName)) {
-            try {
-                Log.d(TAG, domainName + " is a numeric ip address");
-                ipList.add(InetAddress.getByName(domainName));
-            } catch (UnknownHostException e) {
-                Log.e(TAG, "Exception when resolving domainName : " + domainName + ".", e);
-            }
+            Log.d(TAG, domainName + " is a numeric IP address!");
+            ipList.add(InetAddresses.parseNumericAddress(domainName));
         } else {
             try {
                 CompletableFuture<List<InetAddress>> result = new CompletableFuture();
@@ -608,6 +618,7 @@ public class EpdgSelector {
                         filter,
                         network,
                         PARALLEL_STATIC_RESOLUTION_TIMEOUT_DURATION_SEC);
+        printParallelDnsResult(domainNameToIpAddr);
         domainNameToIpAddr.values().forEach(validIpList::addAll);
     }
 
@@ -684,6 +695,7 @@ public class EpdgSelector {
 
         LinkedHashMap<String, List<InetAddress>> domainNameToIpAddr =
                 getIP(domainNames, filter, network, PARALLEL_PLMN_RESOLUTION_TIMEOUT_DURATION_SEC);
+        printParallelDnsResult(domainNameToIpAddr);
         domainNameToIpAddr.values().forEach(validIpList::addAll);
         return domainNameToIpAddr;
     }

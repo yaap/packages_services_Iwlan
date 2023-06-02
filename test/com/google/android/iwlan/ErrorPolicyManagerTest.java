@@ -411,6 +411,53 @@ public class ErrorPolicyManagerTest {
     }
 
     @Test
+    public void testNullCarrierConfig() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + ErrorPolicyString.builder()
+                                .setErrorType("IKE_PROTOCOL_ERROR_TYPE")
+                                .setErrorDetails(List.of("24"))
+                                .setRetryArray(List.of("100"))
+                                .setUnthrottlingEvents(
+                                        List.of("APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"))
+                                .build()
+                                .getErrorPolicyInString()
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfigWithCarrierId(bundle, 1 /* carrierId */);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+
+        // IKE_PROTOCOL_ERROR_TYPE(24) and retry time = 100.
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(100, time);
+
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, null);
+        setupMockForCarrierConfigWithCarrierId(bundle, 2 /* carrierId */);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        mTestLooper.dispatchAll();
+
+        // IKE_PROTOCOL_ERROR_TYPE(24). Fall back to default error policy, retry time = 5.
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(5, time);
+    }
+
+    @Test
     public void testCanBringUpTunnel() throws Exception {
         String apn = "ims";
         String config =
@@ -1061,6 +1108,10 @@ public class ErrorPolicyManagerTest {
     }
 
     private void setupMockForCarrierConfig(PersistableBundle bundle) {
+        setupMockForCarrierConfigWithCarrierId(bundle, TEST_CARRIER_ID);
+    }
+
+    private void setupMockForCarrierConfigWithCarrierId(PersistableBundle bundle, int carrierId) {
         doReturn(mMockCarrierConfigManager)
                 .when(mMockContext)
                 .getSystemService(eq(CarrierConfigManager.class));
@@ -1071,7 +1122,7 @@ public class ErrorPolicyManagerTest {
         doReturn(mMockTelephonyManager)
                 .when(mMockTelephonyManager)
                 .createForSubscriptionId(anyInt());
-        doReturn(TEST_CARRIER_ID).when(mMockTelephonyManager).getSimCarrierId();
+        doReturn(carrierId).when(mMockTelephonyManager).getSimCarrierId();
         SubscriptionInfo mockSubInfo = mock(SubscriptionInfo.class);
         doReturn(mockSubInfo)
                 .when(mMockSubscriptionManager)

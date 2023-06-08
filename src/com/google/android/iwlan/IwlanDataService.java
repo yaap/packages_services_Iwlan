@@ -86,6 +86,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class IwlanDataService extends DataService {
 
     private static final String TAG = IwlanDataService.class.getSimpleName();
+
+    private static final String CONTEXT_ATTRIBUTION_TAG = "IWLAN";
     private static Context mContext;
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private static boolean sNetworkConnected = false;
@@ -121,13 +123,6 @@ public class IwlanDataService extends DataService {
     }
 
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
-
-    enum LinkProtocolType {
-        UNKNOWN,
-        IPV4,
-        IPV6,
-        IPV4V6
-    }
 
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
@@ -599,6 +594,7 @@ public class IwlanDataService extends DataService {
             events.add(IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT);
+            events.add(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.CELLINFO_CHANGED_EVENT);
             events.add(IwlanEventListener.CALL_STATE_CHANGED_EVENT);
             IwlanEventListener.getInstance(mContext, slotIndex)
@@ -967,6 +963,9 @@ public class IwlanDataService extends DataService {
                 getTunnelManager().updateNetwork(network, linkProperties);
             }
 
+            if (network.equals(sNetwork)) {
+                return;
+            }
             for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
                 TunnelState tunnelState = entry.getValue();
                 if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
@@ -1357,6 +1356,12 @@ public class IwlanDataService extends DataService {
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
 
                     iwlanDataServiceProvider.mWfcEnabled = false;
+                    break;
+
+                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+                    iwlanDataServiceProvider.updateNetwork(sNetwork, sLinkProperties);
                     break;
 
                 case IwlanEventListener.CELLINFO_CHANGED_EVENT:
@@ -2040,6 +2045,8 @@ public class IwlanDataService extends DataService {
                 return "WIFI_CALLING_ENABLE_EVENT";
             case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
                 return "WIFI_CALLING_DISABLE_EVENT";
+            case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                return "CROSS_SIM_CALLING_ENABLE_EVENT";
             case IwlanEventListener.CELLINFO_CHANGED_EVENT:
                 return "CELLINFO_CHANGED_EVENT";
             case EVENT_TUNNEL_OPENED_METRICS:
@@ -2055,7 +2062,8 @@ public class IwlanDataService extends DataService {
 
     @Override
     public void onCreate() {
-        setAppContext(getApplicationContext());
+        Context context = getApplicationContext().createAttributionContext(CONTEXT_ATTRIBUTION_TAG);
+        setAppContext(context);
         IwlanBroadcastReceiver.startListening(mContext);
         IwlanHelper.startCountryDetector(mContext);
     }

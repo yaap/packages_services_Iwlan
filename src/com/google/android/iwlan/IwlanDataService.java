@@ -165,12 +165,12 @@ public class IwlanDataService extends DataService {
                 @NonNull Network network, @NonNull LinkProperties linkProperties) {
             Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
 
-            if (!sNetwork.equals(network)) {
+            if (!network.equals(sNetwork)) {
                 Log.d(TAG, "Ignore LinkProperties changes for unused Network.");
                 return;
             }
 
-            if (!sLinkProperties.equals(linkProperties)) {
+            if (!linkProperties.equals(sLinkProperties)) {
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
                     sLinkProperties = linkProperties;

@@ -1891,7 +1891,6 @@ public class IwlanDataService extends DataService {
         }
 
         sDefaultDataTransport = transport;
-        sNetwork = network;
         sNetworkConnected = networkConnected;
 
         if (networkConnected) {
@@ -1914,7 +1913,7 @@ public class IwlanDataService extends DataService {
                 sLinkProperties = linkProperties;
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
-                    dp.updateNetwork(sNetwork, linkProperties);
+                    dp.updateNetwork(network, linkProperties);
                 }
                 IwlanHelper.updateCountryCodeWhenNetworkConnected();
             }
@@ -1927,6 +1926,7 @@ public class IwlanDataService extends DataService {
                 dp.forceCloseTunnelsInDeactivatingState();
             }
         }
+        sNetwork = network;
     }
 
     /**

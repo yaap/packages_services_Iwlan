@@ -1670,6 +1670,7 @@ public class IwlanDataService extends DataService {
                             openedMetricsData.getIkeTunnelEstablishmentDuration());
 
                     metricsAtom.sendMetricsData();
+                    metricsAtom.setMessageId(metricsAtom.INVALID_MESSAGE_ID);
                     break;
 
                 case EVENT_TUNNEL_CLOSED_METRICS:
@@ -1695,6 +1696,7 @@ public class IwlanDataService extends DataService {
                             closedMetricsData.getIkeTunnelEstablishmentDuration());
 
                     metricsAtom.sendMetricsData();
+                    metricsAtom.setMessageId(metricsAtom.INVALID_MESSAGE_ID);
                     iwlanDataServiceProvider.mMetricsAtomForApn.remove(apnName);
                     break;
 

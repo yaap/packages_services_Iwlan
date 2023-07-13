@@ -63,6 +63,7 @@ public class IwlanEventListenerTest {
     @Mock private TelephonyManager mMockTelephonyManager;
 
     private static final int DEFAULT_SLOT_INDEX = 0;
+    private static final int OTHER_SLOT_INDEX = 1;
     private static final int DEFAULT_CARRIER_INDEX = 0;
     private static final String WIFI_SSID_1 = "TEST_AP_NAME_1";
     private static final String WIFI_SSID_2 = "TEST_AP_NAME_2";
@@ -300,6 +301,38 @@ public class IwlanEventListenerTest {
         mTelephonyCallback.onCallStateChanged(TelephonyManager.CALL_STATE_OFFHOOK);
 
         verify(mMockMessage, times(1)).sendToTarget();
+    }
+
+    @Test
+    public void testCallStateChangedMultipleSlots() throws Exception {
+        IwlanEventListener otherSlotIwlanEventListener =
+                IwlanEventListener.getInstance(mMockContext, OTHER_SLOT_INDEX);
+
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CALL_STATE_CHANGED_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        eq(TelephonyManager.CALL_STATE_OFFHOOK)))
+                .thenReturn(mMockMessage);
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CALL_STATE_CHANGED_EVENT),
+                        eq(OTHER_SLOT_INDEX),
+                        eq(TelephonyManager.CALL_STATE_OFFHOOK)))
+                .thenReturn(mMockMessage_2);
+
+        events = new ArrayList<Integer>();
+        events.add(IwlanEventListener.CALL_STATE_CHANGED_EVENT);
+        mIwlanEventListener.addEventListener(events, mMockHandler);
+        otherSlotIwlanEventListener.addEventListener(events, mMockHandler);
+
+        mIwlanEventListener.registerTelephonyCallback();
+        otherSlotIwlanEventListener.registerTelephonyCallback();
+
+        TelephonyCallback.CallStateListener mTelephonyCallback =
+                mIwlanEventListener.getTelephonyCallback();
+        mTelephonyCallback.onCallStateChanged(TelephonyManager.CALL_STATE_OFFHOOK);
+
+        verify(mMockMessage, times(1)).sendToTarget();
+        verify(mMockMessage_2, never()).sendToTarget();
     }
 
     @Test

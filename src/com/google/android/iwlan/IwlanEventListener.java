@@ -168,11 +168,9 @@ public class IwlanEventListener {
                     LOG_TAG,
                     "Call state changed to " + callStateToString(state) + " for slot " + mSlotId);
 
-            for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
-                IwlanEventListener instance = entry.getValue();
-                if (instance != null) {
-                    instance.updateHandlers(CALL_STATE_CHANGED_EVENT, state);
-                }
+            IwlanEventListener instance = mInstances.get(mSlotId);
+            if (instance != null) {
+                instance.updateHandlers(CALL_STATE_CHANGED_EVENT, state);
             }
         }
     }

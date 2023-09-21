@@ -194,7 +194,9 @@ public class EpdgTunnelManager {
                 Set.of(
                         SaProposal.DH_GROUP_1024_BIT_MODP,
                         SaProposal.DH_GROUP_1536_BIT_MODP,
-                        SaProposal.DH_GROUP_2048_BIT_MODP);
+                        SaProposal.DH_GROUP_2048_BIT_MODP,
+                        SaProposal.DH_GROUP_3072_BIT_MODP,
+                        SaProposal.DH_GROUP_4096_BIT_MODP);
         VALID_KEY_LENGTHS =
                 Set.of(
                         SaProposal.KEY_LEN_AES_128,

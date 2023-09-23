@@ -219,6 +219,16 @@ public class ErrorPolicyManager {
             Log.d(LOG_TAG, "Doesn't match to the previous error" + iwlanError);
             ErrorPolicy policy = findErrorPolicy(apn, iwlanError);
             ErrorInfo errorInfo = new ErrorInfo(iwlanError, policy);
+            if (mLastErrorForApn.containsKey(apn)) {
+                ErrorInfo prevErrorInfo = mLastErrorForApn.get(apn);
+                IwlanError prevIwlanError = prevErrorInfo.getError();
+                // If prev and current error are both IKE_PROTOCOL_EXCEPTION, keep the retry index
+                // TODO: b/292312000 - Workaround for RetryIndex lost
+                if (iwlanError.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION
+                        && prevIwlanError.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
+                    errorInfo.setCurrentRetryIndex(prevErrorInfo.getCurrentRetryIndex());
+                }
+            }
             mLastErrorForApn.put(apn, errorInfo);
         }
         retryTime = mLastErrorForApn.get(apn).updateCurrentRetryTime();
@@ -1074,6 +1084,14 @@ public class ErrorPolicyManager {
             mIsBackOffTimeValid = true;
             mBackOffTime = backOffTime;
             mLastErrorTime = IwlanHelper.elapsedRealtime();
+        }
+
+        int getCurrentRetryIndex() {
+            return mCurrentRetryIndex;
+        }
+
+        void setCurrentRetryIndex(int currentRetryIndex) {
+            mCurrentRetryIndex = currentRetryIndex;
         }
 
         /**

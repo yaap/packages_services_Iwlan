@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -157,7 +158,7 @@ public class ErrorPolicyManager {
 
     private int carrierId = TelephonyManager.UNKNOWN_CARRIER_ID;
 
-    private String carrierConfigErrorPolicyString;
+    private String mCarrierConfigErrorPolicyString;
 
     @VisibleForTesting
     static final String KEY_ERROR_POLICY_CONFIG_STRING = "iwlan.key_error_policy_config_string";
@@ -218,6 +219,16 @@ public class ErrorPolicyManager {
             Log.d(LOG_TAG, "Doesn't match to the previous error" + iwlanError);
             ErrorPolicy policy = findErrorPolicy(apn, iwlanError);
             ErrorInfo errorInfo = new ErrorInfo(iwlanError, policy);
+            if (mLastErrorForApn.containsKey(apn)) {
+                ErrorInfo prevErrorInfo = mLastErrorForApn.get(apn);
+                IwlanError prevIwlanError = prevErrorInfo.getError();
+                // If prev and current error are both IKE_PROTOCOL_EXCEPTION, keep the retry index
+                // TODO: b/292312000 - Workaround for RetryIndex lost
+                if (iwlanError.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION
+                        && prevIwlanError.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION) {
+                    errorInfo.setCurrentRetryIndex(prevErrorInfo.getCurrentRetryIndex());
+                }
+            }
             mLastErrorForApn.put(apn, errorInfo);
         }
         retryTime = mLastErrorForApn.get(apn).updateCurrentRetryTime();
@@ -501,7 +512,7 @@ public class ErrorPolicyManager {
             throw new AssertionError(e);
         }
 
-        carrierConfigErrorPolicyString = null;
+        mCarrierConfigErrorPolicyString = null;
         readFromCarrierConfig(IwlanHelper.getCarrierId(mContext, mSlotId));
         updateUnthrottlingEvents();
     }
@@ -792,13 +803,15 @@ public class ErrorPolicyManager {
                 IwlanHelper.getConfig(KEY_ERROR_POLICY_CONFIG_STRING, mContext, mSlotId);
         if (carrierConfigErrorPolicy == null) {
             Log.e(LOG_TAG, "ErrorPolicy from Carrier Config is NULL");
+            mCarrierConfigPolicies.clear();
+            mCarrierConfigErrorPolicyString = null;
             return;
         }
         try {
             Map<String, List<ErrorPolicy>> errorPolicies =
                     readErrorPolicies(new JSONArray(carrierConfigErrorPolicy));
             if (errorPolicies.size() > 0) {
-                carrierConfigErrorPolicyString = carrierConfigErrorPolicy;
+                mCarrierConfigErrorPolicyString = carrierConfigErrorPolicy;
                 carrierId = currentCarrierId;
                 mCarrierConfigPolicies.clear();
                 mCarrierConfigPolicies.putAll(errorPolicies);
@@ -809,7 +822,7 @@ public class ErrorPolicyManager {
                     "Unable to parse the ErrorPolicy from CarrierConfig\n"
                             + carrierConfigErrorPolicy);
             mCarrierConfigPolicies.clear();
-            carrierConfigErrorPolicyString = null;
+            mCarrierConfigErrorPolicyString = null;
             e.printStackTrace();
         }
     }
@@ -1073,6 +1086,14 @@ public class ErrorPolicyManager {
             mLastErrorTime = IwlanHelper.elapsedRealtime();
         }
 
+        int getCurrentRetryIndex() {
+            return mCurrentRetryIndex;
+        }
+
+        void setCurrentRetryIndex(int currentRetryIndex) {
+            mCurrentRetryIndex = currentRetryIndex;
+        }
+
         /**
          * Updates the current retry index and returns the retry time at new index position and also
          * updates mLastErrorTime to current time. returns -1 if the index is out of bounds
@@ -1175,9 +1196,9 @@ public class ErrorPolicyManager {
         String errorPolicyConfig =
                 IwlanHelper.getConfig(KEY_ERROR_POLICY_CONFIG_STRING, mContext, mSlotId);
         return (currentCarrierId != carrierId)
-                || (carrierConfigErrorPolicyString == null)
+                || (mCarrierConfigErrorPolicyString == null)
                 || (errorPolicyConfig != null
-                        && !carrierConfigErrorPolicyString.equals(errorPolicyConfig));
+                        && !Objects.equals(mCarrierConfigErrorPolicyString, errorPolicyConfig));
     }
 
     private final class EpmHandler extends Handler {

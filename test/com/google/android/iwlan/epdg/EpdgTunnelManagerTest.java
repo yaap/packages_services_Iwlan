@@ -356,7 +356,16 @@ public class EpdgTunnelManagerTest {
 
     private void setupTunnelBringup(
             String apnName, List<InetAddress> epdgAddresses, int transactionId) throws Exception {
-        setupMockForGetConfig(null);
+        setupTunnelBringup(apnName, epdgAddresses, transactionId, null);
+    }
+
+    private void setupTunnelBringup(
+            String apnName,
+            List<InetAddress> epdgAddresses,
+            int transactionId,
+            PersistableBundle carrierConfigBundle)
+            throws Exception {
+        setupMockForGetConfig(carrierConfigBundle);
         doReturn(null)
                 .when(mMockIkeSessionCreator)
                 .createIkeSession(
@@ -2475,5 +2484,43 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
         mTestLooper.dispatchAll();
         verify(mMockIkeSession, times(1)).setNetwork(eq(newNetwork));
+    }
+
+    @Test
+    public void testBringUpTunnelWithDHGroups() throws Exception {
+        PersistableBundle bundle = new PersistableBundle();
+        int invalidDHGroup = 100;
+        bundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY,
+                new int[] {
+                    SaProposal.DH_GROUP_1024_BIT_MODP,
+                    SaProposal.DH_GROUP_1536_BIT_MODP,
+                    SaProposal.DH_GROUP_2048_BIT_MODP,
+                    SaProposal.DH_GROUP_3072_BIT_MODP,
+                    SaProposal.DH_GROUP_4096_BIT_MODP,
+                    invalidDHGroup
+                });
+        setupTunnelBringup(TEST_APN_NAME, EXPECTED_EPDG_ADDRESSES, 1 /* transactionId */, bundle);
+
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+        verify(mMockIkeSessionCreator, atLeastOnce())
+                .createIkeSession(
+                        eq(mMockContext),
+                        ikeSessionParamsCaptor.capture(),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertFalse(ikeSessionParams.getIkeSaProposals().isEmpty());
+        assertEquals(
+                List.of(
+                        SaProposal.DH_GROUP_1024_BIT_MODP,
+                        SaProposal.DH_GROUP_1536_BIT_MODP,
+                        SaProposal.DH_GROUP_2048_BIT_MODP,
+                        SaProposal.DH_GROUP_3072_BIT_MODP,
+                        SaProposal.DH_GROUP_4096_BIT_MODP),
+                ikeSessionParams.getIkeSaProposals().get(0).getDhGroups());
     }
 }

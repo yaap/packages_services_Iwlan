@@ -18,11 +18,15 @@ package com.google.android.iwlan.proto;
 
 import android.net.ipsec.ike.exceptions.IkeIOException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
+import android.util.Log;
 
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanStatsLog;
 
 public class MetricsAtom {
+    public static int INVALID_MESSAGE_ID = -1;
+    private static final String TAG = "IwlanMetrics";
+
     private int mMessageId;
     private int mApnType;
     private boolean mIsHandover;
@@ -148,6 +152,7 @@ public class MetricsAtom {
 
     public void sendMetricsData() {
         if (mMessageId == IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED) {
+            Log.d(TAG, "Send metrics data IWLAN_SETUP_DATA_CALL_RESULT_REPORTED");
             IwlanStatsLog.write(
                     mMessageId,
                     mApnType,
@@ -170,12 +175,16 @@ public class MetricsAtom {
                     mIwlanErrorWrappedStackFirstFrame);
             return;
         } else if (mMessageId == IwlanStatsLog.IWLAN_PDN_DISCONNECTED_REASON_REPORTED) {
+            Log.d(TAG, "Send metrics data IWLAN_PDN_DISCONNECTED_REASON_REPORTED");
             IwlanStatsLog.write(
                     mMessageId,
                     mDataCallFailCause,
                     mIsNetworkConnected,
                     mTransportType,
                     mWifiSignalValue);
+            return;
+        } else {
+            Log.d("IwlanMetrics", "Invalid Message ID: " + mMessageId);
             return;
         }
     }

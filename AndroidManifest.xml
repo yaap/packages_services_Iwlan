@@ -38,7 +38,6 @@
     <receiver android:name=".IwlanBroadcastReceiver"
               android:exported="true">
          <intent-filter>
-            <action android:name="android.telephony.action.CARRIER_CONFIG_CHANGED"/>
             <action android:name="android.telephony.action.CARRIER_SIGNAL_PCO_VALUE"/>
          </intent-filter>
     </receiver>

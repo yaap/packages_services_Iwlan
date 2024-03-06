@@ -70,7 +70,6 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         Log.d(TAG, "onReceive: " + action);
         switch (action) {
-            case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
             case WifiManager.WIFI_STATE_CHANGED_ACTION:
                 IwlanEventListener.onBroadcastReceived(intent);
@@ -97,6 +96,11 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
             if ((apnBitMask & ApnSetting.TYPE_IMS) != 0) {
                 int pcoId = intent.getIntExtra(TelephonyManager.EXTRA_PCO_ID, 0);
                 byte[] pcoData = intent.getByteArrayExtra(TelephonyManager.EXTRA_PCO_VALUE);
+
+                if (pcoData == null) {
+                    Log.e(TAG, "Pco data unavailable");
+                    return;
+                }
 
                 Log.d(
                         TAG,

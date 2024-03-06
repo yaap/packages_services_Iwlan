@@ -17,32 +17,42 @@
 package com.google.android.iwlan.epdg;
 
 import android.net.LinkAddress;
+import android.telephony.data.ApnSetting;
 import android.telephony.data.NetworkSliceInfo;
 
 import java.net.InetAddress;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import org.junit.Test;
 
 public class TunnelLinkPropertiesTest {
 
     private static final String IP_ADDRESS = "192.0.2.1";
+    private static final String IPV6_ADDRESS = "2001:0db8:0000:0000:0000:ff00:0042:8329";
     private static final String DNS_ADDRESS = "8.8.8.8";
     private static final String PSCF_ADDRESS = "10.159.204.230";
     private static final String INTERFACE_NAME = "ipsec6";
     private static final NetworkSliceInfo SLICE_INFO =
             NetworkSliceSelectionAssistanceInformation.getSliceInfo(new byte[] {1});
 
-    public static TunnelLinkProperties createTestTunnelLinkProperties() throws Exception {
-        List<LinkAddress> mInternalAddressList = new LinkedList<>();
-        List<InetAddress> mDNSAddressList = new LinkedList<>();
-        List<InetAddress> mPCSFAddressList = new LinkedList<>();
+    public static TunnelLinkProperties createTestTunnelLinkProperties(
+            @ApnSetting.ProtocolType int protocolType) throws Exception {
+        List<LinkAddress> mInternalAddressList = new ArrayList<>();
+        List<InetAddress> mDNSAddressList = new ArrayList<>();
+        List<InetAddress> mPCSFAddressList = new ArrayList<>();
 
-        InetAddress mDNSAddress = InetAddress.getByName(DNS_ADDRESS);
-        InetAddress mPCSFAddress = InetAddress.getByName(PSCF_ADDRESS);
-
-        mInternalAddressList.add(new LinkAddress(InetAddress.getByName(IP_ADDRESS), 3));
-        mDNSAddressList.add(mDNSAddress);
-        mPCSFAddressList.add(mPCSFAddress);
+        if (protocolType == ApnSetting.PROTOCOL_IP) {
+            mInternalAddressList.add(new LinkAddress(InetAddress.getByName(IP_ADDRESS), 3));
+        } else if (protocolType == ApnSetting.PROTOCOL_IPV6) {
+            mInternalAddressList.add(new LinkAddress(InetAddress.getByName(IPV6_ADDRESS), 3));
+        } else if (protocolType == ApnSetting.PROTOCOL_IPV4V6) {
+            mInternalAddressList.add(new LinkAddress(InetAddress.getByName(IP_ADDRESS), 3));
+            mInternalAddressList.add(new LinkAddress(InetAddress.getByName(IPV6_ADDRESS), 3));
+        }
+        mDNSAddressList.add(InetAddress.getByName(DNS_ADDRESS));
+        mPCSFAddressList.add(InetAddress.getByName(PSCF_ADDRESS));
 
         return TunnelLinkProperties.builder()
                 .setInternalAddresses(mInternalAddressList)
@@ -51,5 +61,42 @@ public class TunnelLinkPropertiesTest {
                 .setIfaceName(INTERFACE_NAME)
                 .setSliceInfo(SLICE_INFO)
                 .build();
+    }
+
+    @Test
+    public void testGetProtocolType_emptyInternalAddresses_returnsUnknown() throws Exception {
+        List<InetAddress> mDNSAddressList = new ArrayList<>();
+        List<InetAddress> mPCSFAddressList = new ArrayList<>();
+        mDNSAddressList.add(InetAddress.getByName(DNS_ADDRESS));
+        mPCSFAddressList.add(InetAddress.getByName(PSCF_ADDRESS));
+        TunnelLinkProperties properties =
+                TunnelLinkProperties.builder()
+                        .setInternalAddresses(new ArrayList<>())
+                        .setDnsAddresses(mDNSAddressList)
+                        .setPcscfAddresses(mPCSFAddressList)
+                        .setIfaceName(INTERFACE_NAME)
+                        .setSliceInfo(SLICE_INFO)
+                        .build();
+        assertEquals(ApnSetting.PROTOCOL_UNKNOWN, properties.getProtocolType());
+    }
+
+    @Test
+    public void testGetProtocolType_onlyIpv4InternalAddresses_returnsIp() throws Exception {
+        TunnelLinkProperties properties = createTestTunnelLinkProperties(ApnSetting.PROTOCOL_IP);
+        assertEquals(ApnSetting.PROTOCOL_IP, properties.getProtocolType());
+    }
+
+    @Test
+    public void testGetProtocolType_onlyIpv6InternalAddresses_returnsIpv6() throws Exception {
+        TunnelLinkProperties properties = createTestTunnelLinkProperties(ApnSetting.PROTOCOL_IPV6);
+        assertEquals(ApnSetting.PROTOCOL_IPV6, properties.getProtocolType());
+    }
+
+    @Test
+    public void testGetProtocolType_bothIpv4AndIpv6InternalAddresses_returnsIpv4v6()
+            throws Exception {
+        TunnelLinkProperties properties =
+                createTestTunnelLinkProperties(ApnSetting.PROTOCOL_IPV4V6);
+        assertEquals(ApnSetting.PROTOCOL_IPV4V6, properties.getProtocolType());
     }
 }

@@ -48,6 +48,8 @@ import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 import com.google.android.iwlan.epdg.NaptrDnsResolver.NaptrTarget;
+import com.google.android.iwlan.flags.FeatureFlags;
+import com.google.android.iwlan.flags.FeatureFlagsImpl;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -69,6 +71,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 public class EpdgSelector {
+    private final FeatureFlags mFeatureFlags;
     private static final String TAG = "EpdgSelector";
     private final Context mContext;
     private final int mSlotId;
@@ -76,8 +79,8 @@ public class EpdgSelector {
             new ConcurrentHashMap<>();
     private int mV4PcoId = -1;
     private int mV6PcoId = -1;
-    private byte[] mV4PcoData = null;
-    private byte[] mV6PcoData = null;
+    private List<byte[]> mV4PcoData;
+    private List<byte[]> mV6PcoData;
     @NonNull private final ErrorPolicyManager mErrorPolicyManager;
 
     // The default DNS timeout in the DNS module is set to 5 seconds. To account for IPC overhead,
@@ -87,37 +90,23 @@ public class EpdgSelector {
     private static final long PARALLEL_STATIC_RESOLUTION_TIMEOUT_DURATION_SEC = 6L;
     private static final long PARALLEL_PLMN_RESOLUTION_TIMEOUT_DURATION_SEC = 20L;
     private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.
-    private static final int MAX_EPDG_SELECTION_THREADS = 2; // 1 each for prefetch, tunnel bringup.
     private static final int MAX_DNS_RESOLVER_THREADS = 25; // Do not expect > 25 FQDNs per carrier.
+
+    private static final int PCO_MCC_MNC_LEN = 3; // 3 bytes for MCC and MNC in PCO data.
+    private static final int PCO_IPV4_LEN = 4; // 4 bytes for IPv4 address in PCO data.
+    private static final int PCO_IPV6_LEN = 16; // 16 bytes for IPv6 address in PCO data.
+
     private static final String NO_DOMAIN = "NO_DOMAIN";
 
-    BlockingQueue<Runnable> dnsResolutionQueue =
-            new ArrayBlockingQueue<>(
-                    MAX_DNS_RESOLVER_THREADS
-                            * MAX_EPDG_SELECTION_THREADS
-                            * NUM_EPDG_SELECTION_EXECUTORS);
+    BlockingQueue<Runnable> dnsResolutionQueue;
 
-    Executor mDnsResolutionExecutor =
-            new ThreadPoolExecutor(
-                    0, MAX_DNS_RESOLVER_THREADS, 60L, TimeUnit.SECONDS, dnsResolutionQueue);
+    Executor mDnsResolutionExecutor;
 
-    ExecutorService mEpdgSelectionExecutor =
-            new ThreadPoolExecutor(
-                    0,
-                    MAX_EPDG_SELECTION_THREADS,
-                    60L,
-                    TimeUnit.SECONDS,
-                    new SynchronousQueue<Runnable>());
-    Future mDnsPrefetchFuture;
+    ExecutorService mEpdgSelectionExecutor;
+    Future<?> mDnsPrefetchFuture;
 
-    ExecutorService mSosEpdgSelectionExecutor =
-            new ThreadPoolExecutor(
-                    0,
-                    MAX_EPDG_SELECTION_THREADS,
-                    60L,
-                    TimeUnit.SECONDS,
-                    new SynchronousQueue<Runnable>());
-    Future mSosDnsPrefetchFuture;
+    ExecutorService mSosEpdgSelectionExecutor;
+    Future<?> mSosDnsPrefetchFuture;
 
     final Comparator<InetAddress> inetAddressComparator =
             (ip1, ip2) -> {
@@ -152,19 +141,58 @@ public class EpdgSelector {
     }
 
     @VisibleForTesting
-    EpdgSelector(Context context, int slotId) {
+    EpdgSelector(Context context, int slotId, FeatureFlags featureFlags) {
         mContext = context;
         mSlotId = slotId;
+        mFeatureFlags = featureFlags;
+
+        mV4PcoData = new ArrayList<>();
+        mV6PcoData = new ArrayList<>();
+
+        mV4PcoData = new ArrayList<>();
+        mV6PcoData = new ArrayList<>();
 
         mErrorPolicyManager = ErrorPolicyManager.getInstance(mContext, mSlotId);
+        initializeExecutors();
+    }
+
+    private void initializeExecutors() {
+        int maxEpdgSelectionThreads = mFeatureFlags.preventEpdgSelectionThreadsExhausted() ? 3 : 2;
+
+        dnsResolutionQueue =
+                new ArrayBlockingQueue<>(
+                        MAX_DNS_RESOLVER_THREADS
+                                * maxEpdgSelectionThreads
+                                * NUM_EPDG_SELECTION_EXECUTORS);
+
+        mDnsResolutionExecutor =
+                new ThreadPoolExecutor(
+                        0, MAX_DNS_RESOLVER_THREADS, 60L, TimeUnit.SECONDS, dnsResolutionQueue);
+
+        mEpdgSelectionExecutor =
+                new ThreadPoolExecutor(
+                        0,
+                        maxEpdgSelectionThreads,
+                        60L,
+                        TimeUnit.SECONDS,
+                        new SynchronousQueue<>());
+
+        mSosEpdgSelectionExecutor =
+                new ThreadPoolExecutor(
+                        0,
+                        maxEpdgSelectionThreads,
+                        60L,
+                        TimeUnit.SECONDS,
+                        new SynchronousQueue<>());
     }
 
     public static EpdgSelector getSelectorInstance(Context context, int slotId) {
-        mSelectorInstances.computeIfAbsent(slotId, k -> new EpdgSelector(context, slotId));
+        mSelectorInstances.computeIfAbsent(
+                slotId, k -> new EpdgSelector(context, slotId, new FeatureFlagsImpl()));
         return mSelectorInstances.get(slotId);
     }
 
-    public boolean setPcoData(int pcoId, byte[] pcoData) {
+    public boolean setPcoData(int pcoId, @NonNull byte[] pcoData) {
         Log.d(
                 TAG,
                 "onReceive PcoId:"
@@ -188,11 +216,11 @@ public class EpdgSelector {
 
         if (pcoId == PCO_ID_IPV4) {
             mV4PcoId = pcoId;
-            mV4PcoData = pcoData;
+            mV4PcoData.add(pcoData);
             return true;
         } else if (pcoId == PCO_ID_IPV6) {
             mV6PcoId = pcoId;
-            mV6PcoData = pcoData;
+            mV6PcoData.add(pcoData);
             return true;
         }
 
@@ -203,8 +231,8 @@ public class EpdgSelector {
         Log.d(TAG, "Clear PCO data");
         mV4PcoId = -1;
         mV6PcoId = -1;
-        mV4PcoData = null;
-        mV6PcoData = null;
+        mV4PcoData.clear();
+        mV6PcoData.clear();
     }
 
     private CompletableFuture<Map.Entry<String, List<InetAddress>>> submitDnsResolverQuery(
@@ -284,12 +312,12 @@ public class EpdgSelector {
 
     @VisibleForTesting
     protected boolean hasIpv4Address(Network network) {
-        return IwlanHelper.hasIpv4Address(IwlanHelper.getAllAddressesForNetwork(network, mContext));
+        return IwlanHelper.hasIpv4Address(IwlanHelper.getAllAddressesForNetwork(mContext, network));
     }
 
     @VisibleForTesting
     protected boolean hasIpv6Address(Network network) {
-        return IwlanHelper.hasIpv6Address(IwlanHelper.getAllAddressesForNetwork(network, mContext));
+        return IwlanHelper.hasIpv6Address(IwlanHelper.getAllAddressesForNetwork(mContext, network));
     }
 
     private void printParallelDnsResult(Map<String, List<InetAddress>> domainNameToIpAddresses) {
@@ -857,7 +885,7 @@ public class EpdgSelector {
         }
     }
 
-    private void resolutionMethodPco(int filter, List<InetAddress> validIpList) {
+    private void resolutionMethodPco(int filter, @NonNull List<InetAddress> validIpList) {
         Log.d(TAG, "PCO Method");
 
         int PCO_ID_IPV6 =
@@ -895,17 +923,34 @@ public class EpdgSelector {
         }
     }
 
-    private void getInetAddressWithPcoData(byte[] pcoData, List<InetAddress> validIpList) {
-        InetAddress ipAddress;
-        if (pcoData != null && pcoData.length > 0) {
-            try {
-                ipAddress = InetAddress.getByAddress(pcoData);
-                validIpList.add(ipAddress);
-            } catch (Exception e) {
-                Log.e(TAG, "Exception when querying IP address : " + e);
+    private void getInetAddressWithPcoData(
+            List<byte[]> pcoData, @NonNull List<InetAddress> validIpList) {
+        for (byte[] data : pcoData) {
+            int ipAddressLen = 0;
+            /*
+             * The PCO container contents starts with the operator MCC and MNC of size 3 bytes
+             * combined followed by one IPv6 or IPv4 address.
+             * IPv6 address is encoded as a 128-bit address and
+             * IPv4 address is encoded as 32-bit address.
+             */
+            if (data.length > PCO_MCC_MNC_LEN) {
+                ipAddressLen = data.length - PCO_MCC_MNC_LEN;
             }
-        } else {
-            Log.d(TAG, "Empty PCO data");
+            if ((ipAddressLen == PCO_IPV4_LEN) || (ipAddressLen == PCO_IPV6_LEN)) {
+                byte[] ipAddressData = Arrays.copyOfRange(data, PCO_MCC_MNC_LEN, data.length);
+                try {
+                    validIpList.add(InetAddress.getByAddress(ipAddressData));
+                } catch (UnknownHostException e) {
+                    Log.e(
+                            TAG,
+                            "Exception when querying IP address("
+                                    + Arrays.toString(ipAddressData)
+                                    + "): "
+                                    + e);
+                }
+            } else {
+                Log.e(TAG, "Invalid PCO data:" + Arrays.toString(data));
+            }
         }
     }
 
@@ -1113,8 +1158,9 @@ public class EpdgSelector {
         }
     }
 
-    // Cancels duplicate prefetches a prefetch is already running. Always schedules tunnel bringup.
-    private void trySubmitEpdgSelectionExecutor(
+    // Cancels duplicate prefetches if a prefetch is already running. Always schedules tunnel
+    // bringup.
+    protected void trySubmitEpdgSelectionExecutor(
             Runnable runnable, boolean isPrefetch, boolean isEmergency) {
         if (isEmergency) {
             if (isPrefetch) {

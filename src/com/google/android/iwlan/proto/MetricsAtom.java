@@ -47,6 +47,7 @@ public class MetricsAtom {
     private int mWifiSignalValue;
     private String mIwlanErrorWrappedClassname;
     private String mIwlanErrorWrappedStackFirstFrame;
+    private int mErrorCountOfSameCause;
 
     public void setMessageId(int messageId) {
         this.mMessageId = messageId;
@@ -150,6 +151,14 @@ public class MetricsAtom {
         return mIwlanErrorWrappedStackFirstFrame;
     }
 
+    public void setErrorCountOfSameCause(int errorCount) {
+        mErrorCountOfSameCause = errorCount;
+    }
+
+    public int getErrorCountOfSameCause() {
+        return mErrorCountOfSameCause;
+    }
+
     public void sendMetricsData() {
         if (mMessageId == IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED) {
             Log.d(TAG, "Send metrics data IWLAN_SETUP_DATA_CALL_RESULT_REPORTED");
@@ -172,7 +181,8 @@ public class MetricsAtom {
                     mHandoverFailureMode,
                     mRetryDurationMillis,
                     mIwlanErrorWrappedClassname,
-                    mIwlanErrorWrappedStackFirstFrame);
+                    mIwlanErrorWrappedStackFirstFrame,
+                    mErrorCountOfSameCause);
             return;
         } else if (mMessageId == IwlanStatsLog.IWLAN_PDN_DISCONNECTED_REASON_REPORTED) {
             Log.d(TAG, "Send metrics data IWLAN_PDN_DISCONNECTED_REASON_REPORTED");

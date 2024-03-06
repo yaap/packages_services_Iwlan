@@ -19,6 +19,8 @@ package com.google.android.iwlan;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 import android.content.Context;
@@ -115,6 +117,14 @@ public class IwlanBroadcastReceiverTest {
     }
 
     @Test
+    public void testOnReceiveNoPcoData() throws Exception {
+        onReceiveMethodWithArgs(ApnSetting.TYPE_IMS, testPcoIdIPv6, null);
+
+        // Verify the called times of setPcoData method
+        verify(mMockEpdgSelector, times(0)).setPcoData(anyInt(), any(byte[].class));
+    }
+
+    @Test
     public void testOnReceiveIPv6Pass() throws Exception {
         onReceiveMethodWithArgs(ApnSetting.TYPE_IMS, testPcoIdIPv6);
 
@@ -168,6 +178,18 @@ public class IwlanBroadcastReceiverTest {
         verify(mMockIwlanEventListener).onBroadcastReceived(intent);
     }
     private void onReceiveMethodWithArgs(int apnType, int pcoId) {
+        // Create intent object
+        final Intent mIntent = new Intent(ACTION_CARRIER_SIGNAL_PCO_VALUE);
+        mIntent.putExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, testSubId);
+        mIntent.putExtra(EXTRA_APN_TYPE_INT_KEY, apnType);
+        mIntent.putExtra(EXTRA_PCO_ID_KEY, pcoId);
+        mIntent.putExtra(EXTRA_PCO_VALUE_KEY, pcoData);
+
+        // Trigger onReceive method
+        mBroadcastReceiver.onReceive(mMockContext, mIntent);
+    }
+
+    private void onReceiveMethodWithArgs(int apnType, int pcoId, byte[] pcoData) {
         // Create intent object
         final Intent mIntent = new Intent(ACTION_CARRIER_SIGNAL_PCO_VALUE);
         mIntent.putExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, testSubId);

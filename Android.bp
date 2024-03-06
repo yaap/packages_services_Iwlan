@@ -24,6 +24,7 @@ android_app {
     static_libs: [
         "android-support-annotations",
         "net-utils-dnspacket-common",
+        "iwlan_telephony_flags_lib",
     ],
 
     libs: [
@@ -87,6 +88,9 @@ android_test {
         "mockito-target-inline-minus-junit4",
         "mockito-target-extended-minus-junit4",
         "net-utils-dnspacket-common",
+        "iwlan_telephony_flags_lib",
+        "platform-test-annotations",
+        "flag-junit",
     ],
 
     jni_libs: [

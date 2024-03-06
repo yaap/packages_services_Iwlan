@@ -28,7 +28,6 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
-import android.telephony.CarrierConfigManager;
 import android.telephony.CellInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyCallback;
@@ -51,7 +50,7 @@ public class IwlanEventListener {
 
     public static final int UNKNOWN_EVENT = -1;
 
-    /** On receiving {@link CarrierConfigManager#ACTION_CARRIER_CONFIG_CHANGED} intent. */
+    /** On {@link IwlanCarrierConfigChangeListener#onCarrierConfigChanged} is called. */
     public static final int CARRIER_CONFIG_CHANGED_EVENT = 1;
 
     /** Wifi turned off or disabled. */
@@ -78,7 +77,7 @@ public class IwlanEventListener {
     public static final int CROSS_SIM_CALLING_DISABLE_EVENT = 9;
 
     /**
-     * On receiving {@link CarrierConfigManager#ACTION_CARRIER_CONFIG_CHANGED} intent with
+     * On {@link IwlanCarrierConfigChangeListener#onCarrierConfigChanged} is called with
      * UNKNOWN_CARRIER_ID.
      */
     public static final int CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT = 10;
@@ -247,27 +246,13 @@ public class IwlanEventListener {
 
     /**
      * Report a Broadcast received. Mainly used by IwlanBroadcastReceiver to report the following
-     * broadcasts CARRIER_CONFIG_CHANGED
+     * broadcasts: ACTION_AIRPLANE_MODE_CHANGED, WIFI_STATE_CHANGED_ACTION
      *
      * @param intent intent
      */
     public static synchronized void onBroadcastReceived(Intent intent) {
         int event = UNKNOWN_EVENT;
         switch (intent.getAction()) {
-            case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
-                int slotId =
-                        intent.getIntExtra(
-                                CarrierConfigManager.EXTRA_SLOT_INDEX,
-                                SubscriptionManager.INVALID_SIM_SLOT_INDEX);
-                int carrierId =
-                        intent.getIntExtra(
-                                TelephonyManager.EXTRA_CARRIER_ID,
-                                TelephonyManager.UNKNOWN_CARRIER_ID);
-                Context context = IwlanDataService.getContext();
-                if (slotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX && context != null) {
-                    getInstance(context, slotId).onCarrierConfigChanged(carrierId);
-                }
-                break;
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
                 Boolean isAirplaneModeOn = intent.getBooleanExtra("state", false);
                 if (sIsAirplaneModeOn != null && sIsAirplaneModeOn.equals(isAirplaneModeOn)) {
@@ -333,6 +318,19 @@ public class IwlanEventListener {
     }
 
     /**
+     * Report Carrier Config changed. Mainly used by IwlanCarrierConfigChangeListener.
+     *
+     * @param context context
+     * @param slotId slot id which carrier config is changed
+     * @param subId sub id which carrier config is changed
+     * @param carrierId carrier id
+     */
+    public static synchronized void onCarrierConfigChanged(
+            Context context, int slotId, int subId, int carrierId) {
+        getInstance(context, slotId).onCarrierConfigChanged(subId, carrierId);
+    }
+
+    /**
      * Returns the Event id of the String. String that matches the name of the event
      *
      * @param event String form of the event.
@@ -385,9 +383,8 @@ public class IwlanEventListener {
         sIsAirplaneModeOn = null;
     }
 
-    private void onCarrierConfigChanged(int carrierId) {
+    private void onCarrierConfigChanged(int subId, int carrierId) {
         Log.d(SUB_TAG, "onCarrierConfigChanged");
-        int subId = IwlanHelper.getSubId(mContext, mSlotId);
         if (subId != mSubId) {
             unregisterContentObserver();
             mSubId = subId;

@@ -16,7 +16,7 @@
 
 package com.google.android.iwlan.epdg;
 
-import android.net.Network;
+import com.android.internal.annotations.VisibleForTesting;
 
 import com.google.auto.value.AutoValue;
 
@@ -42,6 +42,11 @@ public abstract class TunnelSetupRequest {
     abstract boolean isEmergency();
 
     abstract boolean requestPcscf();
+
+    @VisibleForTesting
+    public int getPduSessionId() {
+        return pduSessionId();
+    }
 
     public static Builder builder() {
         return new AutoValue_TunnelSetupRequest.Builder()

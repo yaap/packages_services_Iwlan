@@ -1,4 +1,5 @@
 package: "com.google.android.iwlan.flags"
+container: "system"
 
 flag {
     name: "prevent_epdg_selection_threads_exhausted"
@@ -23,4 +24,22 @@ flag {
     namespace: "iwlan_telephony"
     description: "Reorder IKE and Child SA security transforms with high secured as prioritized"
     bug: "306323917"
+}
+flag {
+    name: "epdg_selection_exclude_failed_ip_address"
+    namespace: "iwlan_telephony"
+    description: "Exclude the failed ip address in epdg selection until tunnel establish successfully or all ip address candidates are failed"
+    bug: "300026897"
+}
+flag {
+    name: "update_n1_mode_on_ui_change"
+    namespace: "iwlan_telephony"
+    description: "Enables a 5G SA capable UE to re-establish PDN connections over Wi-Fi with/without N1_MODE_CAPABILITY, when the user enables/disables 5G via UI/UX."
+    bug: "273384888"
+}
+flag {
+    name: "distinct_epdg_selection_for_emergency_sessions"
+    namespace: "iwlan_telephony"
+    description: "Allow additional ePDG selections for emergency PDN"
+    bug: "244670857"
 }

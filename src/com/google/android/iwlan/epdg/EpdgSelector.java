@@ -68,6 +68,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class EpdgSelector {
@@ -83,6 +84,10 @@ public class EpdgSelector {
     private List<byte[]> mV6PcoData;
     @NonNull private final ErrorPolicyManager mErrorPolicyManager;
 
+    // Temporary excluded IP addresses due to recent failures. Cleared after tunnel opened
+    // successfully or all resolved IP addresses are tried and excluded.
+    private final Set<InetAddress> mTemporaryExcludedAddresses;
+
     // The default DNS timeout in the DNS module is set to 5 seconds. To account for IPC overhead,
     // IWLAN applies an internal timeout of 6 seconds, slightly longer than the default timeout
     private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 6L;
@@ -97,6 +102,7 @@ public class EpdgSelector {
     private static final int PCO_IPV6_LEN = 16; // 16 bytes for IPv6 address in PCO data.
 
     private static final String NO_DOMAIN = "NO_DOMAIN";
+    private static final Pattern PLMN_PATTERN = Pattern.compile("\\d{5,6}");
 
     BlockingQueue<Runnable> dnsResolutionQueue;
 
@@ -153,6 +159,8 @@ public class EpdgSelector {
         mV6PcoData = new ArrayList<>();
 
         mErrorPolicyManager = ErrorPolicyManager.getInstance(mContext, mSlotId);
+
+        mTemporaryExcludedAddresses = new HashSet<>();
         initializeExecutors();
     }
 
@@ -233,6 +241,45 @@ public class EpdgSelector {
         mV6PcoId = -1;
         mV4PcoData.clear();
         mV6PcoData.clear();
+    }
+
+    /**
+     * Notify {@link EpdgSelector} that ePDG is connected successfully. The excluded ip addresses
+     * will be cleared so that next ePDG selection will retry all ip addresses.
+     */
+    void onEpdgConnectedSuccessfully() {
+        clearExcludedIpAddresses();
+    }
+
+    /**
+     * Notify {@link EpdgSelector} that failed to connect to an ePDG. EpdgSelector will add the
+     * {@code ipAddress} into excluded list and will not retry until any ePDG connected successfully
+     * or all ip addresses candidates are tried.
+     *
+     * @param ipAddress the ePDG ip address that failed to connect
+     */
+    void onEpdgConnectionFailed(InetAddress ipAddress) {
+        excludeIpAddress(ipAddress);
+    }
+
+    private void excludeIpAddress(InetAddress ipAddress) {
+        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
+            return;
+        }
+        Log.d(TAG, "Added " + ipAddress + " into temporary excluded addresses");
+        mTemporaryExcludedAddresses.add(ipAddress);
+    }
+
+    private void clearExcludedIpAddresses() {
+        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
+            return;
+        }
+        Log.d(TAG, "Cleared temporary excluded addresses");
+        mTemporaryExcludedAddresses.clear();
+    }
+
+    private boolean isInExcludedIpAddresses(InetAddress ipAddress) {
+        return mTemporaryExcludedAddresses.contains(ipAddress);
     }
 
     private CompletableFuture<Map.Entry<String, List<InetAddress>>> submitDnsResolverQuery(
@@ -326,6 +373,36 @@ public class EpdgSelector {
             Log.d(TAG, domain + ": " + domainNameToIpAddresses.get(domain));
         }
     }
+
+    private List<InetAddress> filterExcludedAddresses(List<InetAddress> ipList) {
+        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
+            return ipList;
+        }
+        if (mTemporaryExcludedAddresses.containsAll(ipList)) {
+            Log.d(
+                    TAG,
+                    "All valid ip are tried and excluded, clear all"
+                            + " excluded address and retry entire list again");
+            clearExcludedIpAddresses();
+        }
+
+        var filteredIpList =
+                ipList.stream().filter(ipAddress -> !isInExcludedIpAddresses(ipAddress)).toList();
+
+        int excludedIpNum = filteredIpList.size() - ipList.size();
+        if (excludedIpNum > 0) {
+            Log.d(
+                    TAG,
+                    "Excluded "
+                            + excludedIpNum
+                            + " out of "
+                            + ipList.size()
+                            + " addresses from the list due to recent failures");
+        }
+
+        return filteredIpList;
+    }
+
     /**
      * Returns a list of unique IP addresses corresponding to the given domain names, in the same
      * order of the input. Runs DNS resolution across parallel threads.
@@ -562,19 +639,19 @@ public class EpdgSelector {
         return resultIpList;
     }
 
-    private void prioritizeIp(@NonNull List<InetAddress> validIpList, @EpdgAddressOrder int order) {
-        switch (order) {
-            case IPV4_PREFERRED:
-                validIpList.sort(inetAddressComparator);
-                break;
-            case IPV6_PREFERRED:
-                validIpList.sort(inetAddressComparator.reversed());
-                break;
-            case SYSTEM_PREFERRED:
-                break;
-            default:
+    private List<InetAddress> prioritizeIp(
+            @NonNull List<InetAddress> validIpList, @EpdgAddressOrder int order) {
+        return switch (order) {
+            case IPV4_PREFERRED -> validIpList.stream().sorted(inetAddressComparator).toList();
+            case IPV6_PREFERRED -> validIpList.stream()
+                    .sorted(inetAddressComparator.reversed())
+                    .toList();
+            case SYSTEM_PREFERRED -> validIpList;
+            default -> {
                 Log.w(TAG, "Invalid EpdgAddressOrder : " + order);
-        }
+                yield validIpList;
+            }
+        };
     }
 
     private String[] splitMccMnc(String plmn) {
@@ -1290,9 +1367,10 @@ public class EpdgSelector {
                         }
 
                         if (!validIpList.isEmpty()) {
-                            prioritizeIp(validIpList, order);
-                            selectorCallback.onServerListChanged(
-                                    transactionId, removeDuplicateIp(validIpList));
+                            validIpList = removeDuplicateIp(validIpList);
+                            validIpList = filterExcludedAddresses(validIpList);
+                            validIpList = prioritizeIp(validIpList, order);
+                            selectorCallback.onServerListChanged(transactionId, validIpList);
                         } else {
                             selectorCallback.onError(
                                     transactionId,
@@ -1315,6 +1393,6 @@ public class EpdgSelector {
      * @return True if the PLMN identifier is valid, false otherwise.
      */
     private static boolean isValidPlmn(String plmn) {
-        return plmn != null && plmn.matches("\\d{5,6}");
+        return plmn != null && PLMN_PATTERN.matcher(plmn).matches();
     }
 }

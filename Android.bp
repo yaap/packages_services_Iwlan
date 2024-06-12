@@ -5,8 +5,8 @@ package {
 genrule {
     name: "statslog-Iwlan-java-gen",
     tools: ["stats-log-api-gen"],
-    cmd: "$(location stats-log-api-gen) --java $(out) --module iwlan --javaPackage com.google.android.iwlan"
-        + " --javaClass IwlanStatsLog",
+    cmd: "$(location stats-log-api-gen) --java $(out) --module iwlan --javaPackage com.google.android.iwlan" +
+        " --javaClass IwlanStatsLog",
     out: ["com/google/android/iwlan/IwlanStatsLog.java"],
 }
 
@@ -29,11 +29,12 @@ android_app {
 
     libs: [
         "android.net.ipsec.ike.stubs.system",
+        "androidx.annotation_annotation",
         "auto_value_annotations",
         "framework-annotations-lib",
         "framework-connectivity",
         "framework-wifi",
-        "modules-utils-handlerexecutor"
+        "modules-utils-handlerexecutor",
     ],
 
     plugins: ["auto_value_plugin"],

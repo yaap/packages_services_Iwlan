@@ -1372,6 +1372,7 @@ public class ErrorPolicyManager {
                 case IwlanEventListener.APM_DISABLE_EVENT:
                 case IwlanEventListener.WIFI_DISABLE_EVENT:
                 case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
+                case IwlanEventListener.WIFI_AP_CHANGED_EVENT:
                     unthrottleLastErrorOnEvent(msg.what);
                     break;
                 default:

@@ -20,6 +20,17 @@ import android.net.ipsec.ike.ChildSaProposal;
 import android.util.Pair;
 
 public class EpdgChildSaProposal extends EpdgSaProposal {
+    private boolean mAddChildSessionRekeyKePayload = false;
+
+    /**
+     * Add DH Groups to child session during rekey with KE payload. IKE library doesn't add KE
+     * payload if dh groups are not set in child session params. Use the same groups as that of IKE
+     * session.
+     */
+    public void enableAddChildSessionRekeyKePayload() {
+        mAddChildSessionRekeyKePayload = true;
+    }
+
     /**
      * Builds {@link ChildSaProposal} of carrier proposed encryption algorithms (non-AEAD) cipher
      * suit.
@@ -49,9 +60,11 @@ public class EpdgChildSaProposal extends EpdgSaProposal {
     private ChildSaProposal buildProposal(boolean isAead, boolean isProposed) {
         ChildSaProposal.Builder saProposalBuilder = new ChildSaProposal.Builder();
 
-        int[] dhGroups = getDhGroups();
-        for (int dhGroup : dhGroups) {
-            saProposalBuilder.addDhGroup(dhGroup);
+        if (mAddChildSessionRekeyKePayload) {
+            int[] dhGroups = getDhGroups();
+            for (int dhGroup : dhGroups) {
+                saProposalBuilder.addDhGroup(dhGroup);
+            }
         }
 
         Pair<Integer, Integer>[] encrAlgos;

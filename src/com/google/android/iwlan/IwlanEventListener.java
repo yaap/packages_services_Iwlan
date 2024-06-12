@@ -39,6 +39,9 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import com.google.android.iwlan.flags.FeatureFlags;
+import com.google.android.iwlan.flags.FeatureFlagsImpl;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanEventListener {
 
+    private final FeatureFlags mFeatureFlags;
     public static final int UNKNOWN_EVENT = -1;
 
     /** On {@link IwlanCarrierConfigChangeListener#onCarrierConfigChanged} is called. */
@@ -88,6 +92,9 @@ public class IwlanEventListener {
     /** On Call state changed */
     public static final int CALL_STATE_CHANGED_EVENT = 12;
 
+    /** On Preferred Network Type changed */
+    public static final int PREFERRED_NETWORK_TYPE_CHANGED_EVENT = 13;
+
     /* Events used and handled by IwlanDataService internally */
     public static final int DATA_SERVICE_INTERNAL_EVENT_BASE = 100;
 
@@ -106,7 +113,8 @@ public class IwlanEventListener {
         CROSS_SIM_CALLING_DISABLE_EVENT,
         CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT,
         CELLINFO_CHANGED_EVENT,
-        CALL_STATE_CHANGED_EVENT
+        CALL_STATE_CHANGED_EVENT,
+        PREFERRED_NETWORK_TYPE_CHANGED_EVENT,
     })
     @interface IwlanEventType {}
 
@@ -148,7 +156,9 @@ public class IwlanEventListener {
     }
 
     private class RadioInfoTelephonyCallback extends TelephonyCallback
-            implements TelephonyCallback.CellInfoListener, TelephonyCallback.CallStateListener {
+            implements TelephonyCallback.CellInfoListener,
+                    TelephonyCallback.CallStateListener,
+                    TelephonyCallback.AllowedNetworkTypesListener {
         @Override
         public void onCellInfoChanged(List<CellInfo> arrayCi) {
             Log.d(LOG_TAG, "Cellinfo changed");
@@ -172,13 +182,28 @@ public class IwlanEventListener {
                 instance.updateHandlers(CALL_STATE_CHANGED_EVENT, state);
             }
         }
+
+        @Override
+        public void onAllowedNetworkTypesChanged(
+                @TelephonyManager.AllowedNetworkTypesReason int reason,
+                @TelephonyManager.NetworkTypeBitMask long allowedNetworkType) {
+            if (reason != TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER) {
+                return;
+            }
+
+            IwlanEventListener instance = mInstances.get(mSlotId);
+            if (instance != null) {
+                instance.updateHandlers(PREFERRED_NETWORK_TYPE_CHANGED_EVENT, allowedNetworkType);
+            }
+        }
     }
 
     /**
      * Returns IwlanEventListener instance
      */
     public static IwlanEventListener getInstance(@NonNull Context context, int slotId) {
-        return mInstances.computeIfAbsent(slotId, k -> new IwlanEventListener(context, slotId));
+        return mInstances.computeIfAbsent(
+                slotId, k -> new IwlanEventListener(context, slotId, new FeatureFlagsImpl()));
     }
 
     @VisibleForTesting
@@ -371,16 +396,20 @@ public class IwlanEventListener {
             case "CELLINFO_CHANGED_EVENT":
                 ret = CELLINFO_CHANGED_EVENT;
                 break;
+            case "PREFERRED_NETWORK_TYPE_CHANGED_EVENT":
+                ret = PREFERRED_NETWORK_TYPE_CHANGED_EVENT;
+                break;
         }
         return ret;
     }
 
-    private IwlanEventListener(Context context, int slotId) {
+    IwlanEventListener(Context context, int slotId, FeatureFlags featureFlags) {
         mContext = context;
         mSlotId = slotId;
         mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         SUB_TAG = IwlanEventListener.class.getSimpleName() + "[" + slotId + "]";
         sIsAirplaneModeOn = null;
+        mFeatureFlags = featureFlags;
     }
 
     private void onCarrierConfigChanged(int subId, int carrierId) {
@@ -536,6 +565,16 @@ public class IwlanEventListener {
             Log.d(SUB_TAG, "Updating handlers for the event: " + event);
             for (Handler handler : eventHandlers.get(event)) {
                 handler.obtainMessage(event, mSlotId, state).sendToTarget();
+            }
+        }
+    }
+
+    private synchronized void updateHandlers(int event, long allowedNetworkType) {
+        if (eventHandlers.contains(event)) {
+            Log.d(SUB_TAG, "Updating handlers for the event: " + event);
+            for (Handler handler : eventHandlers.get(event)) {
+                handler.obtainMessage(event, mSlotId, 0 /* unused */, allowedNetworkType)
+                        .sendToTarget();
             }
         }
     }

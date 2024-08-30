@@ -193,6 +193,8 @@ public class EpdgTunnelManager {
     private final EpdgSelector mEpdgSelector;
 
     private final Map<String, TunnelConfig> mApnNameToTunnelConfig = new ConcurrentHashMap<>();
+    private final Map<String, IpsecTransformData> mApnNameToIpsecTransform =
+            new ConcurrentHashMap<>();
     private final Map<String, Integer> mApnNameToCurrentToken = new ConcurrentHashMap<>();
 
     private final String TAG;
@@ -502,6 +504,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onOpened(IkeSessionConfiguration sessionConfiguration) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(TAG, "Ike session opened for apn: " + mApnName + " with token: " + mToken);
             mHandler.obtainMessage(
                             EVENT_IKE_SESSION_OPENED,
@@ -511,6 +517,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onClosed() {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(TAG, "Ike session closed for apn: " + mApnName + " with token: " + mToken);
             mHandler.obtainMessage(
                             EVENT_IKE_SESSION_CLOSED,
@@ -541,6 +551,10 @@ public class EpdgTunnelManager {
         @Override
         public void onIkeSessionConnectionInfoChanged(
                 IkeSessionConnectionInfo ikeSessionConnectionInfo) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Network network = ikeSessionConnectionInfo.getNetwork();
             Log.d(
                     TAG,
@@ -559,6 +573,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onLivenessStatusChanged(int status) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(
                     TAG,
                     "Ike liveness status changed for apn: " + mApnName + " with status: " + status);
@@ -599,6 +617,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onIke3gppDataReceived(List<Ike3gppData> payloads) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             mHandler.obtainMessage(
                             EVENT_IKE_3GPP_DATA_RECEIVED,
                             new Ike3gppDataReceived(mApnName, mToken, payloads))
@@ -619,6 +641,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onOpened(ChildSessionConfiguration sessionConfiguration) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(TAG, "onOpened child session for apn: " + mApnName + " with token: " + mToken);
             mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_OPENED,
@@ -632,6 +658,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onClosed() {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(TAG, "onClosed child session for apn: " + mApnName + " with token: " + mToken);
             mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_CLOSED,
@@ -647,6 +677,10 @@ public class EpdgTunnelManager {
         @Override
         public void onIpSecTransformsMigrated(
                 IpSecTransform inIpSecTransform, IpSecTransform outIpSecTransform) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             // migration is similar to addition
             Log.d(TAG, "Transforms migrated for apn: " + mApnName + " with token: " + mToken);
             mHandler.obtainMessage(
@@ -666,6 +700,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onIpSecTransformCreated(IpSecTransform ipSecTransform, int direction) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(
                     TAG,
                     "Transform created, direction: "
@@ -682,6 +720,10 @@ public class EpdgTunnelManager {
 
         @Override
         public void onIpSecTransformDeleted(IpSecTransform ipSecTransform, int direction) {
+            if (mHandler == null) {
+                Log.d(TAG, "Handler unavailable");
+                return;
+            }
             Log.d(
                     TAG,
                     "Transform deleted, direction: "
@@ -820,6 +862,33 @@ public class EpdgTunnelManager {
     public static void resetAllInstances() {
         mTunnelManagerInstances.clear();
         sLastUnderlyingNetworkValidationMs = 0;
+    }
+
+    private void reset() {
+        if (mHandler != null) {
+            mHandler.getLooper().quit();
+            mHandler = null;
+        }
+
+        mApnNameToTunnelConfig.forEach(
+                (apn, config) -> {
+                    config.getIkeSession().kill();
+                    IpSecManager.IpSecTunnelInterface iface = config.getIface();
+                    if (iface != null) {
+                        iface.close();
+                    }
+                    IpsecTransformData transformData = mApnNameToIpsecTransform.get(apn);
+                    if (transformData != null) {
+                        transformData.getTransform().close();
+                        mApnNameToIpsecTransform.remove(apn);
+                    }
+                });
+
+        mApnNameToTunnelConfig.clear();
+    }
+
+    public static void deinit() {
+        mTunnelManagerInstances.values().forEach(EpdgTunnelManager::reset);
     }
 
     public interface TunnelCallback {
@@ -2240,6 +2309,7 @@ public class EpdgTunnelManager {
                         closeIkeSession(
                                 apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
                     }
+                    mApnNameToIpsecTransform.put(apnName, transformData);
                     if (tunnelConfig.getIkeSessionState()
                             == IkeSessionState.IKE_MOBILITY_IN_PROGRESS) {
                         tunnelConfig.setIkeSessionState(IkeSessionState.CHILD_SESSION_OPENED);
@@ -2250,6 +2320,7 @@ public class EpdgTunnelManager {
                     transformData = (IpsecTransformData) msg.obj;
                     IpSecTransform transform = transformData.getTransform();
                     transform.close();
+                    mApnNameToIpsecTransform.remove(transformData.getApnName());
                     break;
 
                 case EVENT_CHILD_SESSION_CLOSED:

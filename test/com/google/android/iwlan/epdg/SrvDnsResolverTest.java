@@ -18,7 +18,7 @@ package com.google.android.iwlan.epdg;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
-import static com.google.android.iwlan.epdg.SrvDnsResolver.*;
+import static com.google.android.iwlan.epdg.SrvDnsResolver.QUERY_TYPE_SRV;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -170,23 +170,23 @@ public class SrvDnsResolverTest {
         SrvDnsResolver.query(mMockNetwork, TEST_QUERY, Runnable::run, null, mSrvDnsCb);
         final List<SrvRecordInetAddress> records = mSrvDnsResult.join();
 
-        assertEquals(records.size(), 4);
+        assertEquals(4, records.size());
 
         SrvRecordInetAddress record = records.get(0);
-        assertEquals(record.mInetAddress.getHostAddress(), "142.251.2.109");
-        assertEquals(record.mPort, 993);
+        assertEquals("142.251.2.109", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
 
         record = records.get(1);
-        assertEquals(record.mInetAddress.getHostAddress(), "142.251.2.108");
-        assertEquals(record.mPort, 993);
+        assertEquals("142.251.2.108", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
 
         record = records.get(2);
-        assertEquals(record.mInetAddress.getHostAddress(), "2607:f8b0:4023:c03::6d");
-        assertEquals(record.mPort, 993);
+        assertEquals("2607:f8b0:4023:c03::6d", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
 
         record = records.get(3);
-        assertEquals(record.mInetAddress.getHostAddress(), "2607:f8b0:4023:c03::6c");
-        assertEquals(record.mPort, 993);
+        assertEquals("2607:f8b0:4023:c03::6c", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
     }
 
     // Tests the case where the DNS server's Type SRV response includes only the SRV record, and the
@@ -232,23 +232,23 @@ public class SrvDnsResolverTest {
 
         SrvDnsResolver.query(mMockNetwork, TEST_QUERY, Runnable::run, null, mSrvDnsCb);
         List<SrvRecordInetAddress> records = mSrvDnsResult.join();
-        assertEquals(records.size(), 4);
+        assertEquals(4, records.size());
 
         SrvRecordInetAddress record = records.get(0);
-        assertEquals(record.mInetAddress.getHostAddress(), "142.250.101.108");
-        assertEquals(record.mPort, 993);
+        assertEquals("142.250.101.108", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
 
         record = records.get(1);
-        assertEquals(record.mInetAddress.getHostAddress(), "142.250.101.109");
-        assertEquals(record.mPort, 993);
+        assertEquals("142.250.101.109", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
 
         record = records.get(2);
-        assertEquals(record.mInetAddress.getHostAddress(), "2607:f8b0:4023:c03::6d");
-        assertEquals(record.mPort, 993);
+        assertEquals("2607:f8b0:4023:c03::6d", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
 
         record = records.get(3);
-        assertEquals(record.mInetAddress.getHostAddress(), "2607:f8b0:4023:c03::6c");
-        assertEquals(record.mPort, 993);
+        assertEquals("2607:f8b0:4023:c03::6c", record.mInetAddress.getHostAddress());
+        assertEquals(993, record.mPort);
     }
 
     // Tests the case where the DNS server response contains a TYPE_A record instead of a
@@ -284,6 +284,6 @@ public class SrvDnsResolverTest {
             Log.d(TAG, e.getMessage() + e.getCause());
         }
         assertNotNull("Exception wasn't thrown!", exception);
-        assertEquals(exception.code, DnsResolver.ERROR_PARSE);
+        assertEquals(DnsResolver.ERROR_PARSE, exception.code);
     }
 }

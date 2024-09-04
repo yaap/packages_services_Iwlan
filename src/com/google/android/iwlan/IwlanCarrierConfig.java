@@ -41,7 +41,7 @@ public class IwlanCarrierConfig {
      * for the default value.
      */
     public static final String KEY_N1_MODE_EXCLUSION_FOR_EMERGENCY_SESSION_BOOL =
-            PREFIX + "n1_mode_exclusion_for_emergency_session";
+            PREFIX + "n1_mode_exclusion_for_emergency_session_bool";
 
     /**
      * Key to decide whether N1 mode shall be enabled or disabled depending on 5G enabling status
@@ -72,6 +72,85 @@ public class IwlanCarrierConfig {
             PREFIX + "ike_sa_transforms_reorder_bool";
 
     /**
+     * IWLAN error policy configs that determine the behavior when error happens during ePDG tunnel
+     * setup. Refer to {@link #DEFAULT_ERROR_POLICY_CONFIG_STRING} for the default value.
+     *
+     * <p>The Error Config is defined as an Array of APNs identified by "ApnName". Other than Apn
+     * names this can also have "*" value which represents that this can be used as a generic
+     * fallback when no other policy matches.
+     *
+     * <p>Each APN associated with "ApnName" has an array of "ErrorTypes". Where each element in
+     * "ErrorTypes" array defines the config for the Error. The element in "ErrorTypes" array has
+     * the following items:
+     *
+     * <ul>
+     *   <li>"ErrorType": The type of error in String. Possible error types are:
+     *       <ol>
+     *         <li>"IKE_PROTOCOL_ERROR_TYPE" refers to the Notify Error coming in Notify payload.
+     *             See https://tools.ietf.org/html/rfc4306#section-3.10.1 for global errors and
+     *             carrier specific requirements for other carrier specific error codes.
+     *         <li>"GENERIC_ERROR_TYPE" refers to the following IWLAN errors - "IO_EXCEPTION",
+     *             "TIMEOUT_EXCEPTION", "SERVER_SELECTION_FAILED" and "TUNNEL_TRANSFORM_FAILED".
+     *         <li>"*" represents that this policy is a generic fallback when no other policy
+     *             matches.
+     *       </ol>
+     *   <li>"ErrorDetails": Array of errors specifics for which the policy needs to be applied to.
+     *       Note: Array can be a mix of numbers, ranges and string formats. Following are the
+     *       currently supported formats of elements in the array:
+     *       <ol>
+     *         <li>Number or Code: "24" - Number specific to the error.
+     *         <li>Range: "9000-9050" - Range of specific errors.
+     *         <li>Any: "*" value represents that this can be applied to all ErrorDetails when there
+     *             is no specific match. This will be a single element array.
+     *         <li>String: String describing the specific error. Current allowed string values -
+     *             "IO_EXCEPTION", "TIMEOUT_EXCEPTION", "SERVER_SELECTION_FAILED" and
+     *             "TUNNEL_TRANSFORM_FAILED"
+     *       </ol>
+     *       <p>"IKE_PROTOCOL_EXCEPTION" ErrorType expects the "error_detail" to be defined only in
+     *       numbers or range of numbers. Examples: ["24"] or ["9000-9050"] or ["7", "14000-14050"]
+     *       <p>"GENERIC_ERROR_TYPE" or "*" ErrorType expects only the following to be in
+     *       "ErrorDetails" - "IO_EXCEPTION", "TIMEOUT_EXCEPTION", "SERVER_SELECTION_FAILED",
+     *       "TUNNEL_TRANSFORM_FAILED" and "*". Examples: ["IO_EXCEPTION", "TIMEOUT_EXCEPTION"] or
+     *       ["*"]
+     *   <li>"RetryArray": Array of retry times (in secs) represented in string format. Following
+     *       formats are currently supported:
+     *       <ol>
+     *         <li>["0","0", "0"] Retry immediately for maximum 3 times and then fail.
+     *         <li>[] Empty array means to fail whenever the error happens.
+     *         <li>["2", "4", "8"] Retry times are 2 secs, 4secs and 8 secs - fail after that.
+     *         <li>["5", "10", "15", "-1"] Here the "-1" represents infinite retires with the retry
+     *             time "15" the last retry number).
+     *         <li>["2+r15"] 2 seconds + random time below 15 seconds, fail after that.
+     *       </ol>
+     *       <p>When fails, by default throttle for 24 hours.
+     *   <li>"UnthrottlingEvents": Events for which the retry time can be unthrottled in string.
+     *       Possible unthrottling events are:
+     *       <ol>
+     *         <li>"WIFI_DISABLE_EVENT": Wifi on to off toggle.
+     *         <li>"APM_DISABLE_EVENT": APM on to off toggle.
+     *         <li>"APM_ENABLE_EVENT": APM off to on toggle.
+     *         <li>"WIFI_AP_CHANGED_EVENT": Wifi is connected to an AP with different SSID.
+     *         <li>"WIFI_CALLING_DISABLE_EVENT": Wifi calling button on to off toggle.
+     *       </ol>
+     *   <li>"NumAttemptsPerFqdn" Integer to specify th count of tunnel setup attempts IWLAN must
+     *       perform with the IP address(es) returned by a single FQDN, before moving on to the next
+     *       FQDN. It is an optional field.
+     *   <li>"HandoverAttemptCount": Integer to specify the number of handover request attempts
+     *       before using initial attach instead. It is an optional field.
+     *       <p>"HandoverAttemptCount" should not be defined in the config when "ErrorType" is
+     *       defined as any other error types except "IKE_PROTOCOL_ERROR_TYPE", including "*".
+     * </ul>
+     *
+     * <p>Note: When the value is "*" for any of "ApnName" or "ErrorType" or "ErrorDetails", it
+     * means that the config definition applies to rest of the errors for which the config is not
+     * defined. For example, if "ApnName" is "ims" and one of the "ErrorType" in it is defined as
+     * "*" - this policy will be applied to the error that doesn't fall into other error types
+     * defined under "ims".
+     */
+    public static final String KEY_ERROR_POLICY_CONFIG_STRING =
+            PREFIX + "key_error_policy_config_string";
+
+    /**
      * Default delay in seconds for releasing the IWLAN connection after a WWAN handover. This is
      * the default value for {@link #KEY_HANDOVER_TO_WWAN_RELEASE_DELAY_SECOND_INT}.
      */
@@ -87,7 +166,7 @@ public class IwlanCarrierConfig {
      * The default value for determining whether N1 mode shall be enabled or disabled depending on
      * 5G enabling status via the UI/UX.
      */
-    public static final boolean DEFAULT_UPDATE_N1_MODE_ON_UI_CHANGE_BOOL = true;
+    public static final boolean DEFAULT_UPDATE_N1_MODE_ON_UI_CHANGE_BOOL = false;
 
     /** This is the default value for {@link #KEY_DISTINCT_EPDG_FOR_EMERGENCY_ALLOWED_BOOL}. */
     public static final boolean DEFAULT_DISTINCT_EPDG_FOR_EMERGENCY_ALLOWED_BOOL = false;
@@ -101,7 +180,43 @@ public class IwlanCarrierConfig {
     /** This is the default value for {@link #KEY_IKE_SA_TRANSFORMS_REORDER_BOOL}. */
     public static final boolean DEFAULT_IKE_SA_TRANSFORMS_REORDER_BOOL = false;
 
-    private static PersistableBundle sTestBundle = new PersistableBundle();
+    /**
+     * The default value for determining IWLAN's behavior when error happens during ePDG tunnel
+     * setup. This is the default value for {@link #KEY_ERROR_POLICY_CONFIG_STRING}.
+     */
+    public static final String DEFAULT_ERROR_POLICY_CONFIG_STRING =
+            """
+            [{
+            "ApnName": "*",
+            "ErrorTypes": [{
+                "ErrorType": "*",
+                "ErrorDetails": ["*"],
+                "RetryArray": ["1","2","2","10","20","40","80","160",
+                                "320","640","1280","1800","3600","-1"],
+                "UnthrottlingEvents": ["APM_ENABLE_EVENT","APM_DISABLE_EVENT",
+                                        "WIFI_DISABLE_EVENT","WIFI_AP_CHANGED_EVENT"]},{
+                "ErrorType": "GENERIC_ERROR_TYPE",
+                "ErrorDetails": ["IO_EXCEPTION"],
+                "RetryArray": ["0","0","0","30","60+r15","120","-1"],
+                "UnthrottlingEvents": ["APM_ENABLE_EVENT","APM_DISABLE_EVENT",
+                                        "WIFI_DISABLE_EVENT","WIFI_AP_CHANGED_EVENT"]},{
+                "ErrorType": "IKE_PROTOCOL_ERROR_TYPE",
+                "ErrorDetails": ["*"],
+                "RetryArray": ["5","10","10","20","40","80","160",
+                                "320","640","1280","1800","3600","-1"],
+                "UnthrottlingEvents": ["APM_ENABLE_EVENT","WIFI_DISABLE_EVENT",
+                                        "WIFI_CALLING_DISABLE_EVENT"]},{
+                "ErrorType": "IKE_PROTOCOL_ERROR_TYPE",
+                "ErrorDetails": ["36"],
+                "RetryArray": ["0","0","0","10","20","40","80","160",
+                                "320","640","1280","1800","3600","-1"],
+                "UnthrottlingEvents": ["APM_ENABLE_EVENT","WIFI_DISABLE_EVENT",
+                                        "WIFI_CALLING_DISABLE_EVENT"],
+                "HandoverAttemptCount": "3"}]
+            }]
+            """;
+
+    private static final PersistableBundle sTestBundle = new PersistableBundle();
 
     private static PersistableBundle sHiddenBundle = new PersistableBundle();
 
@@ -131,10 +246,15 @@ public class IwlanCarrierConfig {
                 KEY_IKE_DEVICE_IDENTITY_SUPPORTED_BOOL, DEFAULT_IKE_DEVICE_IDENTITY_SUPPORTED_BOOL);
         bundle.putBoolean(
                 KEY_IKE_SA_TRANSFORMS_REORDER_BOOL, DEFAULT_IKE_SA_TRANSFORMS_REORDER_BOOL);
+        bundle.putString(KEY_ERROR_POLICY_CONFIG_STRING, DEFAULT_ERROR_POLICY_CONFIG_STRING);
         return bundle;
     }
 
     private static PersistableBundle getConfig(Context context, int slotId, String key) {
+        if (sTestBundle.containsKey(key)) {
+            return sTestBundle;
+        }
+
         CarrierConfigManager carrierConfigManager =
                 context.getSystemService(CarrierConfigManager.class);
         if (carrierConfigManager == null) {
@@ -147,10 +267,6 @@ public class IwlanCarrierConfig {
     }
 
     private static PersistableBundle getDefaultConfig(String key) {
-        if (sTestBundle.containsKey(key)) {
-            return sTestBundle;
-        }
-
         PersistableBundle bundle = CarrierConfigManager.getDefaultConfig();
         if (bundle.containsKey(key)) {
             return bundle;

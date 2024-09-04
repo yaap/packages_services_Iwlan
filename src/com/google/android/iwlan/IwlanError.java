@@ -203,10 +203,9 @@ public class IwlanError {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof IwlanError)) {
+        if (!(o instanceof IwlanError error)) {
             return false;
         }
-        IwlanError error = (IwlanError) o;
         boolean ret = false;
         if (mErrorType == error.getErrorType()) {
             if (mException != null && error.getException() != null) {

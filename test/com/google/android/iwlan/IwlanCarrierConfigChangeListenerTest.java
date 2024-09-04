@@ -16,8 +16,8 @@
 
 package com.google.android.iwlan;
 
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.*;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static org.mockito.Mockito.lenient;
 
@@ -34,7 +34,7 @@ import org.mockito.MockitoSession;
 public class IwlanCarrierConfigChangeListenerTest {
     private static final String TAG = "IwlanCarrierConfigChangeListenerTest";
     private IwlanCarrierConfigChangeListener mIwlanCarrierConfigChangeListener;
-    private TestLooper mTestLooper = new TestLooper();
+    private final TestLooper mTestLooper = new TestLooper();
 
     private static final int TEST_SUB_ID = 5;
     private static final int TEST_SLOT_ID = 6;

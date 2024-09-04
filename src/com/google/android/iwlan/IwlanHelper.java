@@ -26,9 +26,7 @@ import android.net.IpPrefix;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
-import android.os.PersistableBundle;
 import android.os.SystemClock;
-import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -192,47 +190,12 @@ public class IwlanHelper {
         throw new IllegalStateException("Local address should not be null.");
     }
 
-    /**
-     * @deprecated This method is deprecated. Use {@link IwlanCarrierConfig#getConfig()} instead.
-     */
-    @Deprecated
-    public static <T> T getConfig(String key, Context context, int slotId) {
-        CarrierConfigManager carrierConfigManager =
-                context.getSystemService(CarrierConfigManager.class);
-        if (carrierConfigManager == null) {
-            throw new IllegalStateException("Carrier config manager is null.");
-        }
-
-        PersistableBundle bundle =
-                carrierConfigManager.getConfigForSubId(getSubId(context, slotId));
-
-        if (bundle == null || bundle.get(key) == null) {
-            return getDefaultConfig(key);
-        } else {
-            return (T) bundle.get(key);
-        }
-    }
-
-    /**
-     * @deprecated This method is deprecated. Use {@link IwlanCarrierConfig#getDefaultConfig()}
-     *     instead.
-     */
-    @Deprecated
-    public static <T> T getDefaultConfig(String key) {
-        PersistableBundle bundle = CarrierConfigManager.getDefaultConfig();
-        if (bundle == null) {
-            throw new IllegalStateException("Default config is null for: " + key);
-        }
-        return (T) bundle.get(key);
-    }
-
     public static boolean isDefaultDataSlot(Context context, int slotId) {
-        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
-        int ddsSlotId = sm.getSlotIndex(sm.getDefaultDataSubscriptionId());
-        if (ddsSlotId != sm.INVALID_SIM_SLOT_INDEX) {
-            if (ddsSlotId == slotId) {
-                return true;
-            }
+        int ddsSlotId =
+                SubscriptionManager.getSlotIndex(
+                        SubscriptionManager.getDefaultDataSubscriptionId());
+        if (ddsSlotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+            return ddsSlotId == slotId;
         }
         return false;
     }

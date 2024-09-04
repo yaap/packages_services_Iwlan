@@ -20,7 +20,9 @@ import static org.junit.Assert.assertEquals;
 
 import android.net.InetAddresses;
 
-import com.google.android.iwlan.TunnelMetricsInterface.*;
+import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
+import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
+import com.google.android.iwlan.TunnelMetricsInterface.TunnelMetricsData;
 
 import org.junit.Rule;
 import org.junit.Test;

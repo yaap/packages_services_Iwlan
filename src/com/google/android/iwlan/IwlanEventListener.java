@@ -309,15 +309,9 @@ public class IwlanEventListener {
     /**
      * Broadcast WIFI_AP_CHANGED_EVENT if Wifi SSID changed after Wifi connected.
      *
-     * @param context context
+     * @param wifiInfo connected Wifi network's information.
      */
-    public static void onWifiConnected(Context context) {
-        WifiManager wifiManager = context.getSystemService(WifiManager.class);
-        if (wifiManager == null) {
-            Log.e(LOG_TAG, "Could not find wifiManager");
-            return;
-        }
-        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+    public static void onWifiConnected(WifiInfo wifiInfo) {
         if (wifiInfo == null) {
             Log.e(LOG_TAG, "wifiInfo is null");
             return;
@@ -330,7 +324,7 @@ public class IwlanEventListener {
 
         // Check sWifiSSID is greater than 0 to avoid trigger event after device first camps on
         // Wifi.
-        if (sWifiSSID.length() > 0 && !sWifiSSID.equals(wifiSSID)) {
+        if (!sWifiSSID.isEmpty() && !sWifiSSID.equals(wifiSSID)) {
             Log.d(LOG_TAG, "Wifi SSID changed");
             for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
                 IwlanEventListener instance = entry.getValue();

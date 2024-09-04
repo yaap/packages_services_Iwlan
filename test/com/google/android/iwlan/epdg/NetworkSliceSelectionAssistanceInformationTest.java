@@ -1,7 +1,8 @@
 package com.google.android.iwlan.epdg;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import android.telephony.data.NetworkSliceInfo;
 
@@ -10,8 +11,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
-import java.util.*;
 
 @RunWith(JUnit4.class)
 public class NetworkSliceSelectionAssistanceInformationTest {
@@ -61,12 +60,12 @@ public class NetworkSliceSelectionAssistanceInformationTest {
         si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
 
         assertNotNull(si);
-        assertEquals(si.getSliceServiceType(), 3);
-        assertEquals(si.getMappedHplmnSliceServiceType(), NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE);
-        assertEquals(si.getSliceDifferentiator(), NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+        assertEquals(3, si.getSliceServiceType());
+        assertEquals(NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE, si.getMappedHplmnSliceServiceType());
+        assertEquals(NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE, si.getSliceDifferentiator());
         assertEquals(
-                si.getMappedHplmnSliceDifferentiator(),
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                si.getMappedHplmnSliceDifferentiator());
     }
 
     @Test
@@ -77,12 +76,12 @@ public class NetworkSliceSelectionAssistanceInformationTest {
         si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
 
         assertNotNull(si);
-        assertEquals(si.getSliceServiceType(), 3);
-        assertEquals(si.getMappedHplmnSliceServiceType(), 2);
-        assertEquals(si.getSliceDifferentiator(), NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+        assertEquals(3, si.getSliceServiceType());
+        assertEquals(2, si.getMappedHplmnSliceServiceType());
+        assertEquals(NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE, si.getSliceDifferentiator());
         assertEquals(
-                si.getMappedHplmnSliceDifferentiator(),
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                si.getMappedHplmnSliceDifferentiator());
     }
 
     @Test
@@ -93,12 +92,12 @@ public class NetworkSliceSelectionAssistanceInformationTest {
         si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
 
         assertNotNull(si);
-        assertEquals(si.getSliceServiceType(), 3);
-        assertEquals(si.getMappedHplmnSliceServiceType(), NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE);
-        assertEquals(si.getSliceDifferentiator(), 0x0a0b0c);
+        assertEquals(3, si.getSliceServiceType());
+        assertEquals(NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE, si.getMappedHplmnSliceServiceType());
+        assertEquals(0x0a0b0c, si.getSliceDifferentiator());
         assertEquals(
-                si.getMappedHplmnSliceDifferentiator(),
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                si.getMappedHplmnSliceDifferentiator());
     }
 
     @Test
@@ -109,12 +108,12 @@ public class NetworkSliceSelectionAssistanceInformationTest {
         si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
 
         assertNotNull(si);
-        assertEquals(si.getSliceServiceType(), 3);
-        assertEquals(si.getMappedHplmnSliceServiceType(), 3);
-        assertEquals(si.getSliceDifferentiator(), 0x0a0b0c);
+        assertEquals(3, si.getSliceServiceType());
+        assertEquals(3, si.getMappedHplmnSliceServiceType());
+        assertEquals(0x0a0b0c, si.getSliceDifferentiator());
         assertEquals(
-                si.getMappedHplmnSliceDifferentiator(),
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                si.getMappedHplmnSliceDifferentiator());
     }
 
     @Test
@@ -127,9 +126,9 @@ public class NetworkSliceSelectionAssistanceInformationTest {
         si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
 
         assertNotNull(si);
-        assertEquals(si.getSliceServiceType(), 3);
-        assertEquals(si.getMappedHplmnSliceServiceType(), 2);
-        assertEquals(si.getSliceDifferentiator(), 0x0a0b0c);
-        assertEquals(si.getMappedHplmnSliceDifferentiator(), 0x0f0e0d);
+        assertEquals(3, si.getSliceServiceType());
+        assertEquals(2, si.getMappedHplmnSliceServiceType());
+        assertEquals(0x0a0b0c, si.getSliceDifferentiator());
+        assertEquals(0x0f0e0d, si.getMappedHplmnSliceDifferentiator());
     }
 }

@@ -48,6 +48,7 @@ public class MetricsAtom {
     private String mIwlanErrorWrappedClassname;
     private String mIwlanErrorWrappedStackFirstFrame;
     private int mErrorCountOfSameCause;
+    private boolean mIsNetworkValidated;
 
     public void setMessageId(int messageId) {
         this.mMessageId = messageId;
@@ -159,6 +160,10 @@ public class MetricsAtom {
         return mErrorCountOfSameCause;
     }
 
+    public void setIsNetworkValidated(boolean isNetworkValidated) {
+        mIsNetworkValidated = isNetworkValidated;
+    }
+
     public void sendMetricsData() {
         if (mMessageId == IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED) {
             Log.d(TAG, "Send metrics data IWLAN_SETUP_DATA_CALL_RESULT_REPORTED");
@@ -182,8 +187,8 @@ public class MetricsAtom {
                     mRetryDurationMillis,
                     mIwlanErrorWrappedClassname,
                     mIwlanErrorWrappedStackFirstFrame,
-                    mErrorCountOfSameCause);
-            return;
+                    mErrorCountOfSameCause,
+                    mIsNetworkValidated);
         } else if (mMessageId == IwlanStatsLog.IWLAN_PDN_DISCONNECTED_REASON_REPORTED) {
             Log.d(TAG, "Send metrics data IWLAN_PDN_DISCONNECTED_REASON_REPORTED");
             IwlanStatsLog.write(
@@ -192,10 +197,8 @@ public class MetricsAtom {
                     mIsNetworkConnected,
                     mTransportType,
                     mWifiSignalValue);
-            return;
         } else {
             Log.d("IwlanMetrics", "Invalid Message ID: " + mMessageId);
-            return;
         }
     }
 }

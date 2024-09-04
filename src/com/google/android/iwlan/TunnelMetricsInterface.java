@@ -15,12 +15,12 @@
  */
 package com.google.android.iwlan;
 
-import java.net.InetAddress;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 
+import java.net.InetAddress;
 import java.util.Objects;
 
 public interface TunnelMetricsInterface {
@@ -29,18 +29,20 @@ public interface TunnelMetricsInterface {
     /** Called for logging the tunnel is closed or bring up failed. */
     void onClosed(OnClosedMetrics metricsData);
 
-    static class TunnelMetricsData {
+    class TunnelMetricsData {
         private final String mApnName;
         private final String mEpdgServerAddress;
         private final int mEpdgServerSelectionDuration;
         private final int mIkeTunnelEstablishmentDuration;
         private IwlanDataServiceProvider mIwlanDataServiceProvider;
+        private final boolean mIsNetworkValidated;
 
         protected TunnelMetricsData(Builder builder) {
             this.mApnName = builder.mApnName;
             this.mEpdgServerAddress = builder.mEpdgServerAddress;
             this.mEpdgServerSelectionDuration = builder.mEpdgServerSelectionDuration;
             this.mIkeTunnelEstablishmentDuration = builder.mIkeTunnelEstablishmentDuration;
+            this.mIsNetworkValidated = builder.mIsNetworkValidated;
         }
 
         @Nullable
@@ -69,11 +71,16 @@ public interface TunnelMetricsInterface {
             mIwlanDataServiceProvider = dsp;
         }
 
+        public boolean isNetworkValidated() {
+            return mIsNetworkValidated;
+        }
+
         public static class Builder<T extends Builder> {
             @Nullable private String mApnName = null;
             @Nullable private String mEpdgServerAddress = null;
             private int mEpdgServerSelectionDuration = 0;
             private int mIkeTunnelEstablishmentDuration = 0;
+            private boolean mIsNetworkValidated = false;
 
             /** Default constructor for Builder. */
             public Builder() {}
@@ -98,6 +105,12 @@ public interface TunnelMetricsInterface {
                 return (T) this;
             }
 
+            /** whether underlying network is validated */
+            public T setIsNetworkValidated(boolean isNetworkValidated) {
+                mIsNetworkValidated = isNetworkValidated;
+                return (T) this;
+            }
+
             public TunnelMetricsData build() {
                 if (mApnName == null) {
                     throw new IllegalArgumentException("Necessary parameter missing.");
@@ -107,7 +120,7 @@ public interface TunnelMetricsInterface {
         }
     }
 
-    static class OnOpenedMetrics extends TunnelMetricsData {
+    class OnOpenedMetrics extends TunnelMetricsData {
 
         protected OnOpenedMetrics(Builder builder) {
             super(builder);
@@ -123,7 +136,7 @@ public interface TunnelMetricsInterface {
         }
     }
 
-    static class OnClosedMetrics extends TunnelMetricsData {
+    class OnClosedMetrics extends TunnelMetricsData {
 
         protected OnClosedMetrics(Builder builder) {
             super(builder);

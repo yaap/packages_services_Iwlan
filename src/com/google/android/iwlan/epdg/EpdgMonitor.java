@@ -26,7 +26,7 @@ public class EpdgMonitor {
     private InetAddress mEpdgAddressForNormalSession;
     private InetAddress mSeparateEpdgAddressForEmergencySession;
     private Set<String> mApnConnectToNormalEpdg = new HashSet<>();
-    private Set<String> mApnConnectToEmergencyEpdg = new HashSet<>();
+    private final Set<String> mApnConnectToEmergencyEpdg = new HashSet<>();
     private boolean mHasEmergencyPdnFailedWithConnectedEpdg = false;
 
     public EpdgMonitor() {}

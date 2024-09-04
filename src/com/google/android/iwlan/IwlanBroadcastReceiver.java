@@ -113,15 +113,16 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
 
                 if (mContext != null) {
                     int PCO_ID_IPv6 =
-                            IwlanHelper.getConfig(
-                                    CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV6_INT,
+                            IwlanCarrierConfig.getConfigInt(
                                     mContext,
-                                    intentSlotIndex);
+                                    intentSlotIndex,
+                                    CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV6_INT);
+
                     int PCO_ID_IPv4 =
-                            IwlanHelper.getConfig(
-                                    CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT,
+                            IwlanCarrierConfig.getConfigInt(
                                     mContext,
-                                    intentSlotIndex);
+                                    intentSlotIndex,
+                                    CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT);
 
                     Log.d(
                             TAG,

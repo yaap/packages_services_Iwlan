@@ -148,11 +148,11 @@ public class IwlanEventListenerTest {
 
         // First Wifi connected should not trigger WIFI_AP_CHANGED_EVENT
         when(mMockWifiInfo.getSSID()).thenReturn(WIFI_SSID_1);
-        mIwlanEventListener.onWifiConnected(mMockContext);
+        IwlanEventListener.onWifiConnected(mMockWifiInfo);
         verify(mMockMessage, times(0)).sendToTarget();
 
         when(mMockWifiInfo.getSSID()).thenReturn(WIFI_SSID_2);
-        mIwlanEventListener.onWifiConnected(mMockContext);
+        IwlanEventListener.onWifiConnected(mMockWifiInfo);
         verify(mMockMessage, times(1)).sendToTarget();
     }
 
@@ -223,13 +223,13 @@ public class IwlanEventListenerTest {
         mIwlanEventListener.addEventListener(events, mMockHandler);
 
         // onCarrierConfigChanged with valid Carrier id
-        mIwlanEventListener.onCarrierConfigChanged(
+        IwlanEventListener.onCarrierConfigChanged(
                 mMockContext, DEFAULT_SLOT_INDEX, DEFAULT_SUB_ID, DEFAULT_CARRIER_INDEX);
 
         verify(mMockMessage, times(1)).sendToTarget();
 
         // onCarrierConfigChanged with invalid Carrier id
-        mIwlanEventListener.onCarrierConfigChanged(
+        IwlanEventListener.onCarrierConfigChanged(
                 mMockContext,
                 DEFAULT_SLOT_INDEX,
                 DEFAULT_SUB_ID,

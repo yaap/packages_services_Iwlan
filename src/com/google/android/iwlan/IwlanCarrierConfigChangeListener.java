@@ -22,6 +22,7 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.telephony.CarrierConfigManager;
 import android.util.Log;
+
 import com.android.internal.annotations.VisibleForTesting;
 
 public class IwlanCarrierConfigChangeListener
@@ -33,7 +34,7 @@ public class IwlanCarrierConfigChangeListener
     private static IwlanCarrierConfigChangeListener mInstance;
     private static HandlerThread mHandlerThread;
 
-    private Handler mHandler;
+    private final Handler mHandler;
 
     public static void startListening(Context context) {
         if (mIsListenerRegistered) {

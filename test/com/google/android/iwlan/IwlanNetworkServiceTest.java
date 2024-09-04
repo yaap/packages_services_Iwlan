@@ -18,8 +18,12 @@ package com.google.android.iwlan;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.annotation.Nullable;
 import android.content.Context;
@@ -49,7 +53,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
-import java.util.Arrays;
+import java.util.List;
 
 public class IwlanNetworkServiceTest {
     private static final String TAG = IwlanNetworkServiceTest.class.getSimpleName();
@@ -89,10 +93,9 @@ public class IwlanNetworkServiceTest {
         when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
                         eq(DEFAULT_SLOT_INDEX)))
                 .thenReturn(mMockSubscriptionInfo);
-        when(mMockSubscriptionManager.getDefaultDataSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
-        when(mMockSubscriptionManager.getSlotIndex(DEFAULT_SUB_INDEX))
-                .thenReturn(DEFAULT_SLOT_INDEX);
-        when(mMockSubscriptionManager.getSlotIndex(DEFAULT_SUB_INDEX + 1))
+        when(SubscriptionManager.getDefaultDataSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
+        when(SubscriptionManager.getSlotIndex(DEFAULT_SUB_INDEX)).thenReturn(DEFAULT_SLOT_INDEX);
+        when(SubscriptionManager.getSlotIndex(DEFAULT_SUB_INDEX + 1))
                 .thenReturn(DEFAULT_SLOT_INDEX + 1);
 
         when(mMockSubscriptionInfo.getSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
@@ -133,10 +136,10 @@ public class IwlanNetworkServiceTest {
     @Test
     public void testRequestNetworkRegistrationInfo() throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         // Set Wifi on and verify mCallback should receive onNetworkStateChanged.
-        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
+        IwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
         verify(mCallback, timeout(1000).times(1)).onNetworkStateChanged();
 
         // Set Sub active and verify mCallback should receive onNetworkStateChanged.
@@ -180,7 +183,7 @@ public class IwlanNetworkServiceTest {
     @Test
     public void testNetworkRegistrationInfoSearchingForCellularAndCstDisabled() throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(false);
 
@@ -208,7 +211,7 @@ public class IwlanNetworkServiceTest {
     public void testNetworkRegistrationInfoSearchingForCellularOnSameSubAndCstEnabled()
             throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
 
@@ -236,7 +239,7 @@ public class IwlanNetworkServiceTest {
     public void testNetworkRegistrationInfoHomeForCellularOnDifferentSubAndCstEnabled()
             throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
 
@@ -266,7 +269,7 @@ public class IwlanNetworkServiceTest {
     public void testNetworkRegistrationInfoHomeForCellularVcnOnDifferentSubAndCstEnabled()
             throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
 
@@ -294,7 +297,7 @@ public class IwlanNetworkServiceTest {
     @Test
     public void testNetworkRegistrationInfoHomeForWiFiAndCstEnabled() throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(true);
 
@@ -320,7 +323,7 @@ public class IwlanNetworkServiceTest {
     @Test
     public void testNetworkRegistrationInfoHomeForWiFiAndCstDisabled() throws Exception {
         mIwlanNetworkServiceProvider = initNSP();
-        assertTrue(mIwlanNetworkServiceProvider != null);
+        assertNotNull(mIwlanNetworkServiceProvider);
 
         when(mMockImsMmTelManager.isCrossSimCallingEnabled()).thenReturn(false);
 
@@ -355,7 +358,7 @@ public class IwlanNetworkServiceTest {
                                                 .REGISTRATION_STATE_NOT_REGISTERED_SEARCHING)
                                 ? TelephonyManager.NETWORK_TYPE_UNKNOWN
                                 : TelephonyManager.NETWORK_TYPE_IWLAN)
-                .setAvailableServices(Arrays.asList(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
+                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
                 .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
                 .setEmergencyOnly(!isSubActive)
                 .setDomain(domain)

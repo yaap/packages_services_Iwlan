@@ -16,16 +16,17 @@
 
 package com.google.android.iwlan.epdg;
 
+import static org.junit.Assert.assertEquals;
+
 import android.net.LinkAddress;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.NetworkSliceInfo;
 
+import org.junit.Test;
+
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
 public class TunnelLinkPropertiesTest {
 

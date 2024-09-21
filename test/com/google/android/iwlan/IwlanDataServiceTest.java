@@ -283,6 +283,8 @@ public class IwlanDataServiceTest {
         when(mMockTunnelLinkProperties.ifaceName()).thenReturn("mockipsec0");
 
         mockCarrierConfigForN1Mode(true);
+
+        doNothing().when(mMockEpdgTunnelManager).close();
     }
 
     private void moveTimeForwardAndDispatch(long milliSeconds) {
@@ -1685,6 +1687,7 @@ public class IwlanDataServiceTest {
                         any(IwlanTunnelCallback.class),
                         eq(EpdgTunnelManager.BRINGDOWN_REASON_UNKNOWN));
         assertNotNull(mIwlanDataService.mHandler);
+        verify(mMockEpdgTunnelManager, times(1)).close();
         // Should not raise NullPointerException
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()

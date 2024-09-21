@@ -1182,12 +1182,12 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void close() {
-            // TODO: call epdgtunnelmanager.releaseInstance or equivalent
             mIwlanDataService.removeDataServiceProvider(this);
             IwlanEventListener iwlanEventListener =
                     IwlanEventListener.getInstance(mContext, getSlotIndex());
             iwlanEventListener.removeEventListener(getHandler());
             iwlanEventListener.unregisterContentObserver();
+            mEpdgTunnelManager.close();
         }
 
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

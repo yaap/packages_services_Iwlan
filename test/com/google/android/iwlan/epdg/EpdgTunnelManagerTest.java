@@ -19,6 +19,7 @@ package com.google.android.iwlan.epdg;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static com.google.android.iwlan.epdg.EpdgTunnelManager.BRINGDOWN_REASON_UNKNOWN;
+import static com.google.android.iwlan.proto.MetricsAtom.*;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -45,6 +46,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.net.ConnectivityDiagnosticsManager;
+import android.net.ConnectivityDiagnosticsManager.ConnectivityReport;
 import android.net.ConnectivityManager;
 import android.net.InetAddresses;
 import android.net.IpSecManager;
@@ -72,6 +75,7 @@ import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
 import android.net.ipsec.ike.ike3gpp.Ike3gppData;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
+import android.os.PersistableBundle;
 import android.os.test.TestLooper;
 import android.telephony.CarrierConfigManager;
 import android.telephony.PreciseDataConnectionState;
@@ -85,9 +89,11 @@ import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanCarrierConfig;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
+import com.google.android.iwlan.IwlanStatsLog;
 import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
 import com.google.android.iwlan.flags.FeatureFlags;
+import com.google.android.iwlan.proto.MetricsAtom;
 
 import org.junit.After;
 import org.junit.Before;
@@ -161,6 +167,7 @@ public class EpdgTunnelManagerTest {
     @Mock private ErrorPolicyManager mMockErrorPolicyManager;
     @Mock private FeatureFlags mFakeFeatureFlags;
     @Mock ConnectivityManager mMockConnectivityManager;
+    @Mock ConnectivityDiagnosticsManager mMockConnectivityDiagnosticsManager;
     @Mock SubscriptionManager mMockSubscriptionManager;
     @Mock SubscriptionInfo mMockSubscriptionInfo;
     @Mock TelephonyManager mMockTelephonyManager;
@@ -178,6 +185,10 @@ public class EpdgTunnelManagerTest {
     @Mock NetworkCapabilities mMockNetworkCapabilities;
     private MockitoSession mMockitoSession;
     private long mMockedClockTime = 0;
+    private final ArgumentCaptor<ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback>
+            mConnectivityDiagnosticsCallbackArgumentCaptor =
+                    ArgumentCaptor.forClass(
+                            ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback.class);
 
     static class IkeSessionArgumentCaptors {
         ArgumentCaptor<IkeSessionParams> mIkeSessionParamsCaptor =
@@ -198,6 +209,7 @@ public class EpdgTunnelManagerTest {
                 mockitoSession()
                         .mockStatic(EpdgSelector.class)
                         .mockStatic(ErrorPolicyManager.class)
+                        .mockStatic(IwlanStatsLog.class)
                         .spyStatic(IwlanHelper.class)
                         .strictness(Strictness.LENIENT)
                         .startMocking();
@@ -210,13 +222,14 @@ public class EpdgTunnelManagerTest {
                 .thenReturn(mMockEpdgSelector);
         when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
                 .thenReturn(mMockErrorPolicyManager);
-
         when(mMockContext.getSystemService(eq(ConnectivityManager.class)))
                 .thenReturn(mMockConnectivityManager);
         when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
                 .thenReturn(mMockSubscriptionManager);
         when(mMockContext.getSystemService(eq(TelephonyManager.class)))
                 .thenReturn(mMockTelephonyManager);
+        when(mMockContext.getSystemService(eq(ConnectivityDiagnosticsManager.class)))
+                .thenReturn(mMockConnectivityDiagnosticsManager);
         when(mMockTelephonyManager.createForSubscriptionId(DEFAULT_SUBID))
                 .thenReturn(mMockTelephonyManager);
         when(mMockTelephonyManager.getSimCarrierId()).thenReturn(0);
@@ -225,9 +238,11 @@ public class EpdgTunnelManagerTest {
         when(mMockConnectivityManager.getNetworkCapabilities(any(Network.class)))
                 .thenReturn(mMockNetworkCapabilities);
         when(mMockNetworkCapabilities.hasCapability(anyInt())).thenReturn(false);
-
         mEpdgTunnelManager =
                 spy(new EpdgTunnelManager(mMockContext, DEFAULT_SLOT_INDEX, mFakeFeatureFlags));
+        verify(mMockConnectivityDiagnosticsManager)
+                .registerConnectivityDiagnosticsCallback(
+                        any(), any(), mConnectivityDiagnosticsCallbackArgumentCaptor.capture());
         doReturn(mTestLooper.getLooper()).when(mEpdgTunnelManager).getLooper();
         mEpdgTunnelManager.initHandler();
         when(mEpdgTunnelManager.getIkeSessionCreator()).thenReturn(mMockIkeSessionCreator);
@@ -3308,5 +3323,114 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
         verify(mMockConnectivityManager, times(2))
                 .reportNetworkConnectivity(eq(mMockDefaultNetwork), eq(false));
+    }
+
+    private void verifyValidationMetricsAtom(
+            MetricsAtom metricsAtom,
+            int triggerReason,
+            int validationResult,
+            int transportType,
+            int duration) {
+        assertEquals(
+                IwlanStatsLog.IWLAN_UNDERLYING_NETWORK_VALIDATION_RESULT_REPORTED,
+                metricsAtom.getMessageId());
+        assertEquals(triggerReason, metricsAtom.getTriggerReason());
+        assertEquals(validationResult, metricsAtom.getValidationResult());
+        assertEquals(transportType, metricsAtom.getValidationTransportType());
+        assertEquals(duration, metricsAtom.getValidationDurationMills());
+    }
+
+    private ConnectivityReport createConnectivityReport(Network network, int validationResult) {
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putInt(ConnectivityReport.KEY_NETWORK_VALIDATION_RESULT, validationResult);
+        return new ConnectivityReport(
+                network, /* reportTimestamp */
+                0,
+                new LinkProperties(),
+                new NetworkCapabilities(),
+                bundle);
+    }
+
+    @Test
+    public void testReportValidationMetricsAtom_Validated() {
+        ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback callback =
+                mConnectivityDiagnosticsCallbackArgumentCaptor.getValue();
+        when(mMockNetworkCapabilities.hasCapability(
+                        eq(NetworkCapabilities.NET_CAPABILITY_VALIDATED)))
+                .thenReturn(true);
+        when(mMockNetworkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))
+                .thenReturn(true);
+        IwlanCarrierConfig.putTestConfigIntArray(
+                IwlanCarrierConfig.KEY_UNDERLYING_NETWORK_VALIDATION_EVENTS_INT_ARRAY,
+                new int[] {
+                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL,
+                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON
+                });
+
+        advanceClockByTimeMs(100000);
+        mEpdgTunnelManager.validateUnderlyingNetwork(
+                IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL);
+        mTestLooper.dispatchAll();
+        verify(mMockConnectivityManager, times(1))
+                .reportNetworkConnectivity(eq(mMockDefaultNetwork), eq(false));
+
+        MetricsAtom metricsAtom = mEpdgTunnelManager.getValidationMetricsAtom(mMockDefaultNetwork);
+        advanceClockByTimeMs(1000);
+        callback.onConnectivityReportAvailable(
+                createConnectivityReport(
+                        mMockDefaultNetwork, ConnectivityReport.NETWORK_VALIDATION_RESULT_VALID));
+
+        verifyValidationMetricsAtom(
+                metricsAtom,
+                NETWORK_VALIDATION_EVENT_MAKING_CALL,
+                NETWORK_VALIDATION_RESULT_VALID,
+                NETWORK_VALIDATION_TRANSPORT_TYPE_WIFI,
+                /* duration= */ 1000);
+    }
+
+    @Test
+    public void testReportValidationMetricsAtom_NotValidated() {
+        ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback callback =
+                mConnectivityDiagnosticsCallbackArgumentCaptor.getValue();
+        when(mMockNetworkCapabilities.hasCapability(
+                        eq(NetworkCapabilities.NET_CAPABILITY_VALIDATED)))
+                .thenReturn(true);
+        when(mMockNetworkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR))
+                .thenReturn(true);
+        IwlanCarrierConfig.putTestConfigIntArray(
+                IwlanCarrierConfig.KEY_UNDERLYING_NETWORK_VALIDATION_EVENTS_INT_ARRAY,
+                new int[] {
+                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL,
+                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON
+                });
+
+        advanceClockByTimeMs(100000);
+        mEpdgTunnelManager.validateUnderlyingNetwork(
+                IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON);
+        mTestLooper.dispatchAll();
+        verify(mMockConnectivityManager, times(1))
+                .reportNetworkConnectivity(eq(mMockDefaultNetwork), eq(false));
+
+        MetricsAtom metricsAtom = mEpdgTunnelManager.getValidationMetricsAtom(mMockDefaultNetwork);
+        advanceClockByTimeMs(1000);
+        callback.onConnectivityReportAvailable(
+                createConnectivityReport(
+                        mMockDefaultNetwork, ConnectivityReport.NETWORK_VALIDATION_RESULT_INVALID));
+
+        verifyValidationMetricsAtom(
+                metricsAtom,
+                NETWORK_VALIDATION_EVENT_SCREEN_ON,
+                NETWORK_VALIDATION_RESULT_INVALID,
+                NETWORK_VALIDATION_TRANSPORT_TYPE_CELLULAR,
+                /* duration= */ 1000);
+    }
+
+    @Test
+    public void testClose() {
+        ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback callback =
+                mConnectivityDiagnosticsCallbackArgumentCaptor.getValue();
+        mEpdgTunnelManager.close();
+        verify(mMockConnectivityDiagnosticsManager, times(1))
+                .unregisterConnectivityDiagnosticsCallback(eq(callback));
     }
 }

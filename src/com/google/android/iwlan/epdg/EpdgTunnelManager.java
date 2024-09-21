@@ -23,7 +23,12 @@ import static android.system.OsConstants.AF_INET;
 import static android.system.OsConstants.AF_INET6;
 import static android.telephony.PreciseDataConnectionState.NetworkValidationStatus;
 
+import static com.google.android.iwlan.proto.MetricsAtom.*;
+
 import android.content.Context;
+import android.net.ConnectivityDiagnosticsManager;
+import android.net.ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback;
+import android.net.ConnectivityDiagnosticsManager.ConnectivityReport;
 import android.net.ConnectivityManager;
 import android.net.InetAddresses;
 import android.net.IpPrefix;
@@ -33,6 +38,7 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.eap.EapAkaInfo;
 import android.net.eap.EapInfo;
 import android.net.eap.EapSessionConfig;
@@ -62,6 +68,7 @@ import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
 import android.net.ipsec.ike.ike3gpp.Ike3gppN1ModeInformation;
 import android.net.ipsec.ike.ike3gpp.Ike3gppParams;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
@@ -82,11 +89,13 @@ import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanCarrierConfig;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
+import com.google.android.iwlan.IwlanStatsLog;
 import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
 import com.google.android.iwlan.exceptions.IwlanSimNotReadyException;
 import com.google.android.iwlan.flags.FeatureFlags;
 import com.google.android.iwlan.flags.FeatureFlagsImpl;
+import com.google.android.iwlan.proto.MetricsAtom;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -112,6 +121,7 @@ public class EpdgTunnelManager {
     private final Context mContext;
     private final int mSlotId;
     private Handler mHandler;
+    private ConnectivityDiagnosticsCallback mConnectivityDiagnosticsCallback;
 
     private static final int EVENT_TUNNEL_BRINGUP_REQUEST = 0;
     private static final int EVENT_TUNNEL_BRINGDOWN_REQUEST = 1;
@@ -127,7 +137,6 @@ public class EpdgTunnelManager {
     private static final int EVENT_IKE_3GPP_DATA_RECEIVED = 12;
     private static final int EVENT_IKE_LIVENESS_STATUS_CHANGED = 13;
     private static final int EVENT_REQUEST_NETWORK_VALIDATION_CHECK = 14;
-    private static final int EVENT_TRIGGER_UNDERLYING_NETWORK_VALIDATION = 15;
     private static final int IKE_HARD_LIFETIME_SEC_MINIMUM = 300;
     private static final int IKE_HARD_LIFETIME_SEC_MAXIMUM = 86400;
     private static final int IKE_SOFT_LIFETIME_SEC_MINIMUM = 120;
@@ -166,6 +175,7 @@ public class EpdgTunnelManager {
 
     private static final Map<Integer, EpdgTunnelManager> mTunnelManagerInstances =
             new ConcurrentHashMap<>();
+    private final Map<Network, MetricsAtom> mMetricsAtomForNetwork = new ConcurrentHashMap<>();
 
     private final Queue<TunnelRequestWrapper> mPendingBringUpRequests = new ArrayDeque<>();
 
@@ -699,6 +709,73 @@ public class EpdgTunnelManager {
         mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, mSlotId);
         TAG = EpdgTunnelManager.class.getSimpleName() + "[" + mSlotId + "]";
         initHandler();
+        registerConnectivityDiagnosticsCallback();
+    }
+
+    private void registerConnectivityDiagnosticsCallback() {
+        ConnectivityDiagnosticsManager connectivityDiagnosticsManager =
+                Objects.requireNonNull(mContext)
+                        .getSystemService(ConnectivityDiagnosticsManager.class);
+        NetworkRequest networkRequest =
+                new NetworkRequest.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                        .build();
+        mConnectivityDiagnosticsCallback =
+                new ConnectivityDiagnosticsCallback() {
+                    @Override
+                    public void onConnectivityReportAvailable(@NonNull ConnectivityReport report) {
+                        Network network = report.getNetwork();
+                        int mNetworkValidationResult =
+                                report.getAdditionalInfo()
+                                        .getInt(ConnectivityReport.KEY_NETWORK_VALIDATION_RESULT);
+                        if (!mMetricsAtomForNetwork.containsKey(network)) {
+                            return;
+                        }
+                        reportValidationMetricsAtom(
+                                network, getMetricsValidationResult(mNetworkValidationResult));
+                    }
+                };
+        connectivityDiagnosticsManager.registerConnectivityDiagnosticsCallback(
+                networkRequest, new HandlerExecutor(mHandler), mConnectivityDiagnosticsCallback);
+    }
+
+    private void reportValidationMetricsAtom(Network network, int validationResult) {
+        if (!mMetricsAtomForNetwork.containsKey(network)) {
+            return;
+        }
+        MetricsAtom metricsAtom = mMetricsAtomForNetwork.get(network);
+        metricsAtom.setValidationResult(validationResult);
+        metricsAtom.setValidationDurationMills(
+                (int) (IwlanHelper.elapsedRealtime() - metricsAtom.getValidationStartTimeMills()));
+
+        Log.d(
+                TAG,
+                "reportValidationMetricsAtom: reason="
+                        + metricsAtom.getTriggerReason()
+                        + " validationResult="
+                        + metricsAtom.getValidationResult()
+                        + " transportType="
+                        + metricsAtom.getValidationTransportType()
+                        + " duration="
+                        + metricsAtom.getValidationDurationMills());
+        metricsAtom.sendMetricsData();
+        mMetricsAtomForNetwork.remove(network);
+    }
+
+    @VisibleForTesting
+    MetricsAtom getValidationMetricsAtom(Network network) {
+        return mMetricsAtomForNetwork.get(network);
+    }
+
+    private void unregisterConnectivityDiagnosticsCallback() {
+        ConnectivityDiagnosticsManager connectivityDiagnosticsManager =
+                Objects.requireNonNull(mContext)
+                        .getSystemService(ConnectivityDiagnosticsManager.class);
+        if (connectivityDiagnosticsManager != null) {
+            connectivityDiagnosticsManager.unregisterConnectivityDiagnosticsCallback(
+                    mConnectivityDiagnosticsCallback);
+        }
     }
 
     @VisibleForTesting
@@ -2295,10 +2372,6 @@ public class EpdgTunnelManager {
                     tunnelConfig.getIkeSession().requestLivenessCheck();
                     break;
 
-                case EVENT_TRIGGER_UNDERLYING_NETWORK_VALIDATION:
-                    onTriggerUnderlyingNetworkValidation();
-                    break;
-
                 default:
                     throw new IllegalStateException("Unexpected value: " + msg.what);
             }
@@ -3096,20 +3169,45 @@ public class EpdgTunnelManager {
                         "On triggering underlying network validation. Event: "
                                 + IwlanCarrierConfig.getUnderlyingNetworkValidationEventString(
                                         event));
-                mHandler.obtainMessage(EVENT_TRIGGER_UNDERLYING_NETWORK_VALIDATION).sendToTarget();
+                mHandler.post(() -> onTriggerUnderlyingNetworkValidation(event));
             }
         }
     }
 
-    void onTriggerUnderlyingNetworkValidation() {
+    private void onTriggerUnderlyingNetworkValidation(int event) {
         if (!isUnderlyingNetworkValidated(mDefaultNetwork)) {
             Log.d(TAG, "Network " + mDefaultNetwork + " is already not validated.");
             return;
         }
+
+        setupValidationMetricsAtom(event);
         ConnectivityManager connectivityManager =
                 Objects.requireNonNull(mContext).getSystemService(ConnectivityManager.class);
         Log.d(TAG, "Trigger underlying network validation on network: " + mDefaultNetwork);
         connectivityManager.reportNetworkConnectivity(mDefaultNetwork, false);
+    }
+
+    private void setupValidationMetricsAtom(int event) {
+        MetricsAtom metricsAtom = new MetricsAtom();
+        metricsAtom.setMessageId(IwlanStatsLog.IWLAN_UNDERLYING_NETWORK_VALIDATION_RESULT_REPORTED);
+        metricsAtom.setTriggerReason(getMetricsTriggerReason(event));
+
+        ConnectivityManager connectivityManager =
+                Objects.requireNonNull(mContext).getSystemService(ConnectivityManager.class);
+        NetworkCapabilities networkCapabilities =
+                Objects.requireNonNull(connectivityManager).getNetworkCapabilities(mDefaultNetwork);
+        int validationTransportType = NETWORK_VALIDATION_TRANSPORT_TYPE_UNSPECIFIED;
+        if (networkCapabilities != null) {
+            if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                validationTransportType = NETWORK_VALIDATION_TRANSPORT_TYPE_CELLULAR;
+            } else if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                validationTransportType = NETWORK_VALIDATION_TRANSPORT_TYPE_WIFI;
+            }
+        }
+        metricsAtom.setValidationTransportType(validationTransportType);
+
+        metricsAtom.setValidationStartTimeMills(IwlanHelper.elapsedRealtime());
+        mMetricsAtomForNetwork.put(mDefaultNetwork, metricsAtom);
     }
 
     boolean isUnderlyingNetworkValidationRequired(int error) {
@@ -3121,6 +3219,32 @@ public class EpdgTunnelManager {
                             IwlanError.IKE_DPD_TIMEOUT ->
                     true;
             default -> false;
+        };
+    }
+
+    private int getMetricsValidationResult(int validationResult) {
+        return switch (validationResult) {
+            case ConnectivityReport.NETWORK_VALIDATION_RESULT_INVALID ->
+                    NETWORK_VALIDATION_RESULT_INVALID;
+            case ConnectivityReport.NETWORK_VALIDATION_RESULT_VALID ->
+                    NETWORK_VALIDATION_RESULT_VALID;
+            case ConnectivityReport.NETWORK_VALIDATION_RESULT_PARTIALLY_VALID ->
+                    NETWORK_VALIDATION_RESULT_PARTIALLY_VALID;
+            case ConnectivityReport.NETWORK_VALIDATION_RESULT_SKIPPED ->
+                    NETWORK_VALIDATION_RESULT_SKIPPED;
+            default -> NETWORK_VALIDATION_RESULT_UNSPECIFIED;
+        };
+    }
+
+    private int getMetricsTriggerReason(int reason) {
+        return switch (reason) {
+            case IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL ->
+                    NETWORK_VALIDATION_EVENT_MAKING_CALL;
+            case IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON ->
+                    NETWORK_VALIDATION_EVENT_SCREEN_ON;
+            case IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_NO_RESPONSE ->
+                    NETWORK_VALIDATION_EVENT_NO_RESPONSE;
+            default -> NETWORK_VALIDATION_EVENT_UNSPECIFIED;
         };
     }
 
@@ -3155,6 +3279,11 @@ public class EpdgTunnelManager {
                 true /* isEmergency */,
                 network,
                 null /* selectorCallback */);
+    }
+
+    public void close() {
+        mTunnelManagerInstances.remove(mSlotId);
+        unregisterConnectivityDiagnosticsCallback();
     }
 
     public void dump(PrintWriter pw) {

@@ -1956,7 +1956,8 @@ public class IwlanDataService extends DataService {
                         (int)
                                 ErrorPolicyManager.getInstance(
                                                 mContext, iwlanDataServiceProvider.getSlotIndex())
-                                        .getRemainingRetryTimeMs(apnName);
+                                        .getRemainingBackoffDuration(apnName)
+                                        .toMillis();
                 // TODO(b/343962773): Need to refactor into ErrorPolicyManager
                 if (!tunnelState.getIsHandover()
                         && tunnelState.hasApnType(ApnSetting.TYPE_EMERGENCY)) {

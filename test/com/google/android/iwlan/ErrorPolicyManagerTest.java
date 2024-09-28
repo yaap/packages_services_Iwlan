@@ -53,6 +53,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1005,12 +1006,9 @@ public class ErrorPolicyManagerTest {
         failCause = mErrorPolicyManager.getDataFailCause(apn2);
         assertEquals(DataFailCause.IWLAN_PDN_CONNECTION_REJECTION, failCause);
 
-        long retryTime =
-                Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn1) / 1000);
-        assertEquals(4, retryTime);
+        assertEquals(Duration.ofSeconds(4), mErrorPolicyManager.getRemainingBackoffDuration(apn1));
 
-        retryTime = Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn2) / 1000);
-        assertEquals(5, retryTime);
+        assertEquals(Duration.ofSeconds(5), mErrorPolicyManager.getRemainingBackoffDuration(apn2));
     }
 
     @Test
@@ -1053,8 +1051,7 @@ public class ErrorPolicyManagerTest {
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         mErrorPolicyManager.reportIwlanError(apn, iwlanError, 2);
 
-        long time = Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn) / 1000);
-        assertEquals(time, 2);
+        assertEquals(Duration.ofSeconds(2), mErrorPolicyManager.getRemainingBackoffDuration(apn));
 
         // advanceClockByTimeMs for 2 seconds and make sure that we can bring up tunnel after 2 secs
         // as back off time - 2 secs should override the retry time in policy - 10 secs
@@ -1063,15 +1060,14 @@ public class ErrorPolicyManagerTest {
         assertTrue(bringUpTunnel);
 
         // test whether the same error reported later uses the right policy
-        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(10, time);
 
         bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertFalse(bringUpTunnel);
 
         mErrorPolicyManager.reportIwlanError(apn, iwlanError, 5);
-        time = Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn) / 1000);
-        assertEquals(time, 5);
+        assertEquals(Duration.ofSeconds(5), mErrorPolicyManager.getRemainingBackoffDuration(apn));
 
         // test whether the same error reported later starts from the beginning of retry array
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);

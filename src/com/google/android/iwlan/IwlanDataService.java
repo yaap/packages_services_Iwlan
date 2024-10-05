@@ -37,6 +37,7 @@ import android.net.NetworkSpecifier;
 import android.net.TelephonyNetworkSpecifier;
 import android.net.TransportInfo;
 import android.net.vcn.VcnTransportInfo;
+import android.net.vcn.VcnUtils;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
@@ -211,7 +212,10 @@ public class IwlanDataService extends DataService {
             if (networkCapabilities != null) {
                 if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
                     Log.d(TAG, "Network " + network + " connected using transport MOBILE");
-                    IwlanDataService.setConnectedDataSub(getConnectedDataSub(networkCapabilities));
+                    IwlanDataService.setConnectedDataSub(
+                            getConnectedDataSub(
+                                    mContext.getSystemService(ConnectivityManager.class),
+                                    networkCapabilities));
                     IwlanDataService.setNetworkConnected(true, network, Transport.MOBILE);
                 } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
                     Log.d(TAG, "Network " + network + " connected using transport WIFI");
@@ -1549,7 +1553,8 @@ public class IwlanDataService extends DataService {
         }
     }
 
-    static int getConnectedDataSub(NetworkCapabilities networkCapabilities) {
+    static int getConnectedDataSub(
+            ConnectivityManager connectivityManager, NetworkCapabilities networkCapabilities) {
         int connectedDataSub = INVALID_SUB_ID;
         NetworkSpecifier specifier = networkCapabilities.getNetworkSpecifier();
         TransportInfo transportInfo = networkCapabilities.getTransportInfo();
@@ -1557,7 +1562,8 @@ public class IwlanDataService extends DataService {
         if (specifier instanceof TelephonyNetworkSpecifier) {
             connectedDataSub = ((TelephonyNetworkSpecifier) specifier).getSubscriptionId();
         } else if (transportInfo instanceof VcnTransportInfo) {
-            connectedDataSub = ((VcnTransportInfo) transportInfo).getSubId();
+            connectedDataSub =
+                    VcnUtils.getSubIdFromVcnCaps(connectivityManager, networkCapabilities);
         }
         return connectedDataSub;
     }
@@ -2302,25 +2308,33 @@ public class IwlanDataService extends DataService {
         int cid = networkValidationInfo.mCid;
         Executor executor = networkValidationInfo.mExecutor;
         Consumer<Integer> resultCodeCallback = networkValidationInfo.mResultCodeCallback;
-        IwlanDataServiceProvider.TunnelState tunnelState;
 
         String apnName = findMatchingApn(iwlanDataServiceProvider, cid);
-        int resultCode;
         if (apnName == null) {
-            Log.w(TAG, "no matching APN name found for network validation.");
-            resultCode = DataServiceCallback.RESULT_ERROR_UNSUPPORTED;
-        } else {
-            iwlanDataServiceProvider.mEpdgTunnelManager.requestNetworkValidationForApn(apnName);
-            resultCode = DataServiceCallback.RESULT_SUCCESS;
-            tunnelState = iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
-            if (tunnelState == null) {
-                Log.w(TAG, "EVENT_REQUEST_NETWORK_VALIDATION: tunnel state is null.");
-            } else {
-                tunnelState.setNetworkValidationStatus(
-                        PreciseDataConnectionState.NETWORK_VALIDATION_IN_PROGRESS);
-            }
+            Log.w(TAG, "handleNetworkValidationRequest: No APN for CID: " + cid);
+            executor.execute(
+                    () ->
+                            resultCodeCallback.accept(
+                                    DataServiceCallback.RESULT_ERROR_ILLEGAL_STATE));
+            return;
         }
-        executor.execute(() -> resultCodeCallback.accept(resultCode));
+
+        IwlanDataServiceProvider.TunnelState tunnelState =
+                iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
+        if (tunnelState == null) {
+            Log.e(TAG, "handleNetworkValidationRequest: No tunnel state for APN: " + apnName);
+            executor.execute(
+                    () ->
+                            resultCodeCallback.accept(
+                                    DataServiceCallback.RESULT_ERROR_ILLEGAL_STATE));
+            return;
+        }
+
+        Log.d(TAG, "handleNetworkValidationRequest: Validating network for APN: " + apnName);
+        executor.execute(() -> resultCodeCallback.accept(DataServiceCallback.RESULT_SUCCESS));
+        iwlanDataServiceProvider.mEpdgTunnelManager.requestNetworkValidationForApn(apnName);
+        tunnelState.setNetworkValidationStatus(
+                PreciseDataConnectionState.NETWORK_VALIDATION_IN_PROGRESS);
     }
 
     private static void handleLivenessStatusChange(

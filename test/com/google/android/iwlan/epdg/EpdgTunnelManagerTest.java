@@ -117,7 +117,7 @@ import java.util.concurrent.Executor;
 @RunWith(JUnit4.class)
 public class EpdgTunnelManagerTest {
     public static final int DEFAULT_SLOT_INDEX = 0;
-    public static final int DEFAULT_SUBID = 0;
+    public static final int DEFAULT_SUB_ID = 0;
     public static final int DEFAULT_TOKEN = 0;
 
     private static final String EPDG_ADDRESS = "127.0.0.1";
@@ -215,11 +215,9 @@ public class EpdgTunnelManagerTest {
                         .startMocking();
         mMockedClockTime = 0;
         when(IwlanHelper.elapsedRealtime()).thenAnswer(i -> mMockedClockTime);
+
         EpdgTunnelManager.resetAllInstances();
         ErrorPolicyManager.resetAllInstances();
-
-        when(EpdgSelector.getSelectorInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
-                .thenReturn(mMockEpdgSelector);
         when(ErrorPolicyManager.getInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
                 .thenReturn(mMockErrorPolicyManager);
         when(mMockContext.getSystemService(eq(ConnectivityManager.class)))
@@ -230,7 +228,7 @@ public class EpdgTunnelManagerTest {
                 .thenReturn(mMockTelephonyManager);
         when(mMockContext.getSystemService(eq(ConnectivityDiagnosticsManager.class)))
                 .thenReturn(mMockConnectivityDiagnosticsManager);
-        when(mMockTelephonyManager.createForSubscriptionId(DEFAULT_SUBID))
+        when(mMockTelephonyManager.createForSubscriptionId(DEFAULT_SUB_ID))
                 .thenReturn(mMockTelephonyManager);
         when(mMockTelephonyManager.getSimCarrierId()).thenReturn(0);
         when(mMockContext.getSystemService(eq(IpSecManager.class))).thenReturn(mMockIpSecManager);
@@ -238,14 +236,20 @@ public class EpdgTunnelManagerTest {
         when(mMockConnectivityManager.getNetworkCapabilities(any(Network.class)))
                 .thenReturn(mMockNetworkCapabilities);
         when(mMockNetworkCapabilities.hasCapability(anyInt())).thenReturn(false);
+
         mEpdgTunnelManager =
-                spy(new EpdgTunnelManager(mMockContext, DEFAULT_SLOT_INDEX, mFakeFeatureFlags));
+                spy(
+                        new EpdgTunnelManager(
+                                mMockContext,
+                                DEFAULT_SLOT_INDEX,
+                                mFakeFeatureFlags,
+                                mMockIkeSessionCreator,
+                                mMockEpdgSelector));
         verify(mMockConnectivityDiagnosticsManager)
                 .registerConnectivityDiagnosticsCallback(
                         any(), any(), mConnectivityDiagnosticsCallbackArgumentCaptor.capture());
         doReturn(mTestLooper.getLooper()).when(mEpdgTunnelManager).getLooper();
         mEpdgTunnelManager.initHandler();
-        when(mEpdgTunnelManager.getIkeSessionCreator()).thenReturn(mMockIkeSessionCreator);
 
         when(mMockEpdgSelector.getValidatedServerList(
                         anyInt(),
@@ -275,7 +279,7 @@ public class EpdgTunnelManagerTest {
 
         when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(DEFAULT_SLOT_INDEX))
                 .thenReturn(mMockSubscriptionInfo);
-        when(mMockSubscriptionInfo.getSubscriptionId()).thenReturn(DEFAULT_SUBID);
+        when(mMockSubscriptionInfo.getSubscriptionId()).thenReturn(DEFAULT_SUB_ID);
         when(mMockSubscriptionInfo.getMncString()).thenReturn("344");
 
         when(mMockLinkProperties.isReachable(any())).thenReturn(true);

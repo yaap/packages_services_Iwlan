@@ -1218,7 +1218,7 @@ public class IwlanDataService extends DataService {
                 pw.println(entry.getValue());
             }
             pw.println(mTunnelStats);
-            EpdgTunnelManager.getInstance(mContext, getSlotIndex()).dump(pw);
+            mEpdgTunnelManager.dump(pw);
             ErrorPolicyManager.getInstance(mContext, getSlotIndex()).dump(pw);
             pw.println("-------------------------------------");
         }
@@ -1381,9 +1381,10 @@ public class IwlanDataService extends DataService {
                     break;
 
                 case IwlanEventListener.SCREEN_ON_EVENT:
-                    EpdgTunnelManager.getInstance(mContext, msg.arg1)
-                            .validateUnderlyingNetwork(
-                                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON);
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+                    iwlanDataServiceProvider.mEpdgTunnelManager.validateUnderlyingNetwork(
+                            IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON);
                     break;
 
                 case IwlanEventListener.CALL_STATE_CHANGED_EVENT:
@@ -1397,10 +1398,8 @@ public class IwlanDataService extends DataService {
                                     && currentCallState == TelephonyManager.CALL_STATE_OFFHOOK;
 
                     if (isCallInitiating) {
-                        int slotIndex = msg.arg1;
-                        EpdgTunnelManager.getInstance(mContext, slotIndex)
-                                .validateUnderlyingNetwork(
-                                        IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL);
+                        iwlanDataServiceProvider.mEpdgTunnelManager.validateUnderlyingNetwork(
+                                IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL);
                     }
 
                     if (!IwlanCarrierConfig.getConfigBoolean(

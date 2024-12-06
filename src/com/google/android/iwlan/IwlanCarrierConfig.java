@@ -302,8 +302,13 @@ public class IwlanCarrierConfig {
         }
 
         int subId = IwlanHelper.getSubId(context, slotId);
-        PersistableBundle bundle = carrierConfigManager.getConfigForSubId(subId, key);
-        return bundle.containsKey(key) ? bundle : getDefaultConfig(key);
+        try {
+            PersistableBundle bundle = carrierConfigManager.getConfigForSubId(subId, key);
+            return bundle.containsKey(key) ? bundle : getDefaultConfig(key);
+        } catch (IllegalStateException e) {
+            // Fall through to return default config
+        }
+        return getDefaultConfig(key);
     }
 
     private static PersistableBundle getDefaultConfig(String key) {

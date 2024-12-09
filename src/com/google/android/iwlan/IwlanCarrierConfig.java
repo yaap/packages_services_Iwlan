@@ -21,6 +21,7 @@ import android.os.PersistableBundle;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
+import android.telephony.SubscriptionManager;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -302,12 +303,17 @@ public class IwlanCarrierConfig {
         }
 
         int subId = IwlanHelper.getSubId(context, slotId);
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            return getDefaultConfig(key);
+        }
+
         try {
             PersistableBundle bundle = carrierConfigManager.getConfigForSubId(subId, key);
             return bundle.containsKey(key) ? bundle : getDefaultConfig(key);
         } catch (IllegalStateException e) {
             // Fall through to return default config
         }
+
         return getDefaultConfig(key);
     }
 

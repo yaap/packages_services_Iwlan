@@ -83,7 +83,7 @@ public class IwlanNetworkService extends NetworkService {
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
     // This callback runs in the same thread as IwlanNetworkServiceHandler
-    final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
+    static final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
         public void onAvailable(Network network) {
@@ -150,7 +150,7 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
-    final class IwlanOnSubscriptionsChangedListener
+    static final class IwlanOnSubscriptionsChangedListener
             extends SubscriptionManager.OnSubscriptionsChangedListener {
         /**
          * Callback invoked when there is any change to any SubscriptionInfo. Typically, this method
@@ -191,12 +191,10 @@ public class IwlanNetworkService extends NetworkService {
         @Override
         public void requestNetworkRegistrationInfo(int domain, NetworkServiceCallback callback) {
             getIwlanNetworkServiceHandler()
-                    .sendMessage(
-                            getIwlanNetworkServiceHandler()
-                                    .obtainMessage(
-                                            EVENT_NETWORK_REGISTRATION_INFO_REQUEST,
-                                            new NetworkRegistrationInfoRequestData(
-                                                    domain, callback, this)));
+                    .obtainMessage(
+                            EVENT_NETWORK_REGISTRATION_INFO_REQUEST,
+                            new NetworkRegistrationInfoRequestData(domain, callback, this))
+                    .sendToTarget();
         }
 
         /**
@@ -364,9 +362,8 @@ public class IwlanNetworkService extends NetworkService {
 
         IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex, this);
         getIwlanNetworkServiceHandler()
-                .sendMessage(
-                        getIwlanNetworkServiceHandler()
-                                .obtainMessage(EVENT_CREATE_NETWORK_SERVICE_PROVIDER, np));
+                .obtainMessage(EVENT_CREATE_NETWORK_SERVICE_PROVIDER, np)
+                .sendToTarget();
         return np;
     }
 
@@ -379,10 +376,10 @@ public class IwlanNetworkService extends NetworkService {
         NetworkSpecifier specifier = networkCapabilities.getNetworkSpecifier();
         TransportInfo transportInfo = networkCapabilities.getTransportInfo();
 
-        if (specifier instanceof TelephonyNetworkSpecifier) {
-            connectedDataSub = ((TelephonyNetworkSpecifier) specifier).getSubscriptionId();
-        } else if (transportInfo instanceof VcnTransportInfo) {
-            connectedDataSub = ((VcnTransportInfo) transportInfo).getSubId();
+        if (specifier instanceof TelephonyNetworkSpecifier telephonyNetworkSpecifier) {
+            connectedDataSub = telephonyNetworkSpecifier.getSubscriptionId();
+        } else if (transportInfo instanceof VcnTransportInfo vcnTransportInfo) {
+            connectedDataSub = vcnTransportInfo.getSubId();
         }
         return connectedDataSub;
     }
@@ -432,9 +429,8 @@ public class IwlanNetworkService extends NetworkService {
 
     public void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
         getIwlanNetworkServiceHandler()
-                .sendMessage(
-                        getIwlanNetworkServiceHandler()
-                                .obtainMessage(EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np));
+                .obtainMessage(EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np)
+                .sendToTarget();
     }
 
     void initCallback() {
@@ -500,20 +496,17 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     private static String eventToString(int event) {
-        switch (event) {
-            case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
-                return "CROSS_SIM_CALLING_ENABLE_EVENT";
-            case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
-                return "CROSS_SIM_CALLING_DISABLE_EVENT";
-            case EVENT_NETWORK_REGISTRATION_INFO_REQUEST:
-                return "EVENT_NETWORK_REGISTRATION_INFO_REQUEST";
-            case EVENT_CREATE_NETWORK_SERVICE_PROVIDER:
-                return "EVENT_CREATE_NETWORK_SERVICE_PROVIDER";
-            case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER:
-                return "EVENT_REMOVE_NETWORK_SERVICE_PROVIDER";
-            default:
-                return "Unknown(" + event + ")";
-        }
+        return switch (event) {
+            case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT ->
+                    "CROSS_SIM_CALLING_ENABLE_EVENT";
+            case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT ->
+                    "CROSS_SIM_CALLING_DISABLE_EVENT";
+            case EVENT_NETWORK_REGISTRATION_INFO_REQUEST ->
+                    "EVENT_NETWORK_REGISTRATION_INFO_REQUEST";
+            case EVENT_CREATE_NETWORK_SERVICE_PROVIDER -> "EVENT_CREATE_NETWORK_SERVICE_PROVIDER";
+            case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER -> "EVENT_REMOVE_NETWORK_SERVICE_PROVIDER";
+            default -> "Unknown(" + event + ")";
+        };
     }
 
     @Override

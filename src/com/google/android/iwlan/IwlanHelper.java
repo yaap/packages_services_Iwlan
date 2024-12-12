@@ -278,7 +278,7 @@ public class IwlanHelper {
         }
     }
 
-    static long elapsedRealtime() {
+    public static long elapsedRealtime() {
         /*Returns milliseconds since boot, including time spent in sleep.*/
         return SystemClock.elapsedRealtime();
     }

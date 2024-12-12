@@ -35,12 +35,6 @@
               <action android:name="android.telephony.NetworkService" />
           </intent-filter>
       </service>
-    <receiver android:name=".IwlanBroadcastReceiver"
-              android:exported="true">
-         <intent-filter>
-            <action android:name="android.telephony.action.CARRIER_SIGNAL_PCO_VALUE"/>
-         </intent-filter>
-    </receiver>
       <uses-library android:name="android.net.ipsec.ike" />
   </application>
 </manifest>

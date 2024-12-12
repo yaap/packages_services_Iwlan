@@ -204,19 +204,16 @@ abstract class EpdgSaProposal {
         return -1;
     }
 
-    /**
-     * Compares the priority of the transforms.
-     */
+    /** Compares the priority of the transforms. */
     protected int compareTransformPriority(Set<Integer> transformGroup, int item1, int item2) {
         return getIndexOf(transformGroup, item1) - getIndexOf(transformGroup, item2);
     }
 
     /**
-     * Compares the priority of the encryption/AEAD transforms.
-     * First value in pair is encryption/AEAD algorithm and
-     * second value in pair is key length of that algorithm.
-     * If Algorithms are same then compare the priotity of the key lengths else compare
-     * the priority of the algorithms.
+     * Compares the priority of the encryption/AEAD transforms. First value in pair is
+     * encryption/AEAD algorithm and second value in pair is key length of that algorithm. If
+     * Algorithms are same then compare the priotity of the key lengths else compare the priority of
+     * the algorithms.
      */
     protected int compareEncryptionTransformPriority(
             Set<Integer> algos,

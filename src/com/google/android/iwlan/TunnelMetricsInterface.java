@@ -18,23 +18,15 @@ package com.google.android.iwlan;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
-import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
-
 import java.net.InetAddress;
 import java.util.Objects;
 
 public interface TunnelMetricsInterface {
-    /** Called for logging the tunnel is opened. */
-    void onOpened(OnOpenedMetrics metricsData);
-    /** Called for logging the tunnel is closed or bring up failed. */
-    void onClosed(OnClosedMetrics metricsData);
-
     class TunnelMetricsData {
         private final String mApnName;
         private final String mEpdgServerAddress;
         private final int mEpdgServerSelectionDuration;
         private final int mIkeTunnelEstablishmentDuration;
-        private IwlanDataServiceProvider mIwlanDataServiceProvider;
         private final boolean mIsNetworkValidated;
 
         protected TunnelMetricsData(Builder builder) {
@@ -61,14 +53,6 @@ public interface TunnelMetricsInterface {
 
         public int getIkeTunnelEstablishmentDuration() {
             return mIkeTunnelEstablishmentDuration;
-        }
-
-        public IwlanDataServiceProvider getIwlanDataServiceProvider() {
-            return mIwlanDataServiceProvider;
-        }
-
-        public void setIwlanDataServiceProvider(IwlanDataServiceProvider dsp) {
-            mIwlanDataServiceProvider = dsp;
         }
 
         public boolean isNetworkValidated() {

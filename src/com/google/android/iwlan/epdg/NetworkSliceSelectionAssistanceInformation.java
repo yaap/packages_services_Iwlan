@@ -16,7 +16,7 @@ public class NetworkSliceSelectionAssistanceInformation {
         if (snssai == null) {
             return null;
         }
-        /**
+        /*
          * From 3GPP TS 24.501 Section 9.11.2.8, Content structure of the Value of S-NSSAI
          *
          * <p>Slice Service Type - 1 byte
@@ -75,7 +75,7 @@ public class NetworkSliceSelectionAssistanceInformation {
         if (offset < 0 || snssai.length < offset + 1) {
             return NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
         }
-        /**
+        /*
          * From 3GPP TS 23.003: Values 0 to 127 belong to the standardized SST range and they are
          * defined in 3GPP TS 23.501. Values 128 to 255 belong to the Operator-specific range
          */

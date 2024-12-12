@@ -43,3 +43,9 @@ flag {
     description: "Allow additional ePDG selections for emergency PDN"
     bug: "244670857"
 }
+flag {
+    name: "validate_underlying_network_on_no_response"
+    namespace: "iwlan_telephony"
+    description: "Trigger underlying network validation check upon no network response"
+    bug: "274863262"
+}

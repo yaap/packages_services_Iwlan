@@ -171,8 +171,8 @@ public class ErrorPolicyManager {
     /**
      * Returns ErrorPolicyManager instance for the subId
      *
-     * @param context
-     * @param slotId
+     * @param context the context to be used by the ErrorPolicyManager
+     * @param slotId the slot ID for which the ErrorPolicyManager instance is required
      */
     public static ErrorPolicyManager getInstance(@NonNull Context context, int slotId) {
         return mInstances.computeIfAbsent(slotId, k -> new ErrorPolicyManager(context, slotId));
@@ -183,9 +183,7 @@ public class ErrorPolicyManager {
         mInstances.clear();
     }
 
-    /**
-     * Release or reset the instance.
-     */
+    /** Release or reset the instance. */
     public void releaseInstance() {
         Log.d(LOG_TAG, "Release Instance with slotId: " + mSlotId);
         IwlanEventListener.getInstance(mContext, mSlotId).removeEventListener(mHandler);
@@ -283,33 +281,29 @@ public class ErrorPolicyManager {
     }
 
     private int getDataFailCause(IwlanError error) {
-        int ret;
         int errorType = error.getErrorType();
-        switch (errorType) {
-            case IwlanError.NO_ERROR -> ret = DataFailCause.NONE;
+        return switch (errorType) {
+            case IwlanError.NO_ERROR -> DataFailCause.NONE;
             case IwlanError.IKE_PROTOCOL_EXCEPTION ->
-                    ret = getDataFailCauseForIkeProtocolException(error.getException());
-            case IwlanError.IKE_INTERNAL_IO_EXCEPTION ->
-                    ret = DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
-            case IwlanError.IKE_GENERIC_EXCEPTION -> ret = DataFailCause.ERROR_UNSPECIFIED;
+                    getDataFailCauseForIkeProtocolException(error.getException());
+            case IwlanError.IKE_INTERNAL_IO_EXCEPTION -> DataFailCause.IWLAN_IKEV2_MSG_TIMEOUT;
+            case IwlanError.IKE_GENERIC_EXCEPTION -> DataFailCause.ERROR_UNSPECIFIED;
             case IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED ->
-                    ret = DataFailCause.IWLAN_DNS_RESOLUTION_NAME_FAILURE;
-            case IwlanError.TUNNEL_TRANSFORM_FAILED ->
-                    ret = DataFailCause.IWLAN_TUNNEL_TRANSFORM_FAILED;
-            case IwlanError.SIM_NOT_READY_EXCEPTION -> ret = DataFailCause.SIM_CARD_CHANGED;
+                    DataFailCause.IWLAN_DNS_RESOLUTION_NAME_FAILURE;
+            case IwlanError.TUNNEL_TRANSFORM_FAILED -> DataFailCause.IWLAN_TUNNEL_TRANSFORM_FAILED;
+            case IwlanError.SIM_NOT_READY_EXCEPTION -> DataFailCause.SIM_CARD_CHANGED;
             case IwlanError.IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED ->
-                    ret = DataFailCause.IWLAN_IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED;
+                    DataFailCause.IWLAN_IKE_SESSION_CLOSED_BEFORE_CHILD_SESSION_OPENED;
             case IwlanError.IKE_NETWORK_LOST_EXCEPTION ->
-                    ret = DataFailCause.IWLAN_IKE_NETWORK_LOST_EXCEPTION;
-            case IwlanError.TUNNEL_NOT_FOUND -> ret = DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
-            case IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED -> ret = DataFailCause.ONLY_IPV4_ALLOWED;
-            case IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED -> ret = DataFailCause.ONLY_IPV6_ALLOWED;
-            case IwlanError.IKE_INIT_TIMEOUT -> ret = DataFailCause.IWLAN_IKE_INIT_TIMEOUT;
-            case IwlanError.IKE_MOBILITY_TIMEOUT -> ret = DataFailCause.IWLAN_IKE_MOBILITY_TIMEOUT;
-            case IwlanError.IKE_DPD_TIMEOUT -> ret = DataFailCause.IWLAN_IKE_DPD_TIMEOUT;
-            default -> ret = DataFailCause.ERROR_UNSPECIFIED;
-        }
-        return ret;
+                    DataFailCause.IWLAN_IKE_NETWORK_LOST_EXCEPTION;
+            case IwlanError.TUNNEL_NOT_FOUND -> DataFailCause.IWLAN_TUNNEL_NOT_FOUND;
+            case IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED -> DataFailCause.ONLY_IPV4_ALLOWED;
+            case IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED -> DataFailCause.ONLY_IPV6_ALLOWED;
+            case IwlanError.IKE_INIT_TIMEOUT -> DataFailCause.IWLAN_IKE_INIT_TIMEOUT;
+            case IwlanError.IKE_MOBILITY_TIMEOUT -> DataFailCause.IWLAN_IKE_MOBILITY_TIMEOUT;
+            case IwlanError.IKE_DPD_TIMEOUT -> DataFailCause.IWLAN_IKE_DPD_TIMEOUT;
+            default -> DataFailCause.ERROR_UNSPECIFIED;
+        };
     }
 
     // TODO: create DFC for all IkeProtocolExceptions and assign here.
@@ -319,48 +313,40 @@ public class ErrorPolicyManager {
         }
 
         int protocolErrorType = ikeProtocolException.getErrorType();
-        switch (protocolErrorType) {
-            case IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED:
-                return DataFailCause.IWLAN_IKEV2_AUTH_FAILURE;
-            case IkeProtocolException.ERROR_TYPE_INTERNAL_ADDRESS_FAILURE:
-                return DataFailCause.IWLAN_EPDG_INTERNAL_ADDRESS_FAILURE;
-            case IKE_PROTOCOL_ERROR_PDN_CONNECTION_REJECTION:
-                return DataFailCause.IWLAN_PDN_CONNECTION_REJECTION;
-            case IKE_PROTOCOL_ERROR_MAX_CONNECTION_REACHED:
-                return DataFailCause.IWLAN_MAX_CONNECTION_REACHED;
-            case IKE_PROTOCOL_ERROR_SEMANTIC_ERROR_IN_THE_TFT_OPERATION:
-                return DataFailCause.IWLAN_SEMANTIC_ERROR_IN_THE_TFT_OPERATION;
-            case IKE_PROTOCOL_ERROR_SYNTACTICAL_ERROR_IN_THE_TFT_OPERATION:
-                return DataFailCause.IWLAN_SYNTACTICAL_ERROR_IN_THE_TFT_OPERATION;
-            case IKE_PROTOCOL_ERROR_SEMANTIC_ERRORS_IN_PACKET_FILTERS:
-                return DataFailCause.IWLAN_SEMANTIC_ERRORS_IN_PACKET_FILTERS;
-            case IKE_PROTOCOL_ERROR_SYNTACTICAL_ERRORS_IN_PACKET_FILTERS:
-                return DataFailCause.IWLAN_SYNTACTICAL_ERRORS_IN_PACKET_FILTERS;
-            case IKE_PROTOCOL_ERROR_NON_3GPP_ACCESS_TO_EPC_NOT_ALLOWED:
-                return DataFailCause.IWLAN_NON_3GPP_ACCESS_TO_EPC_NOT_ALLOWED;
-            case IKE_PROTOCOL_ERROR_USER_UNKNOWN:
-                return DataFailCause.IWLAN_USER_UNKNOWN;
-            case IKE_PROTOCOL_ERROR_NO_APN_SUBSCRIPTION:
-                return DataFailCause.IWLAN_NO_APN_SUBSCRIPTION;
-            case IKE_PROTOCOL_ERROR_AUTHORIZATION_REJECTED:
-                return DataFailCause.IWLAN_AUTHORIZATION_REJECTED;
-            case IKE_PROTOCOL_ERROR_ILLEGAL_ME:
-                return DataFailCause.IWLAN_ILLEGAL_ME;
-            case IKE_PROTOCOL_ERROR_NETWORK_FAILURE:
-                return DataFailCause.IWLAN_NETWORK_FAILURE;
-            case IKE_PROTOCOL_ERROR_RAT_TYPE_NOT_ALLOWED:
-                return DataFailCause.IWLAN_RAT_TYPE_NOT_ALLOWED;
-            case IKE_PROTOCOL_ERROR_IMEI_NOT_ACCEPTED:
-                return DataFailCause.IWLAN_IMEI_NOT_ACCEPTED;
-            case IKE_PROTOCOL_ERROR_PLMN_NOT_ALLOWED:
-                return DataFailCause.IWLAN_PLMN_NOT_ALLOWED;
-            case IKE_PROTOCOL_ERROR_UNAUTHENTICATED_EMERGENCY_NOT_SUPPORTED:
-                return DataFailCause.IWLAN_UNAUTHENTICATED_EMERGENCY_NOT_SUPPORTED;
-            case IKE_PROTOCOL_ERROR_CONGESTION:
-                return DataFailCause.IWLAN_CONGESTION;
-            default:
-                return DataFailCause.IWLAN_IKE_PRIVATE_PROTOCOL_ERROR;
-        }
+        return switch (protocolErrorType) {
+            case IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED ->
+                    DataFailCause.IWLAN_IKEV2_AUTH_FAILURE;
+            case IkeProtocolException.ERROR_TYPE_INTERNAL_ADDRESS_FAILURE ->
+                    DataFailCause.IWLAN_EPDG_INTERNAL_ADDRESS_FAILURE;
+            case IKE_PROTOCOL_ERROR_PDN_CONNECTION_REJECTION ->
+                    DataFailCause.IWLAN_PDN_CONNECTION_REJECTION;
+            case IKE_PROTOCOL_ERROR_MAX_CONNECTION_REACHED ->
+                    DataFailCause.IWLAN_MAX_CONNECTION_REACHED;
+            case IKE_PROTOCOL_ERROR_SEMANTIC_ERROR_IN_THE_TFT_OPERATION ->
+                    DataFailCause.IWLAN_SEMANTIC_ERROR_IN_THE_TFT_OPERATION;
+            case IKE_PROTOCOL_ERROR_SYNTACTICAL_ERROR_IN_THE_TFT_OPERATION ->
+                    DataFailCause.IWLAN_SYNTACTICAL_ERROR_IN_THE_TFT_OPERATION;
+            case IKE_PROTOCOL_ERROR_SEMANTIC_ERRORS_IN_PACKET_FILTERS ->
+                    DataFailCause.IWLAN_SEMANTIC_ERRORS_IN_PACKET_FILTERS;
+            case IKE_PROTOCOL_ERROR_SYNTACTICAL_ERRORS_IN_PACKET_FILTERS ->
+                    DataFailCause.IWLAN_SYNTACTICAL_ERRORS_IN_PACKET_FILTERS;
+            case IKE_PROTOCOL_ERROR_NON_3GPP_ACCESS_TO_EPC_NOT_ALLOWED ->
+                    DataFailCause.IWLAN_NON_3GPP_ACCESS_TO_EPC_NOT_ALLOWED;
+            case IKE_PROTOCOL_ERROR_USER_UNKNOWN -> DataFailCause.IWLAN_USER_UNKNOWN;
+            case IKE_PROTOCOL_ERROR_NO_APN_SUBSCRIPTION -> DataFailCause.IWLAN_NO_APN_SUBSCRIPTION;
+            case IKE_PROTOCOL_ERROR_AUTHORIZATION_REJECTED ->
+                    DataFailCause.IWLAN_AUTHORIZATION_REJECTED;
+            case IKE_PROTOCOL_ERROR_ILLEGAL_ME -> DataFailCause.IWLAN_ILLEGAL_ME;
+            case IKE_PROTOCOL_ERROR_NETWORK_FAILURE -> DataFailCause.IWLAN_NETWORK_FAILURE;
+            case IKE_PROTOCOL_ERROR_RAT_TYPE_NOT_ALLOWED ->
+                    DataFailCause.IWLAN_RAT_TYPE_NOT_ALLOWED;
+            case IKE_PROTOCOL_ERROR_IMEI_NOT_ACCEPTED -> DataFailCause.IWLAN_IMEI_NOT_ACCEPTED;
+            case IKE_PROTOCOL_ERROR_PLMN_NOT_ALLOWED -> DataFailCause.IWLAN_PLMN_NOT_ALLOWED;
+            case IKE_PROTOCOL_ERROR_UNAUTHENTICATED_EMERGENCY_NOT_SUPPORTED ->
+                    DataFailCause.IWLAN_UNAUTHENTICATED_EMERGENCY_NOT_SUPPORTED;
+            case IKE_PROTOCOL_ERROR_CONGESTION -> DataFailCause.IWLAN_CONGESTION;
+            default -> DataFailCause.IWLAN_IKE_PRIVATE_PROTOCOL_ERROR;
+        };
     }
 
     public synchronized int getMostRecentDataFailCause() {
@@ -679,18 +665,15 @@ public class ErrorPolicyManager {
     private List<String> parseErrorDetails(int errorType, JSONArray errorDetailArray)
             throws JSONException, IllegalArgumentException {
         List<String> ret = new ArrayList<>();
-        boolean isValidErrorDetail = true;
 
         for (int i = 0; i < errorDetailArray.length(); i++) {
             String errorDetail = errorDetailArray.getString(i).trim();
-            switch (errorType) {
-                case IKE_PROTOCOL_ERROR_TYPE:
-                    isValidErrorDetail = verifyIkeProtocolErrorDetail(errorDetail);
-                    break;
-                case GENERIC_ERROR_TYPE:
-                    isValidErrorDetail = verifyGenericErrorDetail(errorDetail);
-                    break;
-            }
+            boolean isValidErrorDetail =
+                    switch (errorType) {
+                        case IKE_PROTOCOL_ERROR_TYPE -> verifyIkeProtocolErrorDetail(errorDetail);
+                        case GENERIC_ERROR_TYPE -> verifyGenericErrorDetail(errorDetail);
+                        default -> true;
+                    };
             if (!isValidErrorDetail) {
                 throw new IllegalArgumentException(
                         "Invalid ErrorDetail: " + errorDetail + " for ErrorType: " + errorType);
@@ -737,19 +720,12 @@ public class ErrorPolicyManager {
     }
 
     private @ErrorPolicyErrorType int getErrorPolicyErrorType(String errorType) {
-        int ret = UNKNOWN_ERROR_TYPE;
-        switch (errorType) {
-            case "IKE_PROTOCOL_ERROR_TYPE":
-                ret = IKE_PROTOCOL_ERROR_TYPE;
-                break;
-            case "GENERIC_ERROR_TYPE":
-                ret = GENERIC_ERROR_TYPE;
-                break;
-            case "*":
-                ret = FALLBACK_ERROR_TYPE;
-                break;
-        }
-        return ret;
+        return switch (errorType) {
+            case "IKE_PROTOCOL_ERROR_TYPE" -> IKE_PROTOCOL_ERROR_TYPE;
+            case "GENERIC_ERROR_TYPE" -> GENERIC_ERROR_TYPE;
+            case "*" -> FALLBACK_ERROR_TYPE;
+            default -> UNKNOWN_ERROR_TYPE;
+        };
     }
 
     private synchronized Set<Integer> getAllUnthrottlingEvents() {
@@ -991,38 +967,20 @@ public class ErrorPolicyManager {
         }
 
         String getGenericErrorDetailString(IwlanError iwlanError) {
-            String ret = "UNKNOWN";
-            switch (iwlanError.getErrorType()) {
-                case IwlanError.IKE_INTERNAL_IO_EXCEPTION:
-                    ret = "IO_EXCEPTION";
-                    break;
-                case IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED:
-                    ret = "SERVER_SELECTION_FAILED";
-                    break;
-                case IwlanError.TUNNEL_TRANSFORM_FAILED:
-                    ret = "TUNNEL_TRANSFORM_FAILED";
-                    break;
-                case IwlanError.IKE_NETWORK_LOST_EXCEPTION:
-                    ret = "IKE_NETWORK_LOST_EXCEPTION";
-                    break;
-                case IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED:
-                    ret = "EPDG_ADDRESS_ONLY_IPV4_ALLOWED";
-                    break;
-                case IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED:
-                    ret = "EPDG_ADDRESS_ONLY_IPV6_ALLOWED";
-                    break;
-                    // TODO: Add TIMEOUT_EXCEPTION processing
-                case IwlanError.IKE_INIT_TIMEOUT:
-                    ret = "IKE_INIT_TIMEOUT";
-                    break;
-                case IwlanError.IKE_MOBILITY_TIMEOUT:
-                    ret = "IKE_MOBILITY_TIMEOUT";
-                    break;
-                case IwlanError.IKE_DPD_TIMEOUT:
-                    ret = "IKE_DPD_TIMEOUT";
-                    break;
-            }
-            return ret;
+            return switch (iwlanError.getErrorType()) {
+                case IwlanError.IKE_INTERNAL_IO_EXCEPTION -> "IO_EXCEPTION";
+                case IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED -> "SERVER_SELECTION_FAILED";
+                case IwlanError.TUNNEL_TRANSFORM_FAILED -> "TUNNEL_TRANSFORM_FAILED";
+                case IwlanError.IKE_NETWORK_LOST_EXCEPTION -> "IKE_NETWORK_LOST_EXCEPTION";
+                case IwlanError.EPDG_ADDRESS_ONLY_IPV4_ALLOWED -> "EPDG_ADDRESS_ONLY_IPV4_ALLOWED";
+                case IwlanError.EPDG_ADDRESS_ONLY_IPV6_ALLOWED -> "EPDG_ADDRESS_ONLY_IPV6_ALLOWED";
+                // TODO: Add TIMEOUT_EXCEPTION processing
+                // TODO: Add all the missing error detail string
+                case IwlanError.IKE_INIT_TIMEOUT -> "IKE_INIT_TIMEOUT";
+                case IwlanError.IKE_MOBILITY_TIMEOUT -> "IKE_MOBILITY_TIMEOUT";
+                case IwlanError.IKE_DPD_TIMEOUT -> "IKE_DPD_TIMEOUT";
+                default -> "UNKNOWN";
+            };
         }
     }
 
@@ -1049,10 +1007,13 @@ public class ErrorPolicyManager {
     }
 
     /** RetryAction with retry time defined by retry index and error policy */
-    @AutoValue
-    abstract static class PolicyDerivedRetryAction implements RetryAction {
-        abstract int currentRetryIndex();
-
+    record PolicyDerivedRetryAction(
+            @Override IwlanError error,
+            @Override ErrorPolicy errorPolicy,
+            @Override long lastErrorTime,
+            @Override int errorCountOfSameCause,
+            int currentRetryIndex)
+            implements RetryAction {
         @Override
         public long totalRetryTimeMs() {
             return TimeUnit.SECONDS.toMillis(errorPolicy().getRetryTime(currentRetryIndex()));
@@ -1074,27 +1035,16 @@ public class ErrorPolicyManager {
             return errorPolicy.getErrorType() == IKE_PROTOCOL_ERROR_TYPE
                     && currentRetryIndex() + 1 >= errorPolicy.getHandoverAttemptCount();
         }
-
-        /** Create a new PolicyDerivedRetryAction */
-        static PolicyDerivedRetryAction create(
-                IwlanError error,
-                ErrorPolicy errorPolicy,
-                int errorCountOfSameCause,
-                int currentRetryIndex) {
-            return new AutoValue_ErrorPolicyManager_PolicyDerivedRetryAction(
-                    error,
-                    errorPolicy,
-                    IwlanHelper.elapsedRealtime(),
-                    errorCountOfSameCause,
-                    currentRetryIndex);
-        }
     }
 
     /** RetryAction with retry time defined by backoff time in tunnel config */
-    @AutoValue
-    abstract static class IkeBackoffNotifyRetryAction implements RetryAction {
-        abstract long backoffTime();
-
+    record IkeBackoffNotifyRetryAction(
+            @Override IwlanError error,
+            @Override ErrorPolicy errorPolicy,
+            @Override long lastErrorTime,
+            @Override int errorCountOfSameCause,
+            long backoffTime)
+            implements RetryAction {
         @Override
         public long totalRetryTimeMs() {
             return TimeUnit.SECONDS.toMillis(backoffTime());
@@ -1112,19 +1062,6 @@ public class ErrorPolicyManager {
             ErrorPolicy errorPolicy = errorPolicy();
             return errorPolicy.getErrorType() == IKE_PROTOCOL_ERROR_TYPE
                     && errorPolicy.getHandoverAttemptCount() == 0;
-        }
-
-        static IkeBackoffNotifyRetryAction create(
-                IwlanError error,
-                ErrorPolicy errorPolicy,
-                int errorCountOfSameCause,
-                long backoffTime) {
-            return new AutoValue_ErrorPolicyManager_IkeBackoffNotifyRetryAction(
-                    error,
-                    errorPolicy,
-                    IwlanHelper.elapsedRealtime(),
-                    errorCountOfSameCause,
-                    backoffTime);
         }
     }
 
@@ -1224,8 +1161,12 @@ public class ErrorPolicyManager {
 
             ErrorPolicy policy = findErrorPolicy(mApn, iwlanError);
             PolicyDerivedRetryAction newRetryAction =
-                    PolicyDerivedRetryAction.create(
-                            iwlanError, policy, newErrorCount, newRetryIndex);
+                    new PolicyDerivedRetryAction(
+                            iwlanError,
+                            policy,
+                            IwlanHelper.elapsedRealtime(),
+                            newErrorCount,
+                            newRetryIndex);
             mLastRetryActionByCause.put(errorCause, newRetryAction);
             mLastRetryAction = newRetryAction;
 
@@ -1242,8 +1183,12 @@ public class ErrorPolicyManager {
             // For configured back off time case, simply create new RetryAction, nothing need to
             // keep
             IkeBackoffNotifyRetryAction newRetryAction =
-                    IkeBackoffNotifyRetryAction.create(
-                            iwlanError, policy, newErrorCount, backoffTime);
+                    new IkeBackoffNotifyRetryAction(
+                            iwlanError,
+                            policy,
+                            IwlanHelper.elapsedRealtime(),
+                            newErrorCount,
+                            backoffTime);
             mLastRetryActionByCause.put(errorCause, newRetryAction);
             mLastRetryAction = newRetryAction;
 

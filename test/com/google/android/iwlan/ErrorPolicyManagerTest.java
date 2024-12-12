@@ -27,7 +27,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -775,7 +774,7 @@ public class ErrorPolicyManagerTest {
                 .obtainMessage(IwlanEventListener.WIFI_DISABLE_EVENT)
                 .sendToTarget();
         advanceClockByTimeMs(500);
-        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
+        verify(mMockDataServiceProvider).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
@@ -830,7 +829,7 @@ public class ErrorPolicyManagerTest {
                 .obtainMessage(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT)
                 .sendToTarget();
         advanceClockByTimeMs(500);
-        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
+        verify(mMockDataServiceProvider).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
@@ -885,7 +884,7 @@ public class ErrorPolicyManagerTest {
                 .obtainMessage(IwlanEventListener.APM_ENABLE_EVENT)
                 .sendToTarget();
         advanceClockByTimeMs(500);
-        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
+        verify(mMockDataServiceProvider).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
@@ -943,7 +942,7 @@ public class ErrorPolicyManagerTest {
                 .obtainMessage(IwlanEventListener.WIFI_AP_CHANGED_EVENT)
                 .sendToTarget();
         advanceClockByTimeMs(500);
-        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
+        verify(mMockDataServiceProvider).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
@@ -1052,9 +1051,9 @@ public class ErrorPolicyManagerTest {
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = buildIwlanIkeAuthFailedError();
-        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError, 2);
+        mErrorPolicyManager.reportIwlanError(apn, iwlanError, 2);
 
-        time = Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn) / 1000);
+        long time = Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn) / 1000);
         assertEquals(time, 2);
 
         // advanceClockByTimeMs for 2 seconds and make sure that we can bring up tunnel after 2 secs
@@ -1070,7 +1069,7 @@ public class ErrorPolicyManagerTest {
         bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertFalse(bringUpTunnel);
 
-        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError, 5);
+        mErrorPolicyManager.reportIwlanError(apn, iwlanError, 5);
         time = Math.round((double) mErrorPolicyManager.getRemainingRetryTimeMs(apn) / 1000);
         assertEquals(time, 5);
 

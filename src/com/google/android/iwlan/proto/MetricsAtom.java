@@ -27,6 +27,21 @@ public class MetricsAtom {
     public static int INVALID_MESSAGE_ID = -1;
     private static final String TAG = "IwlanMetrics";
 
+    public static final int NETWORK_VALIDATION_TRANSPORT_TYPE_UNSPECIFIED = 0;
+    public static final int NETWORK_VALIDATION_TRANSPORT_TYPE_CELLULAR = 1;
+    public static final int NETWORK_VALIDATION_TRANSPORT_TYPE_WIFI = 2;
+
+    public static final int NETWORK_VALIDATION_EVENT_UNSPECIFIED = 0;
+    public static final int NETWORK_VALIDATION_EVENT_MAKING_CALL = 1;
+    public static final int NETWORK_VALIDATION_EVENT_SCREEN_ON = 2;
+    public static final int NETWORK_VALIDATION_EVENT_NO_RESPONSE = 3;
+
+    public static final int NETWORK_VALIDATION_RESULT_UNSPECIFIED = 0;
+    public static final int NETWORK_VALIDATION_RESULT_INVALID = 1;
+    public static final int NETWORK_VALIDATION_RESULT_VALID = 2;
+    public static final int NETWORK_VALIDATION_RESULT_PARTIALLY_VALID = 3;
+    public static final int NETWORK_VALIDATION_RESULT_SKIPPED = 4;
+
     private int mMessageId;
     private int mApnType;
     private boolean mIsHandover;
@@ -49,9 +64,18 @@ public class MetricsAtom {
     private String mIwlanErrorWrappedStackFirstFrame;
     private int mErrorCountOfSameCause;
     private boolean mIsNetworkValidated;
+    private int mTriggerReason;
+    private int mValidationResult;
+    private int mValidationTransportType;
+    private int mValidationDurationMills;
+    private long mValidationStartTimeMills;
 
     public void setMessageId(int messageId) {
         this.mMessageId = messageId;
+    }
+
+    public int getMessageId() {
+        return mMessageId;
     }
 
     public void setApnType(int apnType) {
@@ -164,6 +188,46 @@ public class MetricsAtom {
         mIsNetworkValidated = isNetworkValidated;
     }
 
+    public void setTriggerReason(int reason) {
+        mTriggerReason = reason;
+    }
+
+    public int getTriggerReason() {
+        return mTriggerReason;
+    }
+
+    public void setValidationResult(int validationResult) {
+        mValidationResult = validationResult;
+    }
+
+    public int getValidationResult() {
+        return mValidationResult;
+    }
+
+    public void setValidationTransportType(int transportType) {
+        mValidationTransportType = transportType;
+    }
+
+    public int getValidationTransportType() {
+        return mValidationTransportType;
+    }
+
+    public void setValidationDurationMills(int validationDurationMills) {
+        mValidationDurationMills = validationDurationMills;
+    }
+
+    public int getValidationDurationMills() {
+        return mValidationDurationMills;
+    }
+
+    public void setValidationStartTimeMills(long validationStartTimeMills) {
+        mValidationStartTimeMills = validationStartTimeMills;
+    }
+
+    public long getValidationStartTimeMills() {
+        return mValidationStartTimeMills;
+    }
+
     public void sendMetricsData() {
         if (mMessageId == IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED) {
             Log.d(TAG, "Send metrics data IWLAN_SETUP_DATA_CALL_RESULT_REPORTED");
@@ -197,6 +261,15 @@ public class MetricsAtom {
                     mIsNetworkConnected,
                     mTransportType,
                     mWifiSignalValue);
+        } else if (mMessageId
+                == IwlanStatsLog.IWLAN_UNDERLYING_NETWORK_VALIDATION_RESULT_REPORTED) {
+            Log.d(TAG, "Send metrics data IWLAN_UNDERLYING_NETWORK_VALIDATION_RESULT_REPORTED");
+            IwlanStatsLog.write(
+                    mMessageId,
+                    mTriggerReason,
+                    mValidationResult,
+                    mValidationTransportType,
+                    mValidationDurationMills);
         } else {
             Log.d("IwlanMetrics", "Invalid Message ID: " + mMessageId);
         }

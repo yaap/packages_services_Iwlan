@@ -51,7 +51,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanEventListener {
 
-    private final FeatureFlags mFeatureFlags;
     public static final int UNKNOWN_EVENT = -1;
 
     /** On {@link IwlanCarrierConfigChangeListener#onCarrierConfigChanged} is called. */
@@ -62,6 +61,7 @@ public class IwlanEventListener {
 
     /** Airplane mode turned off or disabled. */
     public static final int APM_DISABLE_EVENT = 3;
+
     /** Airplane mode turned on or enabled */
     public static final int APM_ENABLE_EVENT = 4;
 
@@ -95,6 +95,8 @@ public class IwlanEventListener {
     /** On Preferred Network Type changed */
     public static final int PREFERRED_NETWORK_TYPE_CHANGED_EVENT = 13;
 
+    public static final int SCREEN_ON_EVENT = 14;
+
     /* Events used and handled by IwlanDataService internally */
     public static final int DATA_SERVICE_INTERNAL_EVENT_BASE = 100;
 
@@ -115,6 +117,7 @@ public class IwlanEventListener {
         CELLINFO_CHANGED_EVENT,
         CALL_STATE_CHANGED_EVENT,
         PREFERRED_NETWORK_TYPE_CHANGED_EVENT,
+        SCREEN_ON_EVENT,
     })
     @interface IwlanEventType {}
 
@@ -198,9 +201,7 @@ public class IwlanEventListener {
         }
     }
 
-    /**
-     * Returns IwlanEventListener instance
-     */
+    /** Returns IwlanEventListener instance */
     public static IwlanEventListener getInstance(@NonNull Context context, int slotId) {
         return mInstances.computeIfAbsent(
                 slotId, k -> new IwlanEventListener(context, slotId, new FeatureFlagsImpl()));
@@ -303,6 +304,9 @@ public class IwlanEventListener {
                     }
                 }
                 break;
+            case Intent.ACTION_SCREEN_ON:
+                mInstances.values().forEach(instance -> instance.updateHandlers(SCREEN_ON_EVENT));
+                break;
         }
     }
 
@@ -355,46 +359,21 @@ public class IwlanEventListener {
      * @param event String form of the event.
      */
     public static int getUnthrottlingEvent(String event) {
-        int ret = UNKNOWN_EVENT;
-        switch (event) {
-            case "CARRIER_CONFIG_CHANGED_EVENT":
-                ret = CARRIER_CONFIG_CHANGED_EVENT;
-                break;
-            case "WIFI_DISABLE_EVENT":
-                ret = WIFI_DISABLE_EVENT;
-                break;
-            case "APM_DISABLE_EVENT":
-                ret = APM_DISABLE_EVENT;
-                break;
-            case "APM_ENABLE_EVENT":
-                ret = APM_ENABLE_EVENT;
-                break;
-            case "WIFI_AP_CHANGED_EVENT":
-                ret = WIFI_AP_CHANGED_EVENT;
-                break;
-            case "WIFI_CALLING_ENABLE_EVENT":
-                ret = WIFI_CALLING_ENABLE_EVENT;
-                break;
-            case "WIFI_CALLING_DISABLE_EVENT":
-                ret = WIFI_CALLING_DISABLE_EVENT;
-                break;
-            case "CROSS_SIM_CALLING_ENABLE_EVENT":
-                ret = CROSS_SIM_CALLING_ENABLE_EVENT;
-                break;
-            case "CROSS_SIM_CALLING_DISABLE_EVENT":
-                ret = CROSS_SIM_CALLING_DISABLE_EVENT;
-                break;
-            case "CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT":
-                ret = CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT;
-                break;
-            case "CELLINFO_CHANGED_EVENT":
-                ret = CELLINFO_CHANGED_EVENT;
-                break;
-            case "PREFERRED_NETWORK_TYPE_CHANGED_EVENT":
-                ret = PREFERRED_NETWORK_TYPE_CHANGED_EVENT;
-                break;
-        }
-        return ret;
+        return switch (event) {
+            case "CARRIER_CONFIG_CHANGED_EVENT" -> CARRIER_CONFIG_CHANGED_EVENT;
+            case "WIFI_DISABLE_EVENT" -> WIFI_DISABLE_EVENT;
+            case "APM_DISABLE_EVENT" -> APM_DISABLE_EVENT;
+            case "APM_ENABLE_EVENT" -> APM_ENABLE_EVENT;
+            case "WIFI_AP_CHANGED_EVENT" -> WIFI_AP_CHANGED_EVENT;
+            case "WIFI_CALLING_ENABLE_EVENT" -> WIFI_CALLING_ENABLE_EVENT;
+            case "WIFI_CALLING_DISABLE_EVENT" -> WIFI_CALLING_DISABLE_EVENT;
+            case "CROSS_SIM_CALLING_ENABLE_EVENT" -> CROSS_SIM_CALLING_ENABLE_EVENT;
+            case "CROSS_SIM_CALLING_DISABLE_EVENT" -> CROSS_SIM_CALLING_DISABLE_EVENT;
+            case "CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT" -> CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT;
+            case "CELLINFO_CHANGED_EVENT" -> CELLINFO_CHANGED_EVENT;
+            case "PREFERRED_NETWORK_TYPE_CHANGED_EVENT" -> PREFERRED_NETWORK_TYPE_CHANGED_EVENT;
+            default -> UNKNOWN_EVENT;
+        };
     }
 
     IwlanEventListener(Context context, int slotId, FeatureFlags featureFlags) {
@@ -402,8 +381,6 @@ public class IwlanEventListener {
         mSlotId = slotId;
         mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         SUB_TAG = IwlanEventListener.class.getSimpleName() + "[" + slotId + "]";
-        sIsAirplaneModeOn = null;
-        mFeatureFlags = featureFlags;
     }
 
     private void onCarrierConfigChanged(int subId, int carrierId) {
@@ -574,15 +551,11 @@ public class IwlanEventListener {
     }
 
     private String callStateToString(int state) {
-        switch (state) {
-            case TelephonyManager.CALL_STATE_IDLE:
-                return "CALL_STATE_IDLE";
-            case TelephonyManager.CALL_STATE_RINGING:
-                return "CALL_STATE_RINGING";
-            case TelephonyManager.CALL_STATE_OFFHOOK:
-                return "CALL_STATE_OFFHOOK";
-            default:
-                return "Unknown Call State (" + state + ")";
-        }
+        return switch (state) {
+            case TelephonyManager.CALL_STATE_IDLE -> "CALL_STATE_IDLE";
+            case TelephonyManager.CALL_STATE_RINGING -> "CALL_STATE_RINGING";
+            case TelephonyManager.CALL_STATE_OFFHOOK -> "CALL_STATE_OFFHOOK";
+            default -> "Unknown Call State (" + state + ")";
+        };
     }
 }

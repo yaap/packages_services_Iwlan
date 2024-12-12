@@ -121,16 +121,11 @@ final class NaptrDnsResolver {
 
             @NaptrRecordType
             public int getTypeFromFlagString() {
-                switch (flag) {
-                    case "S":
-                    case "s":
-                        return TYPE_SRV;
-                    case "A":
-                    case "a":
-                        return TYPE_A;
-                    default:
-                        throw new ParseException("Unsupported flag type: " + flag);
-                }
+                return switch (flag) {
+                    case "S", "s" -> TYPE_SRV;
+                    case "A", "a" -> TYPE_A;
+                    default -> throw new ParseException("Unsupported flag type: " + flag);
+                };
             }
 
             NaptrRecord(byte[] naptrRecordData) throws ParseException {

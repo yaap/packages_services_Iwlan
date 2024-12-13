@@ -336,4 +336,32 @@ public class IwlanCarrierConfigTest {
     public void testGetDefaultConfig_KeyNotFound() {
         IwlanCarrierConfig.getDefaultConfigInt(KEY_NON_EXISTING);
     }
+
+    @Test
+    public void testGetConfig_invalidSubId() {
+        String configKey = "KeyInvalidSubId";
+
+        when(mMockSubscriptionInfo.getSubscriptionId())
+                .thenReturn(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+        mBundleForSub.putInt(configKey, VALUE_CONFIG_IN_SUB_INT);
+        mBundleForDefault.putInt(configKey, VALUE_CONFIG_IN_DEFAULT_INT);
+
+        int result = IwlanCarrierConfig.getConfigInt(mMockContext, DEFAULT_SLOT_ID, configKey);
+
+        assertEquals(VALUE_CONFIG_IN_DEFAULT_INT, result);
+    }
+
+    @Test
+    public void testGetConfig_illegalStateException() {
+        String configKey = "KeyException";
+
+        when(mMockCarrierConfigManager.getConfigForSubId(DEFAULT_SUB_ID, configKey))
+                .thenThrow(new IllegalStateException());
+        mBundleForSub.putInt(configKey, VALUE_CONFIG_IN_SUB_INT);
+        mBundleForDefault.putInt(configKey, VALUE_CONFIG_IN_DEFAULT_INT);
+
+        int result = IwlanCarrierConfig.getConfigInt(mMockContext, DEFAULT_SLOT_ID, configKey);
+
+        assertEquals(VALUE_CONFIG_IN_DEFAULT_INT, result);
+    }
 }

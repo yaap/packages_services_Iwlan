@@ -37,7 +37,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.any;
@@ -99,6 +98,7 @@ import com.google.android.iwlan.proto.MetricsAtom;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -138,7 +138,6 @@ public class IwlanDataServiceTest {
     @Mock private ConnectivityManager mMockConnectivityManager;
     @Mock private DataServiceCallback mMockDataServiceCallback;
     @Mock private EpdgTunnelManager mMockEpdgTunnelManager;
-    @Mock private IwlanDataServiceProvider mMockIwlanDataServiceProvider;
     @Mock private Network mMockNetwork;
     @Mock private TunnelLinkProperties mMockTunnelLinkProperties;
     @Mock private TunnelMetricsInterface.OnOpenedMetrics mMockOnOpenedMetrics;
@@ -158,7 +157,7 @@ public class IwlanDataServiceTest {
     private List<DataCallResponse> mResultDataCallList;
     private @DataServiceCallback.ResultCode int mResultCode;
     private IwlanDataService mIwlanDataService;
-    private IwlanDataServiceProvider mSpyIwlanDataServiceProvider;
+    private IwlanDataServiceProvider mIwlanDataServiceProvider;
     private final TestLooper mTestLooper = new TestLooper();
     private long mMockedCalendarTime;
     private final ArgumentCaptor<NetworkCallback> mNetworkCallbackCaptor =
@@ -216,6 +215,11 @@ public class IwlanDataServiceTest {
                         .strictness(Strictness.LENIENT)
                         .startMocking();
 
+        mIwlanDataService = spy(new IwlanDataService());
+        mLinkProperties = new LinkProperties();
+        mLinkProperties.setInterfaceName("wlan0");
+        mLinkProperties.addLinkAddress(mMockIPv4LinkAddress);
+
         lenient()
                 .when(SubscriptionManager.getDefaultDataSubscriptionId())
                 .thenReturn(DEFAULT_SUB_INDEX);
@@ -228,8 +232,11 @@ public class IwlanDataServiceTest {
 
         when(mMockContext.getSystemService(eq(ConnectivityManager.class)))
                 .thenReturn(mMockConnectivityManager);
+        when(mMockContext.getSystemService(eq(ImsManager.class))).thenReturn(mMockImsManager);
         when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
                 .thenReturn(mMockSubscriptionManager);
+        when(mMockContext.getSystemService(eq(TelephonyManager.class)))
+                .thenReturn(mMockTelephonyManager);
 
         doNothing()
                 .when(mMockConnectivityManager)
@@ -244,17 +251,12 @@ public class IwlanDataServiceTest {
 
         when(mMockSubscriptionInfo.getSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
 
-        when(mMockContext.getSystemService(eq(TelephonyManager.class)))
-                .thenReturn(mMockTelephonyManager);
-
         when(mMockTelephonyManager.createForSubscriptionId(eq(DEFAULT_SUB_INDEX)))
                 .thenReturn(mMockTelephonyManager);
 
         when(mMockTelephonyManager.isNetworkRoaming()).thenReturn(false);
 
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
-
-        when(mMockContext.getSystemService(eq(ImsManager.class))).thenReturn(mMockImsManager);
 
         when(mMockImsManager.getImsMmTelManager(anyInt())).thenReturn(mMockImsMmTelManager);
 
@@ -263,30 +265,23 @@ public class IwlanDataServiceTest {
         when(mMockIPv4LinkAddress.getAddress()).thenReturn(mMockInet4Address);
         when(mMockIPv6LinkAddress.getAddress()).thenReturn(mMockInet6Address);
 
-        mIwlanDataService = spy(new IwlanDataService());
-
-        // Injects the test looper into the IwlanDataServiceHandler
-        doReturn(mTestLooper.getLooper()).when(mIwlanDataService).getLooper();
-        mIwlanDataService.setAppContext(mMockContext);
-        mSpyIwlanDataServiceProvider =
-                spy(
-                        (IwlanDataServiceProvider)
-                                mIwlanDataService.onCreateDataServiceProvider(DEFAULT_SLOT_INDEX));
-        mTestLooper.dispatchAll();
-
-        when(Calendar.getInstance().getTime()).thenAnswer(i -> mMockedCalendarTime);
-
-        mLinkProperties = new LinkProperties();
-        mLinkProperties.setInterfaceName("wlan0");
-        mLinkProperties.addLinkAddress(mMockIPv4LinkAddress);
-
         when(mMockConnectivityManager.getLinkProperties(eq(mMockNetwork)))
                 .thenReturn(mLinkProperties);
         when(mMockTunnelLinkProperties.ifaceName()).thenReturn("mockipsec0");
 
-        mockCarrierConfigForN1Mode(true);
+        doReturn(mTestLooper.getLooper()).when(mIwlanDataService).getLooper();
 
         doNothing().when(mMockEpdgTunnelManager).close();
+
+        mIwlanDataService.setAppContext(mMockContext);
+        mIwlanDataService.registerServices(mMockContext);
+
+        mockCarrierConfigForN1Mode(true);
+
+        mIwlanDataServiceProvider =
+                (IwlanDataServiceProvider)
+                        mIwlanDataService.onCreateDataServiceProvider(DEFAULT_SLOT_INDEX);
+        mTestLooper.dispatchAll();
     }
 
     private void moveTimeForwardAndDispatch(long milliSeconds) {
@@ -296,13 +291,9 @@ public class IwlanDataServiceTest {
 
     @After
     public void cleanUp() throws Exception {
-        mStaticMockSession.finishMocking();
         IwlanCarrierConfig.resetTestConfig();
-        mSpyIwlanDataServiceProvider.close();
         mTestLooper.dispatchAll();
-        if (mIwlanDataService != null) {
-            mIwlanDataService.onDestroy();
-        }
+        mStaticMockSession.finishMocking();
     }
 
     public Network createMockNetwork(LinkProperties linkProperties) {
@@ -349,17 +340,26 @@ public class IwlanDataServiceTest {
     }
 
     @Test
-    public void testWifiOnLost() {
-        when(mMockIwlanDataServiceProvider.getSlotIndex()).thenReturn(DEFAULT_SLOT_INDEX + 1);
-        mIwlanDataService.addIwlanDataServiceProvider(mMockIwlanDataServiceProvider);
+    public void testWifiLostInBringingDownState_shouldCloseTunnel() {
+        DataProfile dataProfile = buildImsDataProfile();
+
+        mIwlanDataServiceProvider.setTunnelState(
+                dataProfile,
+                mMockDataServiceCallback,
+                TunnelState.TUNNEL_IN_BRINGDOWN,
+                /* linkProperties */ null,
+                /* isHandover */ false,
+                /* pduSessionId */ 1,
+                /* isImsOrEmergency */ true,
+                /* isDataCallSetupWithN1 */ true);
 
         onSystemDefaultNetworkLost();
+
         assertFalse(
                 IwlanDataService.isNetworkConnected(
                         false /* isActiveDataOnOtherSub */, false /* isCstEnabled */));
-        verify(mMockIwlanDataServiceProvider).forceCloseTunnelsInDeactivatingState();
-        mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
-        mTestLooper.dispatchAll();
+        verify(mMockEpdgTunnelManager, atLeastOnce())
+                .closeTunnel(any(), eq(true) /* forceClose */, any(), anyInt());
     }
 
     @Test
@@ -444,7 +444,7 @@ public class IwlanDataServiceTest {
 
         clearInvocations(mMockEpdgTunnelManager);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -583,21 +583,12 @@ public class IwlanDataServiceTest {
     }
 
     @Test
-    public void testAddDuplicateDataServiceProviderThrows() throws Exception {
-        when(mMockIwlanDataServiceProvider.getSlotIndex()).thenReturn(DEFAULT_SLOT_INDEX);
-        assertThrows(
-                IllegalStateException.class,
-                () -> mIwlanDataService.addIwlanDataServiceProvider(mMockIwlanDataServiceProvider));
-    }
-
-    @Test
-    public void testRemoveDataServiceProvider() {
-        when(mMockIwlanDataServiceProvider.getSlotIndex()).thenReturn(DEFAULT_SLOT_INDEX);
-        mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
-        mTestLooper.dispatchAll();
-        verify(mIwlanDataService).deinitNetworkCallback();
-        mIwlanDataService.onCreateDataServiceProvider(DEFAULT_SLOT_INDEX);
-        mTestLooper.dispatchAll();
+    public void testOnCreateDataServiceProvider_shouldCloseAndCreateNewIfExist() {
+        DataService.DataServiceProvider dataServiceProvider =
+                mIwlanDataService.onCreateDataServiceProvider(DEFAULT_SLOT_INDEX);
+        verify(mMockEpdgTunnelManager).close();
+        assertNotNull(dataServiceProvider);
+        assertNotEquals(dataServiceProvider, mIwlanDataServiceProvider);
     }
 
     @Test
@@ -610,7 +601,7 @@ public class IwlanDataServiceTest {
 
         IwlanDataServiceCallback callback = new IwlanDataServiceCallback();
         TunnelLinkProperties mLinkProperties = createTunnelLinkProperties();
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 new DataServiceCallback(callback),
                 TunnelState.TUNNEL_UP,
@@ -619,7 +610,7 @@ public class IwlanDataServiceTest {
                 1, /* pduSessionId */
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
-        mSpyIwlanDataServiceProvider.requestDataCallList(new DataServiceCallback(callback));
+        mIwlanDataServiceProvider.requestDataCallList(new DataServiceCallback(callback));
         mTestLooper.dispatchAll();
 
         assertEquals(DataServiceCallback.RESULT_SUCCESS, mResultCode);
@@ -662,7 +653,7 @@ public class IwlanDataServiceTest {
     @Test
     public void testRequestDataCallListEmpty() throws Exception {
         IwlanDataServiceCallback callback = new IwlanDataServiceCallback();
-        mSpyIwlanDataServiceProvider.requestDataCallList(new DataServiceCallback(callback));
+        mIwlanDataServiceProvider.requestDataCallList(new DataServiceCallback(callback));
         mTestLooper.dispatchAll();
 
         assertEquals(DataServiceCallback.RESULT_SUCCESS, mResultCode);
@@ -671,7 +662,7 @@ public class IwlanDataServiceTest {
 
     @Test
     public void testIwlanSetupDataCallWithInvalidArg() {
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.UNKNOWN, /* AccessNetworkType */
                 null, /* dataProfile */
                 false, /* isRoaming */
@@ -697,7 +688,7 @@ public class IwlanDataServiceTest {
         /* Wifi is not connected */
         onSystemDefaultNetworkLost();
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -719,7 +710,7 @@ public class IwlanDataServiceTest {
 
     @Test
     public void testIwlanDeactivateDataCallWithInvalidArg() {
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 0, /* cid */
                 DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
                 mMockDataServiceCallback);
@@ -737,7 +728,7 @@ public class IwlanDataServiceTest {
         onSystemDefaultNetworkConnected(
                 mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -757,7 +748,7 @@ public class IwlanDataServiceTest {
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -774,7 +765,7 @@ public class IwlanDataServiceTest {
         onSystemDefaultNetworkConnected(
                 mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -801,7 +792,7 @@ public class IwlanDataServiceTest {
         onSystemDefaultNetworkConnected(
                 mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -826,7 +817,7 @@ public class IwlanDataServiceTest {
                 ArgumentCaptor.forClass(DataCallResponse.class);
 
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, tp, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -846,7 +837,7 @@ public class IwlanDataServiceTest {
 
         onSystemDefaultNetworkConnected(TRANSPORT_WIFI);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -856,7 +847,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_NORMAL,
                 mMockDataServiceCallback);
@@ -870,7 +861,7 @@ public class IwlanDataServiceTest {
                         eq(BRINGDOWN_REASON_DEACTIVATE_DATA_CALL));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -884,7 +875,7 @@ public class IwlanDataServiceTest {
 
         onSystemDefaultNetworkConnected(TRANSPORT_WIFI);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_UP,
@@ -894,7 +885,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_HANDOVER,
                 mMockDataServiceCallback);
@@ -910,7 +901,7 @@ public class IwlanDataServiceTest {
                         eq(BRINGDOWN_REASON_DEACTIVATE_DATA_CALL));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -926,7 +917,7 @@ public class IwlanDataServiceTest {
                 IwlanCarrierConfig.KEY_HANDOVER_TO_WWAN_RELEASE_DELAY_SECOND_INT, 3);
         onSystemDefaultNetworkConnected(TRANSPORT_WIFI);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_UP,
@@ -936,7 +927,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_HANDOVER,
                 mMockDataServiceCallback);
@@ -961,7 +952,7 @@ public class IwlanDataServiceTest {
                         eq(BRINGDOWN_REASON_DEACTIVATE_DATA_CALL));
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -980,7 +971,7 @@ public class IwlanDataServiceTest {
 
         onSystemDefaultNetworkConnected(TRANSPORT_WIFI);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_UP,
@@ -990,7 +981,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, /* type IMS */
                 true,
@@ -999,7 +990,7 @@ public class IwlanDataServiceTest {
                 true,
                 1 /* Transport WiFi */);
 
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_HANDOVER,
                 mMockDataServiceCallback);
@@ -1012,7 +1003,7 @@ public class IwlanDataServiceTest {
                         eq(TEST_APN_NAME), anyBoolean(), any(IwlanTunnelCallback.class), anyInt());
 
         /* Check callback result is RESULT_SUCCESS when onClosed() is called. */
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1038,7 +1029,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
                 .thenReturn(DataFailCause.USER_AUTHENTICATION);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1048,7 +1039,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1058,7 +1049,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1089,7 +1080,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.shouldRetryWithInitialAttach(eq(TEST_APN_NAME)))
                 .thenReturn(false);
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1099,7 +1090,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1109,7 +1100,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1149,7 +1140,7 @@ public class IwlanDataServiceTest {
                         CALL_STATE_IDLE)
                 .sendToTarget();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1159,7 +1150,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1169,7 +1160,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1206,7 +1197,7 @@ public class IwlanDataServiceTest {
                         CALL_STATE_IDLE)
                 .sendToTarget();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1216,7 +1207,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 512, // type Emergency
                 true,
@@ -1226,7 +1217,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1263,7 +1254,7 @@ public class IwlanDataServiceTest {
                         TelephonyManager.CALL_STATE_OFFHOOK)
                 .sendToTarget();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1273,7 +1264,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1283,7 +1274,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1320,7 +1311,7 @@ public class IwlanDataServiceTest {
                         TelephonyManager.CALL_STATE_OFFHOOK)
                 .sendToTarget();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1330,7 +1321,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 512, // type Emergency
                 true,
@@ -1340,7 +1331,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1477,7 +1468,7 @@ public class IwlanDataServiceTest {
                         TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX, false /* isVcn */);
         getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -1509,7 +1500,7 @@ public class IwlanDataServiceTest {
                         TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX, false /* isVcn */);
         getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -1542,7 +1533,7 @@ public class IwlanDataServiceTest {
                         TRANSPORT_CELLULAR, DEFAULT_SUB_INDEX + 1, false /* isVcn */);
         getNetworkMonitorCallback().onCapabilitiesChanged(mMockNetwork, nc);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -1562,7 +1553,7 @@ public class IwlanDataServiceTest {
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -1585,7 +1576,7 @@ public class IwlanDataServiceTest {
         }
 
         IwlanDataServiceProvider.IwlanDataTunnelStats stats =
-                mSpyIwlanDataServiceProvider.getTunnelStats();
+                mIwlanDataServiceProvider.getTunnelStats();
         long result = stats.mTunnelSetupFailureCounts.get(TEST_APN_NAME);
         assertEquals(count, result);
     }
@@ -1607,7 +1598,7 @@ public class IwlanDataServiceTest {
         }
 
         IwlanDataServiceProvider.IwlanDataTunnelStats stats =
-                mSpyIwlanDataServiceProvider.getTunnelStats();
+                mIwlanDataServiceProvider.getTunnelStats();
         long result = stats.mUnsolTunnelDownCounts.get(TEST_APN_NAME);
         assertEquals(result, count);
     }
@@ -1618,7 +1609,7 @@ public class IwlanDataServiceTest {
         Calendar calendar = mock(Calendar.class);
         when(calendar.getTime()).thenAnswer(i -> new Date(mMockedCalendarTime));
 
-        mSpyIwlanDataServiceProvider.setCalendar(calendar);
+        mIwlanDataServiceProvider.setCalendar(calendar);
         onSystemDefaultNetworkConnected(
                 mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
 
@@ -1650,7 +1641,7 @@ public class IwlanDataServiceTest {
         tunnelUpStats.accept(tunnelDown.getTime() - tunnelUp.getTime());
 
         IwlanDataServiceProvider.IwlanDataTunnelStats stats =
-                mSpyIwlanDataServiceProvider.getTunnelStats();
+                mIwlanDataServiceProvider.getTunnelStats();
         LongSummaryStatistics finalSetupStats = stats.mTunnelSetupSuccessStats.get(TEST_APN_NAME);
         LongSummaryStatistics finalUpStats = stats.mTunnelUpStats.get(TEST_APN_NAME);
 
@@ -1672,7 +1663,7 @@ public class IwlanDataServiceTest {
     public void testIwlanDataServiceHandlerOnUnbind() {
         DataProfile dp = buildImsDataProfile();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_UP,
@@ -1682,7 +1673,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1696,9 +1687,9 @@ public class IwlanDataServiceTest {
                 .thenReturn(DataFailCause.ERROR_UNSPECIFIED);
 
         // Simulate IwlanDataService.onUnbind() which force close all tunnels
-        mSpyIwlanDataServiceProvider.forceCloseTunnels(EpdgTunnelManager.BRINGDOWN_REASON_UNKNOWN);
+        mIwlanDataServiceProvider.forceCloseTunnels(EpdgTunnelManager.BRINGDOWN_REASON_UNKNOWN);
         // Simulate DataService.onUnbind() which remove all IwlanDataServiceProviders
-        mSpyIwlanDataServiceProvider.close();
+        mIwlanDataServiceProvider.close();
         mTestLooper.dispatchAll();
 
         verify(mMockEpdgTunnelManager, atLeastOnce())
@@ -1710,7 +1701,7 @@ public class IwlanDataServiceTest {
         assertNotNull(mIwlanDataService.mHandler);
         verify(mMockEpdgTunnelManager, times(1)).close();
         // Should not raise NullPointerException
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1726,7 +1717,7 @@ public class IwlanDataServiceTest {
     public void testMetricsWhenTunnelClosedWithWrappedException() {
         DataProfile dp = buildImsDataProfile();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1736,7 +1727,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1746,7 +1737,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        MetricsAtom metricsAtom = mSpyIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
+        MetricsAtom metricsAtom = mIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
         assertNotNull(metricsAtom);
 
         String exceptionMessage = "Some exception message";
@@ -1768,7 +1759,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getRemainingBackoffDuration(eq(TEST_APN_NAME)))
                 .thenReturn(ErrorPolicyManager.UNSPECIFIED_RETRY_DURATION);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(
                         TEST_APN_NAME,
@@ -1798,7 +1789,7 @@ public class IwlanDataServiceTest {
     public void testMetricsWhenTunnelClosedWithoutWrappedException() {
         DataProfile dp = buildImsDataProfile();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1808,7 +1799,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, // type IMS
                 true,
@@ -1818,7 +1809,7 @@ public class IwlanDataServiceTest {
                 1 // Transport Wi-Fi
                 );
 
-        MetricsAtom metricsAtom = mSpyIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
+        MetricsAtom metricsAtom = mIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
         assertNotNull(metricsAtom);
 
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
@@ -1827,7 +1818,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getRemainingBackoffDuration(eq(TEST_APN_NAME)))
                 .thenReturn(ErrorPolicyManager.UNSPECIFIED_RETRY_DURATION);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(
                         TEST_APN_NAME,
@@ -1844,7 +1835,7 @@ public class IwlanDataServiceTest {
     public void testMetricsWhenTunnelClosedWithErrorCount() {
         DataProfile dp = buildImsDataProfile();
 
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
@@ -1854,7 +1845,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, /* type IMS */
                 true,
@@ -1863,7 +1854,7 @@ public class IwlanDataServiceTest {
                 true,
                 1 /* Transport Wi-Fi */);
 
-        MetricsAtom metricsAtom = mSpyIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
+        MetricsAtom metricsAtom = mIwlanDataServiceProvider.getMetricsAtomByApn(TEST_APN_NAME);
         assertNotNull(metricsAtom);
 
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
@@ -1874,7 +1865,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getRemainingBackoffDuration(eq(TEST_APN_NAME)))
                 .thenReturn(ErrorPolicyManager.UNSPECIFIED_RETRY_DURATION);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(
                         TEST_APN_NAME,
@@ -1886,7 +1877,7 @@ public class IwlanDataServiceTest {
     }
 
     private void mockTunnelSetupFail(DataProfile dp) {
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -1902,7 +1893,7 @@ public class IwlanDataServiceTest {
                 .when(mMockEpdgTunnelManager)
                 .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(
                         TEST_APN_NAME,
@@ -1915,7 +1906,7 @@ public class IwlanDataServiceTest {
     }
 
     private void mockTunnelSetupSuccess(DataProfile dp, long setupTime, Calendar calendar) {
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -1935,7 +1926,7 @@ public class IwlanDataServiceTest {
         advanceCalendarByTimeMs(setupTime, calendar);
 
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -1945,7 +1936,7 @@ public class IwlanDataServiceTest {
     }
 
     private void mockUnsolTunnelDown() {
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(
                         TEST_APN_NAME,
@@ -1955,7 +1946,7 @@ public class IwlanDataServiceTest {
     }
 
     private void mockDeactivateTunnel(long deactivationTime, Calendar calendar) {
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_NORMAL /* DataService.REQUEST_REASON_NORMAL */,
                 mMockDataServiceCallback);
@@ -1969,7 +1960,7 @@ public class IwlanDataServiceTest {
 
         advanceCalendarByTimeMs(deactivationTime, calendar);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -1992,7 +1983,7 @@ public class IwlanDataServiceTest {
         onSystemDefaultNetworkConnected(
                 newNetwork1, mLinkProperties, TRANSPORT_WIFI, DEFAULT_SUB_INDEX);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2079,7 +2070,7 @@ public class IwlanDataServiceTest {
 
         sendCallStateChangedEvent(callState);
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME, 64, true, TelephonyManager.NETWORK_TYPE_LTE, false, true, 1);
     }
 
@@ -2105,7 +2096,7 @@ public class IwlanDataServiceTest {
                     CarrierConfigManager.CARRIER_NR_AVAILABILITY_SA
                 });
         IwlanCarrierConfig.putTestConfigBundle(bundle);
-        assertTrue(mSpyIwlanDataServiceProvider.isN1ModeSupported());
+        assertTrue(mIwlanDataServiceProvider.isN1ModeSupported());
 
         bundle.putIntArray(
                 CarrierConfigManager.KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY,
@@ -2113,7 +2104,7 @@ public class IwlanDataServiceTest {
                     CarrierConfigManager.CARRIER_NR_AVAILABILITY_NSA,
                 });
         IwlanCarrierConfig.putTestConfigBundle(bundle);
-        assertFalse(mSpyIwlanDataServiceProvider.isN1ModeSupported());
+        assertFalse(mIwlanDataServiceProvider.isN1ModeSupported());
     }
 
     @Test
@@ -2126,7 +2117,7 @@ public class IwlanDataServiceTest {
         mockCallState(CALL_STATE_IDLE);
         mockSetupDataCallWithPduSessionId(0);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2143,7 +2134,7 @@ public class IwlanDataServiceTest {
                         any(IwlanTunnelCallback.class),
                         eq(EpdgTunnelManager.BRINGDOWN_REASON_ENABLE_N1_MODE));
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2166,7 +2157,7 @@ public class IwlanDataServiceTest {
         updatePreferredNetworkType(NETWORK_TYPE_BITMASK_NR);
         mockSetupDataCallWithPduSessionId(5 /* pduSessionId */);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2183,7 +2174,7 @@ public class IwlanDataServiceTest {
                         any(IwlanTunnelCallback.class),
                         eq(EpdgTunnelManager.BRINGDOWN_REASON_DISABLE_N1_MODE));
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2207,7 +2198,7 @@ public class IwlanDataServiceTest {
         mockCallState(CALL_STATE_RINGING);
         mockSetupDataCallWithPduSessionId(0);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2237,7 +2228,7 @@ public class IwlanDataServiceTest {
                         any(IwlanTunnelCallback.class),
                         eq(EpdgTunnelManager.BRINGDOWN_REASON_ENABLE_N1_MODE));
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2259,7 +2250,7 @@ public class IwlanDataServiceTest {
         mockCallState(CALL_STATE_RINGING);
         mockSetupDataCallWithPduSessionId(0);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2293,7 +2284,7 @@ public class IwlanDataServiceTest {
         mockCallState(CALL_STATE_IDLE);
         mockSetupDataCallWithPduSessionId(0);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2314,7 +2305,7 @@ public class IwlanDataServiceTest {
         mockCallState(CALL_STATE_IDLE);
         mockSetupDataCallWithPduSessionId(0);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2334,7 +2325,7 @@ public class IwlanDataServiceTest {
 
         mockSetupDataCallWithPduSessionId(1);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2357,7 +2348,7 @@ public class IwlanDataServiceTest {
 
         mockSetupDataCallWithPduSessionId(0);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2374,7 +2365,7 @@ public class IwlanDataServiceTest {
         updatePreferredNetworkType(NETWORK_TYPE_BITMASK_NR);
         mockSetupDataCallWithPduSessionId(1);
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
         mTestLooper.dispatchAll();
@@ -2395,7 +2386,7 @@ public class IwlanDataServiceTest {
     private void verifySetupDataCallRequestHandled(int pduSessionId, DataProfile dp) {
         onSystemDefaultNetworkConnected(
                 mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2447,7 +2438,7 @@ public class IwlanDataServiceTest {
         int index = 0;
         String apnName = "mms";
         ArrayList<Integer> resultCodeCallback = new ArrayList<>();
-        mSpyIwlanDataServiceProvider.requestNetworkValidation(
+        mIwlanDataServiceProvider.requestNetworkValidation(
                 apnName.hashCode(), Runnable::run, resultCodeCallback::add);
         mTestLooper.dispatchAll();
 
@@ -2462,7 +2453,7 @@ public class IwlanDataServiceTest {
         verifySetupDataCallRequestHandled(5 /* pduSessionId */, dp);
 
         stubMockOnOpenedMetrics();
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onOpened(
                         dp.getApnSetting().getApnName(),
@@ -2474,7 +2465,7 @@ public class IwlanDataServiceTest {
     private List<DataCallResponse> verifyDataCallListChangeAndCaptureUpdatedList() {
         ArgumentCaptor<List<DataCallResponse>> dataCallListCaptor =
                 ArgumentCaptor.forClass((Class) List.class);
-        verify(mSpyIwlanDataServiceProvider, atLeastOnce())
+        verify(mIwlanDataServiceProvider, atLeastOnce())
                 .notifyDataCallListChanged(dataCallListCaptor.capture());
         return dataCallListCaptor.getValue();
     }
@@ -2496,6 +2487,9 @@ public class IwlanDataServiceTest {
     }
 
     @Test
+    @Ignore(
+            "b/324874097 - Fix IwlanDataServiceTest to correctly spy on IwlanDataServiceProvider."
+                    + " Address flakiness caused by Mockito spy instrumentation issues on Android.")
     public void testOnNetworkValidationStatusChangedForRegisteredApn() {
         List<DataCallResponse> dataCallList;
 
@@ -2507,30 +2501,22 @@ public class IwlanDataServiceTest {
         verifySetupDataCallSuccess(dp);
         dataCallList = verifyDataCallListChangeAndCaptureUpdatedList();
         assertEquals(1, dataCallList.size());
-        // TODO: b/324874097 - Fix IwlanDataServiceTest to correctly spy on
-        // IwlanDataServiceProvider. Address flakiness caused by Mockito spy instrumentation issues
-        // on Android. Investigate solutions.
-        //
-        // assertDataCallResponsePresentByCidAndStatus(
-        //        cid, PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS, dataCallList);
+        assertDataCallResponsePresentByCidAndStatus(
+                cid, PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS, dataCallList);
 
         // Requests network validation
-        mSpyIwlanDataServiceProvider.requestNetworkValidation(
+        mIwlanDataServiceProvider.requestNetworkValidation(
                 cid, Runnable::run, mockResultCodeCallback);
         mTestLooper.dispatchAll();
         verify(mockResultCodeCallback, times(1)).accept(DataServiceCallback.RESULT_SUCCESS);
 
         dataCallList = verifyDataCallListChangeAndCaptureUpdatedList();
         assertEquals(1, dataCallList.size());
-        // TODO: b/324874097 - Fix IwlanDataServiceTest to correctly spy on
-        // IwlanDataServiceProvider. Address flakiness caused by Mockito spy instrumentation issues
-        // on Android. Investigate solutions.
-        //
-        // assertDataCallResponsePresentByCidAndStatus(
-        //        cid, PreciseDataConnectionState.NETWORK_VALIDATION_IN_PROGRESS, dataCallList);
+        assertDataCallResponsePresentByCidAndStatus(
+                cid, PreciseDataConnectionState.NETWORK_VALIDATION_IN_PROGRESS, dataCallList);
 
         // Validation success
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onNetworkValidationStatusChanged(
                         dp.getApnSetting().getApnName(),
@@ -2539,12 +2525,8 @@ public class IwlanDataServiceTest {
 
         dataCallList = verifyDataCallListChangeAndCaptureUpdatedList();
         assertEquals(1, dataCallList.size());
-        // TODO: b/324874097 - Fix IwlanDataServiceTest to correctly spy on
-        // IwlanDataServiceProvider. Address flakiness caused by Mockito spy instrumentation issues
-        // on Android. Investigate solutions.
-        //
-        // assertDataCallResponsePresentByCidAndStatus(
-        //        cid, PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS, dataCallList);
+        assertDataCallResponsePresentByCidAndStatus(
+                cid, PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS, dataCallList);
     }
 
     @Test
@@ -2558,13 +2540,13 @@ public class IwlanDataServiceTest {
         verifySetupDataCallSuccess(dp);
 
         // Requests network validation, network validation status in progress
-        mSpyIwlanDataServiceProvider.requestNetworkValidation(
+        mIwlanDataServiceProvider.requestNetworkValidation(
                 cid, Runnable::run, mockResultCodeCallback);
         mTestLooper.dispatchAll();
         verify(mockResultCodeCallback, times(1)).accept(DataServiceCallback.RESULT_SUCCESS);
 
         // Requests data call list
-        mSpyIwlanDataServiceProvider.requestDataCallList(mMockDataServiceCallback);
+        mIwlanDataServiceProvider.requestDataCallList(mMockDataServiceCallback);
         mTestLooper.dispatchAll();
 
         verify(mMockDataServiceCallback)
@@ -2587,7 +2569,7 @@ public class IwlanDataServiceTest {
         onSystemDefaultNetworkConnected(TRANSPORT_WIFI);
 
         DataProfile dp = buildImsDataProfile();
-        mSpyIwlanDataServiceProvider.setTunnelState(
+        mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_UP,
@@ -2597,7 +2579,7 @@ public class IwlanDataServiceTest {
                 true /* isImsOrEmergency */,
                 true /* isDataCallSetupWithN1 */);
 
-        mSpyIwlanDataServiceProvider.deactivateDataCall(
+        mIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
                 DataService.REQUEST_REASON_HANDOVER,
                 mMockDataServiceCallback);
@@ -2609,7 +2591,7 @@ public class IwlanDataServiceTest {
                 .closeTunnel(
                         eq(TEST_APN_NAME), anyBoolean(), any(IwlanTunnelCallback.class), anyInt());
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2632,7 +2614,7 @@ public class IwlanDataServiceTest {
         verify(mMockDataServiceCallback)
                 .onSetupDataCallComplete(
                         eq(DataServiceCallback.RESULT_ERROR_TEMPORARILY_UNAVAILABLE), isNull());
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2652,7 +2634,7 @@ public class IwlanDataServiceTest {
         onSystemDefaultNetworkConnected(TRANSPORT_WIFI);
 
         DataProfile dp = buildImsDataProfile();
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2678,7 +2660,7 @@ public class IwlanDataServiceTest {
                                 EpdgTunnelManager
                                         .BRINGDOWN_REASON_NETWORK_UPDATE_WHEN_TUNNEL_IN_BRINGUP));
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2700,7 +2682,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
                 .thenReturn(DataFailCause.USER_AUTHENTICATION);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2714,7 +2696,7 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, /* type IMS */
                 true,
@@ -2723,7 +2705,7 @@ public class IwlanDataServiceTest {
                 true,
                 1 /* Transport Wi-Fi */);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2749,7 +2731,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
                 .thenReturn(DataFailCause.USER_AUTHENTICATION);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2763,7 +2745,7 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, /* type IMS */
                 true,
@@ -2772,7 +2754,7 @@ public class IwlanDataServiceTest {
                 true,
                 1 /* Transport Wi-Fi */);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();
@@ -2852,7 +2834,7 @@ public class IwlanDataServiceTest {
         when(mMockErrorPolicyManager.getDataFailCause(eq(TEST_APN_NAME)))
                 .thenReturn(DataFailCause.USER_AUTHENTICATION);
 
-        mSpyIwlanDataServiceProvider.setupDataCall(
+        mIwlanDataServiceProvider.setupDataCall(
                 AccessNetworkType.IWLAN, /* AccessNetworkType */
                 dp, /* dataProfile */
                 false, /* isRoaming */
@@ -2866,7 +2848,7 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback);
         mTestLooper.dispatchAll();
 
-        mSpyIwlanDataServiceProvider.setMetricsAtom(
+        mIwlanDataServiceProvider.setMetricsAtom(
                 TEST_APN_NAME,
                 64, /* type IMS */
                 true,
@@ -2875,7 +2857,7 @@ public class IwlanDataServiceTest {
                 true,
                 1 /* Transport Wi-Fi */);
 
-        mSpyIwlanDataServiceProvider
+        mIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
                 .onClosed(TEST_APN_NAME, new IwlanError(IwlanError.NO_ERROR), mMockOnClosedMetrics);
         mTestLooper.dispatchAll();

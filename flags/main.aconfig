@@ -49,3 +49,9 @@ flag {
     description: "Trigger underlying network validation check upon no network response"
     bug: "274863262"
 }
+flag {
+    name: "iwlan_silent_restart"
+    namespace: "iwlan_telephony"
+    description: "Clear tunnels and other resources in IWLAN and restart the process"
+    bug: "392910631"
+}

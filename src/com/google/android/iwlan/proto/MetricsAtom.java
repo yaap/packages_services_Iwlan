@@ -69,6 +69,7 @@ public class MetricsAtom {
     private int mValidationTransportType;
     private int mValidationDurationMills;
     private long mValidationStartTimeMills;
+    private boolean mValidationTriggered;
 
     public void setMessageId(int messageId) {
         this.mMessageId = messageId;
@@ -228,6 +229,14 @@ public class MetricsAtom {
         return mValidationStartTimeMills;
     }
 
+    public boolean getValidationTriggered() {
+        return mValidationTriggered;
+    }
+
+    public void setValidationTriggered(boolean validationTriggered) {
+        mValidationTriggered = validationTriggered;
+    }
+
     public void sendMetricsData() {
         if (mMessageId == IwlanStatsLog.IWLAN_SETUP_DATA_CALL_RESULT_REPORTED) {
             Log.d(TAG, "Send metrics data IWLAN_SETUP_DATA_CALL_RESULT_REPORTED");
@@ -269,7 +278,8 @@ public class MetricsAtom {
                     mTriggerReason,
                     mValidationResult,
                     mValidationTransportType,
-                    mValidationDurationMills);
+                    mValidationDurationMills,
+                    mValidationTriggered);
         } else {
             Log.d("IwlanMetrics", "Invalid Message ID: " + mMessageId);
         }

@@ -3522,6 +3522,24 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
+    public void testReportValidationMetricsAtom_networkLost() {
+        mEpdgTunnelManager.updateNetwork(/* network= */ null, /* linkProperties= */ null);
+        IwlanCarrierConfig.putTestConfigIntArray(
+                IwlanCarrierConfig.KEY_UNDERLYING_NETWORK_VALIDATION_EVENTS_INT_ARRAY,
+                new int[] {
+                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL,
+                    IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON
+                });
+
+        advanceClockByTimeMs(100000);
+        mEpdgTunnelManager.validateUnderlyingNetwork(
+                IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON);
+        mTestLooper.dispatchAll();
+        verify(mMockConnectivityManager, never())
+                .reportNetworkConnectivity(eq(mMockDefaultNetwork), eq(false));
+    }
+
+    @Test
     public void testClose() {
         ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback callback =
                 mConnectivityDiagnosticsCallbackArgumentCaptor.getValue();

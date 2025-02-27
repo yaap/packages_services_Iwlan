@@ -789,22 +789,29 @@ public class EpdgTunnelManager {
                             return;
                         }
                         reportValidationMetricsAtom(
-                                network, getMetricsValidationResult(mNetworkValidationResult));
+                                network,
+                                getMetricsValidationResult(mNetworkValidationResult),
+                                /* validationTriggered */ true);
                     }
                 };
         connectivityDiagnosticsManager.registerConnectivityDiagnosticsCallback(
                 networkRequest, new HandlerExecutor(mHandler), mConnectivityDiagnosticsCallback);
     }
 
-    private void reportValidationMetricsAtom(Network network, int validationResult) {
+    private void reportValidationMetricsAtom(
+            Network network, int validationResult, boolean validationTriggered) {
         if (!mMetricsAtomForNetwork.containsKey(network)) {
             return;
         }
         MetricsAtom metricsAtom = mMetricsAtomForNetwork.get(network);
         metricsAtom.setValidationResult(validationResult);
+        metricsAtom.setValidationTriggered(validationTriggered);
         metricsAtom.setValidationDurationMills(
-                (int) (IwlanHelper.elapsedRealtime() - metricsAtom.getValidationStartTimeMills()));
-
+                validationTriggered
+                        ? (int)
+                                (IwlanHelper.elapsedRealtime()
+                                        - metricsAtom.getValidationStartTimeMills())
+                        : 0);
         Log.d(
                 TAG,
                 "reportValidationMetricsAtom: reason="
@@ -814,7 +821,9 @@ public class EpdgTunnelManager {
                         + " transportType="
                         + metricsAtom.getValidationTransportType()
                         + " duration="
-                        + metricsAtom.getValidationDurationMills());
+                        + metricsAtom.getValidationDurationMills()
+                        + " validationTriggered="
+                        + metricsAtom.getValidationTriggered());
         metricsAtom.sendMetricsData();
         mMetricsAtomForNetwork.remove(network);
     }
@@ -3260,12 +3269,17 @@ public class EpdgTunnelManager {
     }
 
     private void onTriggerUnderlyingNetworkValidation(int event) {
+        setupValidationMetricsAtom(event);
+
         if (!isUnderlyingNetworkValidated(mDefaultNetwork)) {
             Log.d(TAG, "Network " + mDefaultNetwork + " is already not validated.");
+            reportValidationMetricsAtom(
+                    mDefaultNetwork,
+                    NETWORK_VALIDATION_RESULT_INVALID,
+                    /* validationTriggered */ false);
             return;
         }
 
-        setupValidationMetricsAtom(event);
         ConnectivityManager connectivityManager =
                 Objects.requireNonNull(mContext).getSystemService(ConnectivityManager.class);
         Log.d(TAG, "Trigger underlying network validation on network: " + mDefaultNetwork);

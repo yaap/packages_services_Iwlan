@@ -331,6 +331,37 @@ public class IwlanCarrierConfig {
     }
 
     /**
+     * Returns whether CarrierConfig is loaded for the given slot ID.
+     *
+     * @param context the application context
+     * @param slotId the slot ID
+     * @return Returns {@code true} if the CarrierConfig for the given slot ID is loaded.
+     */
+    static boolean isCarrierConfigLoaded(Context context, int slotId) {
+        int subId = IwlanHelper.getSubId(context, slotId);
+
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            // Fail to query subscription id, just return false.
+            return false;
+        }
+
+        CarrierConfigManager carrierConfigManager =
+                context.getSystemService(CarrierConfigManager.class);
+        PersistableBundle bundle;
+        try {
+            bundle =
+                    carrierConfigManager != null
+                            ? carrierConfigManager.getConfigForSubId(
+                                    subId, CarrierConfigManager.KEY_CARRIER_CONFIG_APPLIED_BOOL)
+                            : new PersistableBundle();
+        } catch (Exception e) {
+            bundle = new PersistableBundle();
+        }
+
+        return CarrierConfigManager.isConfigForIdentifiedCarrier(bundle);
+    }
+
+    /**
      * Gets a configuration int value for a given slot ID and key.
      *
      * @param context the application context

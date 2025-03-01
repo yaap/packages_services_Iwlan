@@ -660,6 +660,8 @@ public class IwlanDataService extends DataService {
             mEpdgTunnelManager = EpdgTunnelManager.getInstance(mContext, slotIndex);
             mCalendar = Calendar.getInstance();
             mTunnelStats = new IwlanDataTunnelStats();
+            mWfcEnabled = IwlanHelper.isWfcEnabled(mContext, slotIndex);
+            mCarrierConfigReady = IwlanCarrierConfig.isCarrierConfigLoaded(mContext, slotIndex);
 
             // Register IwlanEventListener
             List<Integer> events = new ArrayList<Integer>();

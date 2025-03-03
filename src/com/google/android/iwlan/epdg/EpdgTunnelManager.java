@@ -799,7 +799,7 @@ public class EpdgTunnelManager {
     }
 
     private void reportValidationMetricsAtom(
-            Network network, int validationResult, boolean validationTriggered) {
+            @NonNull Network network, int validationResult, boolean validationTriggered) {
         if (!mMetricsAtomForNetwork.containsKey(network)) {
             return;
         }
@@ -3219,6 +3219,8 @@ public class EpdgTunnelManager {
     }
 
     private boolean isUnderlyingNetworkValidated(Network network) {
+        if (network == null) return false;
+
         ConnectivityManager connectivityManager =
                 Objects.requireNonNull(mContext).getSystemService(ConnectivityManager.class);
         NetworkCapabilities networkCapabilities =
@@ -3269,7 +3271,9 @@ public class EpdgTunnelManager {
     }
 
     private void onTriggerUnderlyingNetworkValidation(int event) {
-        setupValidationMetricsAtom(event);
+        if (mDefaultNetwork == null) return;
+
+        setupValidationMetricsAtom(mDefaultNetwork, event);
 
         if (!isUnderlyingNetworkValidated(mDefaultNetwork)) {
             Log.d(TAG, "Network " + mDefaultNetwork + " is already not validated.");
@@ -3283,10 +3287,11 @@ public class EpdgTunnelManager {
         ConnectivityManager connectivityManager =
                 Objects.requireNonNull(mContext).getSystemService(ConnectivityManager.class);
         Log.d(TAG, "Trigger underlying network validation on network: " + mDefaultNetwork);
-        connectivityManager.reportNetworkConnectivity(mDefaultNetwork, false);
+        Objects.requireNonNull(connectivityManager)
+                .reportNetworkConnectivity(mDefaultNetwork, false);
     }
 
-    private void setupValidationMetricsAtom(int event) {
+    private void setupValidationMetricsAtom(@NonNull Network network, int event) {
         MetricsAtom metricsAtom = new MetricsAtom();
         metricsAtom.setMessageId(IwlanStatsLog.IWLAN_UNDERLYING_NETWORK_VALIDATION_RESULT_REPORTED);
         metricsAtom.setTriggerReason(getMetricsTriggerReason(event));
@@ -3306,7 +3311,7 @@ public class EpdgTunnelManager {
         metricsAtom.setValidationTransportType(validationTransportType);
 
         metricsAtom.setValidationStartTimeMills(IwlanHelper.elapsedRealtime());
-        mMetricsAtomForNetwork.put(mDefaultNetwork, metricsAtom);
+        mMetricsAtomForNetwork.put(network, metricsAtom);
     }
 
     boolean isUnderlyingNetworkValidationRequired(int error) {

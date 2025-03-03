@@ -21,7 +21,7 @@ package {
 aconfig_declarations {
     name: "iwlan_telephony_flags",
     package: "com.google.android.iwlan.flags",
-    container: "system",
+    container: "system_ext",
     srcs: [
         "main.aconfig",
     ],

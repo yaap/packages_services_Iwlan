@@ -697,16 +697,30 @@ public class EpdgTunnelManager {
         }
     }
 
-    @VisibleForTesting
-    EpdgTunnelManager(Context context, int slotId, FeatureFlags featureFlags) {
+    private EpdgTunnelManager(Context context, int slotId, FeatureFlags featureFlags) {
+        this(
+                context,
+                slotId,
+                featureFlags,
+                new IkeSessionCreator(),
+                new EpdgSelector(context, slotId, featureFlags));
+    }
+
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    EpdgTunnelManager(
+            Context context,
+            int slotIndex,
+            FeatureFlags featureFlags,
+            IkeSessionCreator ikeSessionCreator,
+            EpdgSelector epdgSelector) {
         mContext = context;
-        mSlotId = slotId;
+        mSlotId = slotIndex;
         mFeatureFlags = featureFlags;
-        mIkeSessionCreator = new IkeSessionCreator();
+        mIkeSessionCreator = ikeSessionCreator;
         mIpSecManager = mContext.getSystemService(IpSecManager.class);
         // Adding this here is necessary because we need to initialize EpdgSelector at the beginning
         // to ensure no broadcasts are missed.
-        mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, mSlotId);
+        mEpdgSelector = epdgSelector;
         TAG = EpdgTunnelManager.class.getSimpleName() + "[" + mSlotId + "]";
         initHandler();
         registerConnectivityDiagnosticsCallback();

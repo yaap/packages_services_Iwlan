@@ -57,7 +57,6 @@ import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 import com.google.android.iwlan.epdg.NaptrDnsResolver.NaptrTarget;
 import com.google.android.iwlan.flags.FeatureFlags;
-import com.google.android.iwlan.flags.FeatureFlagsImpl;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -76,7 +75,6 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -93,8 +91,6 @@ public class EpdgSelector {
     private static final String TAG = "EpdgSelector";
     private final Context mContext;
     private final int mSlotId;
-    private static final ConcurrentHashMap<Integer, EpdgSelector> mSelectorInstances =
-            new ConcurrentHashMap<>();
 
     private final ConnectivityManager mConnectivityManager;
 
@@ -166,7 +162,6 @@ public class EpdgSelector {
         void onError(int transactionId, IwlanError error);
     }
 
-    @VisibleForTesting
     EpdgSelector(Context context, int slotId, FeatureFlags featureFlags) {
         mContext = context;
         mSlotId = slotId;
@@ -226,12 +221,6 @@ public class EpdgSelector {
                         60L,
                         TimeUnit.SECONDS,
                         new SynchronousQueue<>());
-    }
-
-    public static EpdgSelector getSelectorInstance(Context context, int slotId) {
-        mSelectorInstances.computeIfAbsent(
-                slotId, k -> new EpdgSelector(context, slotId, new FeatureFlagsImpl()));
-        return mSelectorInstances.get(slotId);
     }
 
     private void clearPcoData() {
@@ -1374,12 +1363,7 @@ public class EpdgSelector {
         return new IwlanError(IwlanError.NO_ERROR);
     }
 
-    /**
-     * Validates a PLMN (Public Land Mobile Network) identifier string.
-     *
-     * @param plmn The PLMN identifier string to validate.
-     * @return True if the PLMN identifier is valid, false otherwise.
-     */
+    /* Validates a PLMN (Public Land Mobile Network) identifier string. */
     private static boolean isValidPlmn(String plmn) {
         return plmn != null && PLMN_PATTERN.matcher(plmn).matches();
     }

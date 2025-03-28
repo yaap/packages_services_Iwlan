@@ -59,7 +59,7 @@ public class IwlanSilentRestart extends ContentProvider {
 
     private void clearAndExit() {
         deinitService();
-        Log.i(TAG, "Restart com.google.pixel.iwlan by killing it");
+        Log.i(TAG, "Restart com.google.android.iwlan by killing it");
         System.exit(0);
     }
 

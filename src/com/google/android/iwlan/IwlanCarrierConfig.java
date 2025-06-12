@@ -21,6 +21,7 @@ import android.os.PersistableBundle;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
+import android.telephony.SubscriptionManager;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -302,8 +303,18 @@ public class IwlanCarrierConfig {
         }
 
         int subId = IwlanHelper.getSubId(context, slotId);
-        PersistableBundle bundle = carrierConfigManager.getConfigForSubId(subId, key);
-        return bundle.containsKey(key) ? bundle : getDefaultConfig(key);
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            return getDefaultConfig(key);
+        }
+
+        try {
+            PersistableBundle bundle = carrierConfigManager.getConfigForSubId(subId, key);
+            return bundle.containsKey(key) ? bundle : getDefaultConfig(key);
+        } catch (IllegalStateException e) {
+            // Fall through to return default config
+        }
+
+        return getDefaultConfig(key);
     }
 
     private static PersistableBundle getDefaultConfig(String key) {
@@ -317,6 +328,37 @@ public class IwlanCarrierConfig {
         }
 
         throw new IllegalArgumentException("Default config not found for key: " + key);
+    }
+
+    /**
+     * Returns whether CarrierConfig is loaded for the given slot ID.
+     *
+     * @param context the application context
+     * @param slotId the slot ID
+     * @return Returns {@code true} if the CarrierConfig for the given slot ID is loaded.
+     */
+    static boolean isCarrierConfigLoaded(Context context, int slotId) {
+        int subId = IwlanHelper.getSubId(context, slotId);
+
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            // Fail to query subscription id, just return false.
+            return false;
+        }
+
+        CarrierConfigManager carrierConfigManager =
+                context.getSystemService(CarrierConfigManager.class);
+        PersistableBundle bundle;
+        try {
+            bundle =
+                    carrierConfigManager != null
+                            ? carrierConfigManager.getConfigForSubId(
+                                    subId, CarrierConfigManager.KEY_CARRIER_CONFIG_APPLIED_BOOL)
+                            : new PersistableBundle();
+        } catch (Exception e) {
+            bundle = new PersistableBundle();
+        }
+
+        return CarrierConfigManager.isConfigForIdentifiedCarrier(bundle);
     }
 
     /**

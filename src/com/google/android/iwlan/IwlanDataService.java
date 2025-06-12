@@ -67,7 +67,7 @@ import android.telephony.data.NetworkSliceInfo;
 import android.telephony.data.TrafficDescriptor;
 import android.util.Log;
 
-import com.android.internal.annotations.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 
 import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
@@ -106,10 +106,15 @@ public class IwlanDataService extends DataService {
     private static Network sNetwork = null;
     private static LinkProperties sLinkProperties = null;
     private static NetworkCapabilities sNetworkCapabilities;
+
     @VisibleForTesting Handler mHandler;
     private HandlerThread mHandlerThread;
-    private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
+    private static final Map<Integer, IwlanDataServiceProvider> sDataServiceProviders =
             new ConcurrentHashMap<>();
+
+    private ConnectivityManager mConnectivityManager;
+    private TelephonyManager mTelephonyManager;
+
     private static final int INVALID_SUB_ID = -1;
 
     // The current subscription with the active internet PDN. Need not be the default data sub.
@@ -136,8 +141,6 @@ public class IwlanDataService extends DataService {
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
     private boolean mIs5GEnabledOnUi;
-
-    public IwlanDataService() {}
 
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
@@ -188,7 +191,7 @@ public class IwlanDataService extends DataService {
             }
 
             if (!linkProperties.equals(sLinkProperties)) {
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
+                for (IwlanDataServiceProvider dp : sDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
                     sLinkProperties = linkProperties;
                     dp.updateNetwork(network, linkProperties);
@@ -236,7 +239,6 @@ public class IwlanDataService extends DataService {
         private static final int CALLBACK_TYPE_GET_DATACALL_LIST_COMPLETE = 3;
 
         private final String SUB_TAG;
-        private final IwlanDataService mIwlanDataService;
         // TODO(b/358152549): Remove metrics handling inside IwlanTunnelCallback
         private final IwlanTunnelCallback mIwlanTunnelCallback;
         private final EpdgTunnelManager mEpdgTunnelManager;
@@ -647,18 +649,19 @@ public class IwlanDataService extends DataService {
          *
          * @param slotIndex SIM slot index the data service provider associated with.
          */
-        public IwlanDataServiceProvider(int slotIndex, IwlanDataService iwlanDataService) {
+        public IwlanDataServiceProvider(int slotIndex) {
             super(slotIndex);
             SUB_TAG = TAG + "[" + slotIndex + "]";
 
             // TODO:
             // get reference carrier config for this sub
             // get reference to resolver
-            mIwlanDataService = iwlanDataService;
             mIwlanTunnelCallback = new IwlanTunnelCallback(this);
             mEpdgTunnelManager = EpdgTunnelManager.getInstance(mContext, slotIndex);
             mCalendar = Calendar.getInstance();
             mTunnelStats = new IwlanDataTunnelStats();
+            mWfcEnabled = IwlanHelper.isWfcEnabled(mContext, slotIndex);
+            mCarrierConfigReady = IwlanCarrierConfig.isCarrierConfigLoaded(mContext, slotIndex);
 
             // Register IwlanEventListener
             List<Integer> events = new ArrayList<Integer>();
@@ -1186,7 +1189,6 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void close() {
-            mIwlanDataService.removeDataServiceProvider(this);
             IwlanEventListener iwlanEventListener =
                     IwlanEventListener.getInstance(mContext, getSlotIndex());
             iwlanEventListener.removeEventListener(getHandler());
@@ -1319,7 +1321,6 @@ public class IwlanDataService extends DataService {
 
             IwlanDataServiceProvider iwlanDataServiceProvider;
             DataServiceCallback callback;
-            int slotId;
 
             switch (msg.what) {
                 case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
@@ -1451,27 +1452,8 @@ public class IwlanDataService extends DataService {
                     break;
 
                 case EVENT_FORCE_CLOSE_TUNNEL:
-                    for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
+                    for (IwlanDataServiceProvider dp : sDataServiceProviders.values()) {
                         dp.forceCloseTunnels(EpdgTunnelManager.BRINGDOWN_REASON_UNKNOWN);
-                    }
-                    break;
-
-                case EVENT_ADD_DATA_SERVICE_PROVIDER:
-                    iwlanDataServiceProvider = (IwlanDataServiceProvider) msg.obj;
-                    addIwlanDataServiceProvider(iwlanDataServiceProvider);
-                    break;
-
-                case EVENT_REMOVE_DATA_SERVICE_PROVIDER:
-                    iwlanDataServiceProvider = (IwlanDataServiceProvider) msg.obj;
-
-                    slotId = iwlanDataServiceProvider.getSlotIndex();
-                    IwlanDataServiceProvider dsp = sIwlanDataServiceProviders.remove(slotId);
-                    if (dsp == null) {
-                        Log.w(TAG + "[" + slotId + "]", "No DataServiceProvider exists for slot!");
-                    }
-
-                    if (sIwlanDataServiceProviders.isEmpty()) {
-                        deinitNetworkCallback();
                     }
                     break;
 
@@ -1645,7 +1627,7 @@ public class IwlanDataService extends DataService {
             if (hasTransportChanged) {
                 // Perform forceClose for tunnels in bringdown.
                 // let framework handle explicit teardown
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
+                for (IwlanDataServiceProvider dp : sDataServiceProviders.values()) {
                     dp.forceCloseTunnelsInDeactivatingState();
                 }
             }
@@ -1659,14 +1641,14 @@ public class IwlanDataService extends DataService {
                         mContext.getSystemService(ConnectivityManager.class);
                 LinkProperties linkProperties = connectivityManager.getLinkProperties(network);
                 sLinkProperties = linkProperties;
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
+                for (IwlanDataServiceProvider dp : sDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
                     dp.updateNetwork(network, linkProperties);
                 }
                 IwlanHelper.updateCountryCodeWhenNetworkConnected();
             }
         } else {
-            for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
+            for (IwlanDataServiceProvider dp : sDataServiceProviders.values()) {
                 // once network is disconnected, even NAT KA offload fails
                 // But we should still let framework do an explicit teardown
                 // so as to not affect an ongoing handover
@@ -1681,14 +1663,8 @@ public class IwlanDataService extends DataService {
         sNetworkCapabilities = networkCapabilities;
     }
 
-    /**
-     * Get the DataServiceProvider associated with the slotId
-     *
-     * @param slotId slot index
-     * @return DataService.DataServiceProvider associated with the slot
-     */
     public static DataService.DataServiceProvider getDataServiceProvider(int slotId) {
-        return sIwlanDataServiceProviders.get(slotId);
+        return sDataServiceProviders.get(slotId);
     }
 
     public static Context getContext() {
@@ -1697,48 +1673,26 @@ public class IwlanDataService extends DataService {
 
     @Override
     public DataServiceProvider onCreateDataServiceProvider(int slotIndex) {
-        // TODO: validity check on slot index
-        Log.d(TAG, "Creating provider for " + slotIndex);
+        Log.d(TAG, "Creating DataServiceProvider for " + slotIndex);
 
-        if (mNetworkMonitorCallback == null) {
-            // start monitoring network and register for default network callback
-            ConnectivityManager connectivityManager =
-                    mContext.getSystemService(ConnectivityManager.class);
-            mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
-            if (connectivityManager != null) {
-                connectivityManager.registerSystemDefaultNetworkCallback(
-                        mNetworkMonitorCallback, getHandler());
-            }
-            Log.d(TAG, "Registered with Connectivity Service");
+        IwlanDataServiceProvider dataServiceProvider = sDataServiceProviders.get(slotIndex);
+        if (dataServiceProvider != null) {
+            Log.w(
+                    TAG,
+                    "DataServiceProvider already exists for slot "
+                            + slotIndex
+                            + ". Closing and recreating.");
+            dataServiceProvider.close();
         }
 
-        IwlanDataServiceProvider dp = new IwlanDataServiceProvider(slotIndex, this);
+        dataServiceProvider = new IwlanDataServiceProvider(slotIndex);
+        sDataServiceProviders.put(slotIndex, dataServiceProvider);
 
-        getHandler().obtainMessage(EVENT_ADD_DATA_SERVICE_PROVIDER, dp).sendToTarget();
-        return dp;
-    }
-
-    public void removeDataServiceProvider(IwlanDataServiceProvider dp) {
-        getHandler().obtainMessage(EVENT_REMOVE_DATA_SERVICE_PROVIDER, dp).sendToTarget();
-    }
-
-    @VisibleForTesting
-    void addIwlanDataServiceProvider(IwlanDataServiceProvider dp) {
-        int slotIndex = dp.getSlotIndex();
-        if (sIwlanDataServiceProviders.containsKey(slotIndex)) {
-            throw new IllegalStateException(
-                    "DataServiceProvider already exists for slot " + slotIndex);
-        }
-        sIwlanDataServiceProviders.put(slotIndex, dp);
+        return dataServiceProvider;
     }
 
     void deinitNetworkCallback() {
-        // deinit network related stuff
-        ConnectivityManager connectivityManager =
-                mContext.getSystemService(ConnectivityManager.class);
-        if (connectivityManager != null) {
-            connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
-        }
+        mConnectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
         mNetworkMonitorCallback = null;
     }
 
@@ -1794,7 +1748,6 @@ public class IwlanDataService extends DataService {
     }
 
     private void initAllowedNetworkType() {
-        TelephonyManager mTelephonyManager = mContext.getSystemService(TelephonyManager.class);
         mIs5GEnabledOnUi =
                 ((mTelephonyManager.getAllowedNetworkTypesBitmask()
                                 & TelephonyManager.NETWORK_TYPE_BITMASK_NR)
@@ -1828,20 +1781,42 @@ public class IwlanDataService extends DataService {
                 : null;
     }
 
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void registerServices(Context context) {
+        mConnectivityManager = context.getSystemService(ConnectivityManager.class);
+        Objects.requireNonNull(mConnectivityManager);
+
+        mTelephonyManager = context.getSystemService(TelephonyManager.class);
+        Objects.requireNonNull(mTelephonyManager);
+
+        mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
+        mConnectivityManager.registerSystemDefaultNetworkCallback(
+                mNetworkMonitorCallback, getHandler());
+
+        IwlanBroadcastReceiver.startListening(context);
+        IwlanCarrierConfigChangeListener.startListening(context);
+        IwlanHelper.startCountryDetector(context);
+        initAllowedNetworkType();
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void unregisterServices() {
+        IwlanCarrierConfigChangeListener.stopListening(mContext);
+        IwlanBroadcastReceiver.stopListening(mContext);
+        deinitNetworkCallback();
+    }
+
     @Override
     public void onCreate() {
         Context context = getApplicationContext().createAttributionContext(CONTEXT_ATTRIBUTION_TAG);
         setAppContext(context);
-        IwlanBroadcastReceiver.startListening(mContext);
-        IwlanCarrierConfigChangeListener.startListening(mContext);
-        IwlanHelper.startCountryDetector(mContext);
-        initAllowedNetworkType();
+        registerServices(context);
     }
 
     @Override
     public void onDestroy() {
-        IwlanCarrierConfigChangeListener.stopListening(mContext);
-        IwlanBroadcastReceiver.stopListening(mContext);
+        unregisterServices();
+        super.onDestroy();
     }
 
     @Override
@@ -2370,7 +2345,7 @@ public class IwlanDataService extends DataService {
             transport = "WIFI";
         }
         pw.println("Default transport: " + transport);
-        for (IwlanDataServiceProvider provider : sIwlanDataServiceProviders.values()) {
+        for (IwlanDataServiceProvider provider : sDataServiceProviders.values()) {
             pw.println();
             provider.dump(fd, pw, args);
             pw.println();

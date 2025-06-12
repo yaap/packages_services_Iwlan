@@ -123,6 +123,8 @@ android_test {
         "iwlan_telephony_flags_lib",
         "platform-test-annotations",
         "flag-junit",
+        "StatsdTestUtils",
+        "statsdprotolite",
     ],
 
     jni_libs: [

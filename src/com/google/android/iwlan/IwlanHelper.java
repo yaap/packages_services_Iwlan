@@ -200,6 +200,28 @@ public class IwlanHelper {
         return false;
     }
 
+    static boolean isWfcEnabled(Context context, int slotId) {
+        boolean isWfcEnabled = false;
+        int subId = getSubId(context, slotId);
+
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            // Fail to query subscription id, just return false.
+            return false;
+        }
+
+        ImsManager imsManager = context.getSystemService(ImsManager.class);
+        if (imsManager != null) {
+            return false;
+        }
+
+        try {
+            isWfcEnabled = imsManager.getImsMmTelManager(subId).isVoWiFiSettingEnabled();
+        } catch (Exception e) {
+            Log.e(TAG, "Fail to query Wi-Fi calling setting");
+        }
+        return isWfcEnabled;
+    }
+
     public static boolean isCrossSimCallingEnabled(Context context, int slotId) {
         boolean isCstEnabled = false;
         int subid = getSubId(context, slotId);

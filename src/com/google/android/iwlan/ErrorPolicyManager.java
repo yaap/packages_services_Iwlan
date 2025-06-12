@@ -863,7 +863,7 @@ public class ErrorPolicyManager {
             abstract Builder setRetryArray(List<Integer> retryArray);
 
             abstract Builder setInfiniteRetriesWithLastRetryTime(
-                    Boolean infiniteRetriesWithLastRetryTime);
+                    boolean infiniteRetriesWithLastRetryTime);
 
             abstract Builder setUnthrottlingEvents(List<Integer> unthrottlingEvents);
 

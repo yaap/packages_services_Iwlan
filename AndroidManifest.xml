@@ -16,6 +16,10 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
+  <permission android:name="android.iwlan.permission.RESTART_IWLAN"
+                android:label="Permission to restart Iwlan"
+                android:protectionLevel="signature|privileged" />
+
   <application
       android:directBootAware="true"
       android:defaultToDeviceProtectedStorage="true">
@@ -35,6 +39,9 @@
               <action android:name="android.telephony.NetworkService" />
           </intent-filter>
       </service>
-      <uses-library android:name="android.net.ipsec.ike" />
+      <provider android:name=".IwlanSilentRestart"
+            android:authorities="com.google.android.iwlan.iwlansilentrestart"
+            android:exported="true">
+    </provider>
   </application>
 </manifest>

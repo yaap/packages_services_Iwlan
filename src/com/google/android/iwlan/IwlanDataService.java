@@ -103,6 +103,7 @@ public class IwlanDataService extends DataService {
     private static Context mContext;
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private static boolean sNetworkConnected = false;
+    private static boolean sVcn = false;
     private static Network sNetwork = null;
     private static LinkProperties sLinkProperties = null;
     private static NetworkCapabilities sNetworkCapabilities;
@@ -263,7 +264,8 @@ public class IwlanDataService extends DataService {
             // size ipv6 routers have to handle so setting it to 1280 is the safest approach.
             // ideally it should be 1280 - tunnelling overhead ?
             private static final int LINK_MTU = 1280; // TODO: need to subtract tunnelling overhead?
-            private static final int LINK_MTU_CST = 1200; // Reserve 80 bytes for VCN.
+            // TODO: Reserve 80 bytes for VCN, but need to bypass VCN in long-term(b/382695720)
+            private static final int LINK_MTU_CST_OVER_VCN = 1200;
             static final int TUNNEL_DOWN = 1;
             static final int TUNNEL_IN_BRINGUP = 2;
             static final int TUNNEL_UP = 3;
@@ -300,8 +302,8 @@ public class IwlanDataService extends DataService {
             }
 
             public int getLinkMtu() {
-                if ((sDefaultDataTransport == Transport.MOBILE) && sNetworkConnected) {
-                    return LINK_MTU_CST;
+                if ((sDefaultDataTransport == Transport.MOBILE) && sVcn && sNetworkConnected) {
+                    return LINK_MTU_CST_OVER_VCN;
                 } else {
                     return LINK_MTU; // TODO: need to subtract tunnelling overhead
                 }
@@ -1539,12 +1541,14 @@ public class IwlanDataService extends DataService {
         int connectedDataSub = INVALID_SUB_ID;
         NetworkSpecifier specifier = networkCapabilities.getNetworkSpecifier();
         TransportInfo transportInfo = networkCapabilities.getTransportInfo();
+        sVcn = false;
 
         if (specifier instanceof TelephonyNetworkSpecifier) {
             connectedDataSub = ((TelephonyNetworkSpecifier) specifier).getSubscriptionId();
         } else if (transportInfo instanceof VcnTransportInfo) {
             connectedDataSub =
                     VcnUtils.getSubIdFromVcnCaps(connectivityManager, networkCapabilities);
+            sVcn = true;
         }
         return connectedDataSub;
     }

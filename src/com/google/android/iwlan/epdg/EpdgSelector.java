@@ -622,6 +622,12 @@ public class EpdgSelector {
         return plmnsFromCarrierConfig.contains(new StringBuilder(plmn).insert(3, "-").toString());
     }
 
+    private List<InetAddress> removeLoopbackAddress(List<InetAddress> validIpList) {
+        return validIpList.stream()
+                .filter(ip -> !ip.isLoopbackAddress())
+                .collect(Collectors.toList());
+    }
+
     private List<InetAddress> removeDuplicateIp(List<InetAddress> validIpList) {
         ArrayList<InetAddress> resultIpList = new ArrayList<>();
 
@@ -1344,6 +1350,7 @@ public class EpdgSelector {
                         }
 
                         if (!validIpList.isEmpty()) {
+                            validIpList = removeLoopbackAddress(validIpList);
                             validIpList = removeDuplicateIp(validIpList);
                             validIpList = filterExcludedAddresses(validIpList);
                             validIpList = prioritizeIp(validIpList, order);

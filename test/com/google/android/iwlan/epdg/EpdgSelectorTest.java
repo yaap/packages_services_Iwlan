@@ -106,24 +106,27 @@ public class EpdgSelectorTest {
 
     private static final byte[] TEST_PCO_NO_DATA = {0x00};
     private static final byte[] TEST_PCO_PLMN_DATA = {0x38, 0x01, 0x24, 0x00};
-    private static final byte[] TEST_PCO_IPV4_DATA = {0x38, 0x01, 0x24, 0x7F, 0x00, 0x00, 0x01};
+    private static final byte[] TEST_PCO_IPV4_DATA = {0x38, 0x01, 0x24, 0x6A, 0x00, 0x00, 0x01};
     private static final byte[] TEST_PCO_IPV6_DATA = {
         0x38, 0x01, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x01
+        0x00, 0x00, 0x00, 0x02
     };
 
     private static final String TEST_LOCAL_IPV4_ADDRESS = "192.168.1.100";
     private static final String TEST_LOCAL_IPV6_ADDRESS = "2001:db8::1";
 
-    private static final String TEST_IPV4_ADDRESS = "127.0.0.1";
-    private static final String TEST_IPV4_ADDRESS_1 = "127.0.0.2";
-    private static final String TEST_IPV4_ADDRESS_2 = "127.0.0.3";
-    private static final String TEST_IPV4_ADDRESS_3 = "127.0.0.4";
-    private static final String TEST_IPV4_ADDRESS_4 = "127.0.0.5";
-    private static final String TEST_IPV4_ADDRESS_5 = "127.0.0.6";
-    private static final String TEST_IPV4_ADDRESS_6 = "127.0.0.7";
-    private static final String TEST_IPV4_ADDRESS_7 = "127.0.0.8";
-    private static final String TEST_IPV6_ADDRESS = "0000:0000:0000:0000:0000:0000:0000:0001";
+    private static final String TEST_IPV4_LOOPBACK_ADDRESS = "127.0.0.1";
+    private static final String TEST_IPV6_LOOPBACK_ADDRESS =
+            "0000:0000:0000:0000:0000:0000:0000:0001";
+    private static final String TEST_IPV4_ADDRESS = "106.0.0.1";
+    private static final String TEST_IPV4_ADDRESS_1 = "106.0.0.2";
+    private static final String TEST_IPV4_ADDRESS_2 = "106.0.0.3";
+    private static final String TEST_IPV4_ADDRESS_3 = "106.0.0.4";
+    private static final String TEST_IPV4_ADDRESS_4 = "106.0.0.5";
+    private static final String TEST_IPV4_ADDRESS_5 = "106.0.0.6";
+    private static final String TEST_IPV4_ADDRESS_6 = "106.0.0.7";
+    private static final String TEST_IPV4_ADDRESS_7 = "106.0.0.8";
+    private static final String TEST_IPV6_ADDRESS = "0000:0000:0000:0000:0000:0000:0000:0002";
 
     private static final int TEST_PCO_ID_INVALID = 0xFF00;
     private static final int TEST_PCO_ID_IPV6 = 0xFF01;
@@ -1370,6 +1373,30 @@ public class EpdgSelectorTest {
                         EpdgSelector.SYSTEM_PREFERRED,
                         /* isEmergency= */ false);
 
+        assertEquals(expectedAddresses, actualAddresses);
+    }
+
+    @Test
+    public void testRemoveLocalbackAddress() throws Exception {
+        when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
+
+        // Set DnsResolver query mock
+        final String addr1 = "epdg.epc.mnc120.mcc300.pub.3gppnetwork.org";
+        final String addr2 = "epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        final String testStaticAddress = addr1 + "," + addr2;
+        mFakeDns.setAnswer(
+                addr1, new String[] {TEST_IPV4_ADDRESS, TEST_IPV4_LOOPBACK_ADDRESS}, TYPE_A);
+        mFakeDns.setAnswer(addr2, new String[] {TEST_IPV6_LOOPBACK_ADDRESS}, TYPE_AAAA);
+
+        // Set carrier config mock
+        IwlanCarrierConfig.putTestConfigIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        IwlanCarrierConfig.putTestConfigString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+
+        var expectedAddresses = List.of(InetAddress.getAllByName(TEST_IPV4_ADDRESS));
+        var actualAddresses = getValidatedServerListWithDefaultParams(/* isEmergency= */ false);
         assertEquals(expectedAddresses, actualAddresses);
     }
 

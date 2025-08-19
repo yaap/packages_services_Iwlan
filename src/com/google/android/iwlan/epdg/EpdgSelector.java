@@ -110,8 +110,15 @@ public class EpdgSelector {
 
     private static final long PARALLEL_STATIC_RESOLUTION_TIMEOUT_DURATION_SEC = 6L;
     private static final long PARALLEL_PLMN_RESOLUTION_TIMEOUT_DURATION_SEC = 20L;
-    private static final int NUM_EPDG_SELECTION_EXECUTORS = 2; // 1 each for normal selection, SOS.
-    private static final int MAX_DNS_RESOLVER_THREADS = 25; // Do not expect > 25 FQDNs per carrier.
+
+    // Number of executors per subscription (1 for normal, 1 for emergency).
+    private static final int NUM_EPDG_SELECTION_EXECUTORS = 2;
+
+    // Max threads per executor: 1 for pre-fetch, 1 for bring-up, and 1 for recycled requests.
+    private static final int MAX_EPDG_SELECTION_THREADS = 3;
+
+    // Max concurrent DNS resolver threads per subscription.
+    private static final int MAX_DNS_RESOLVER_THREADS = 25;
 
     private static final int PCO_MCC_MNC_LEN = 3; // 3 bytes for MCC and MNC in PCO data.
     private static final int PCO_IPV4_LEN = 4; // 4 bytes for IPv4 address in PCO data.
@@ -194,12 +201,10 @@ public class EpdgSelector {
     }
 
     private void initializeExecutors() {
-        int maxEpdgSelectionThreads = mFeatureFlags.preventEpdgSelectionThreadsExhausted() ? 3 : 2;
-
         dnsResolutionQueue =
                 new ArrayBlockingQueue<>(
                         MAX_DNS_RESOLVER_THREADS
-                                * maxEpdgSelectionThreads
+                                * MAX_EPDG_SELECTION_THREADS
                                 * NUM_EPDG_SELECTION_EXECUTORS);
 
         mDnsResolutionExecutor =
@@ -209,7 +214,7 @@ public class EpdgSelector {
         mEpdgSelectionExecutor =
                 new ThreadPoolExecutor(
                         0,
-                        maxEpdgSelectionThreads,
+                        MAX_EPDG_SELECTION_THREADS,
                         60L,
                         TimeUnit.SECONDS,
                         new SynchronousQueue<>());
@@ -217,7 +222,7 @@ public class EpdgSelector {
         mSosEpdgSelectionExecutor =
                 new ThreadPoolExecutor(
                         0,
-                        maxEpdgSelectionThreads,
+                        MAX_EPDG_SELECTION_THREADS,
                         60L,
                         TimeUnit.SECONDS,
                         new SynchronousQueue<>());

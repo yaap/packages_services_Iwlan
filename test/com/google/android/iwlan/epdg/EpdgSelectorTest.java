@@ -700,7 +700,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testTemporaryExcludedIpAddressWhenDisabledExcludeFailedIp() throws Exception {
-        doReturn(false).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final IkeIOException mockIkeIOException = mock(IkeIOException.class);
@@ -746,7 +745,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testTemporaryExcludedIpAddressWhenEnabledExcludeFailedIp() throws Exception {
-        doReturn(true).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final String fqdnFromRplmn = "epdg.epc.mnc122.mcc300.pub.3gppnetwork.org";
@@ -879,7 +877,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testShouldNotTemporaryExcludedIpAddressWhenInternalError() throws Exception {
-        doReturn(true).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final String fqdnFromRplmn = "epdg.epc.mnc122.mcc300.pub.3gppnetwork.org";

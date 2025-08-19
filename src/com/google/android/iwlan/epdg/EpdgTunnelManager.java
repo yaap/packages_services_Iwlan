@@ -2595,31 +2595,8 @@ public class EpdgTunnelManager {
         return numRequestsClosed;
     }
 
-    InetAddress validateAndSetEpdgAddressLegacy(List<InetAddress> selectorResultList) {
-        List<InetAddress> addrList = mValidEpdgInfo.getAddrList();
-        if (addrList == null || !addrList.equals(selectorResultList)) {
-            Log.d(TAG, "Update ePDG address list.");
-            mValidEpdgInfo.setAddrList(selectorResultList);
-            addrList = mValidEpdgInfo.getAddrList();
-        }
-
-        int index = mValidEpdgInfo.getIndex();
-        Log.d(
-                TAG,
-                "Valid ePDG Address List: "
-                        + Arrays.toString(addrList.toArray())
-                        + ", index = "
-                        + index);
-        mValidEpdgInfo.incrementIndex();
-        return addrList.get(index);
-    }
-
     @VisibleForTesting
     InetAddress validateAndSetEpdgAddress(List<InetAddress> selectorResultList) {
-        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
-            return validateAndSetEpdgAddressLegacy(selectorResultList);
-        }
-
         if (mEpdgMonitor.hasEmergencyPdnFailedWithConnectedEpdg()
                 && selectorResultList
                         .get(0)

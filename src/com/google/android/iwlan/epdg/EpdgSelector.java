@@ -259,17 +259,11 @@ public class EpdgSelector {
     }
 
     private void excludeIpAddress(InetAddress ipAddress) {
-        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
-            return;
-        }
         Log.d(TAG, "Added " + ipAddress + " into temporary excluded addresses");
         mTemporaryExcludedAddresses.add(ipAddress);
     }
 
     private void clearExcludedIpAddresses() {
-        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
-            return;
-        }
         Log.d(TAG, "Cleared temporary excluded addresses");
         mTemporaryExcludedAddresses.clear();
     }
@@ -373,9 +367,6 @@ public class EpdgSelector {
     }
 
     private List<InetAddress> filterExcludedAddresses(List<InetAddress> ipList) {
-        if (!mFeatureFlags.epdgSelectionExcludeFailedIpAddress()) {
-            return ipList;
-        }
         if (mTemporaryExcludedAddresses.containsAll(ipList)) {
             Log.d(
                     TAG,

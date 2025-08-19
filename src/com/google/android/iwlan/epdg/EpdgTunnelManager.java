@@ -1151,49 +1151,36 @@ public class EpdgTunnelManager {
                 new TunnelModeChildSessionParams.Builder()
                         .setLifetimeSeconds(hardTimeSeconds, softTimeSeconds);
 
-        // Else block and it's related functionality can be removed once
-        // multipleSaProposals, highSecureTransformsPrioritized and aeadAlgosEnabled feature flags
-        // related functionality becomes stable and gets instruction to remove feature flags.
-        if (mFeatureFlags.multipleSaProposals()
-                || mFeatureFlags.highSecureTransformsPrioritized()) {
-            EpdgChildSaProposal epdgChildSaProposal = createEpdgChildSaProposal();
+        EpdgChildSaProposal epdgChildSaProposal = createEpdgChildSaProposal();
 
-            if (IwlanCarrierConfig.getConfigBoolean(
-                    mContext,
-                    mSlotId,
-                    CarrierConfigManager.Iwlan.KEY_ADD_KE_TO_CHILD_SESSION_REKEY_BOOL)) {
-                epdgChildSaProposal.enableAddChildSessionRekeyKePayload();
-            }
-            // Adds single SA proposal, priority is for AEAD if configured else non-AEAD proposal.
-            if (isChildSessionAeadAlgosAvailable()) {
-                childSessionParamsBuilder.addChildSaProposal(
-                        epdgChildSaProposal.buildProposedChildSaAeadProposal());
-            } else {
+        if (IwlanCarrierConfig.getConfigBoolean(
+                mContext,
+                mSlotId,
+                CarrierConfigManager.Iwlan.KEY_ADD_KE_TO_CHILD_SESSION_REKEY_BOOL)) {
+            epdgChildSaProposal.enableAddChildSessionRekeyKePayload();
+        }
+        // Adds single SA proposal, priority is for AEAD if configured else non-AEAD proposal.
+        if (isChildSessionAeadAlgosAvailable()) {
+            childSessionParamsBuilder.addChildSaProposal(
+                    epdgChildSaProposal.buildProposedChildSaAeadProposal());
+        } else {
+            childSessionParamsBuilder.addChildSaProposal(
+                    epdgChildSaProposal.buildProposedChildSaProposal());
+        }
+        // Adds multiple proposals. If AEAD proposal already added then adds
+        // configured non-AEAD proposal followed by supported AEAD and non-AEAD proposals.
+        if (IwlanCarrierConfig.getConfigBoolean(
+                mContext,
+                mSlotId,
+                CarrierConfigManager.Iwlan.KEY_SUPPORTS_CHILD_SESSION_MULTIPLE_SA_PROPOSALS_BOOL)) {
+            if (isChildSessionAeadAlgosAvailable() && isChildSessionNonAeadAlgosAvailable()) {
                 childSessionParamsBuilder.addChildSaProposal(
                         epdgChildSaProposal.buildProposedChildSaProposal());
             }
-            // Adds multiple proposals. If AEAD proposal already added then adds
-            // configured non-AEAD proposal followed by supported AEAD and non-AEAD proposals.
-            if (IwlanCarrierConfig.getConfigBoolean(
-                    mContext,
-                    mSlotId,
-                    CarrierConfigManager.Iwlan
-                            .KEY_SUPPORTS_CHILD_SESSION_MULTIPLE_SA_PROPOSALS_BOOL)) {
-                if (isChildSessionAeadAlgosAvailable() && isChildSessionNonAeadAlgosAvailable()) {
-                    childSessionParamsBuilder.addChildSaProposal(
-                            epdgChildSaProposal.buildProposedChildSaProposal());
-                }
-                childSessionParamsBuilder.addChildSaProposal(
-                        epdgChildSaProposal.buildSupportedChildSaAeadProposal());
-                childSessionParamsBuilder.addChildSaProposal(
-                        epdgChildSaProposal.buildSupportedChildSaProposal());
-            }
-        } else {
-            if (isChildSessionAeadAlgosAvailable()) {
-                childSessionParamsBuilder.addChildSaProposal(buildAeadChildSaProposal());
-            } else {
-                childSessionParamsBuilder.addChildSaProposal(buildChildSaProposal());
-            }
+            childSessionParamsBuilder.addChildSaProposal(
+                    epdgChildSaProposal.buildSupportedChildSaAeadProposal());
+            childSessionParamsBuilder.addChildSaProposal(
+                    epdgChildSaProposal.buildSupportedChildSaProposal());
         }
 
         boolean handoverIPv4Present = setupRequest.srcIpv4Address().isPresent();
@@ -1337,38 +1324,25 @@ public class EpdgTunnelManager {
                         .setRetransmissionTimeoutsMillis(getRetransmissionTimeoutsFromConfig())
                         .setDpdDelaySeconds(getDpdDelayFromConfig());
 
-        // Else block and it's related functionality can be removed once
-        // multipleSaProposals, highSecureTransformsPrioritized and aeadAlgosEnabled feature flags
-        // related functionality becomes stable and gets instruction to remove feature flags.
-        if (mFeatureFlags.multipleSaProposals()
-                || mFeatureFlags.highSecureTransformsPrioritized()) {
-            EpdgIkeSaProposal epdgIkeSaProposal = createEpdgIkeSaProposal();
+        EpdgIkeSaProposal epdgIkeSaProposal = createEpdgIkeSaProposal();
 
-            // Adds single SA proposal, priority is for AEAD if configured else non-AEAD proposal.
-            if (isIkeSessionAeadAlgosAvailable()) {
-                builder.addIkeSaProposal(epdgIkeSaProposal.buildProposedIkeSaAeadProposal());
-            } else {
+        // Adds single SA proposal, priority is for AEAD if configured else non-AEAD proposal.
+        if (isIkeSessionAeadAlgosAvailable()) {
+            builder.addIkeSaProposal(epdgIkeSaProposal.buildProposedIkeSaAeadProposal());
+        } else {
+            builder.addIkeSaProposal(epdgIkeSaProposal.buildProposedIkeSaProposal());
+        }
+        // Adds multiple proposals. If AEAD proposal already added then adds
+        // configured non-AEAD proposal followed by supported AEAD and non-AEAD proposals.
+        if (IwlanCarrierConfig.getConfigBoolean(
+                mContext,
+                mSlotId,
+                CarrierConfigManager.Iwlan.KEY_SUPPORTS_IKE_SESSION_MULTIPLE_SA_PROPOSALS_BOOL)) {
+            if (isIkeSessionAeadAlgosAvailable() && isIkeSessionNonAeadAlgosAvailable()) {
                 builder.addIkeSaProposal(epdgIkeSaProposal.buildProposedIkeSaProposal());
             }
-            // Adds multiple proposals. If AEAD proposal already added then adds
-            // configured non-AEAD proposal followed by supported AEAD and non-AEAD proposals.
-            if (IwlanCarrierConfig.getConfigBoolean(
-                    mContext,
-                    mSlotId,
-                    CarrierConfigManager.Iwlan
-                            .KEY_SUPPORTS_IKE_SESSION_MULTIPLE_SA_PROPOSALS_BOOL)) {
-                if (isIkeSessionAeadAlgosAvailable() && isIkeSessionNonAeadAlgosAvailable()) {
-                    builder.addIkeSaProposal(epdgIkeSaProposal.buildProposedIkeSaProposal());
-                }
-                builder.addIkeSaProposal(epdgIkeSaProposal.buildSupportedIkeSaAeadProposal());
-                builder.addIkeSaProposal(epdgIkeSaProposal.buildSupportedIkeSaProposal());
-            }
-        } else {
-            if (isIkeSessionAeadAlgosAvailable()) {
-                builder.addIkeSaProposal(buildIkeSaAeadProposal());
-            } else {
-                builder.addIkeSaProposal(buildIkeSaProposal());
-            }
+            builder.addIkeSaProposal(epdgIkeSaProposal.buildSupportedIkeSaAeadProposal());
+            builder.addIkeSaProposal(epdgIkeSaProposal.buildSupportedIkeSaProposal());
         }
 
         if (needIncludeInitialContact(epdgAddress)) {
@@ -3317,10 +3291,10 @@ public class EpdgTunnelManager {
     boolean isUnderlyingNetworkValidationRequired(int error) {
         return switch (error) {
             case IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED,
-                            IwlanError.IKE_NETWORK_LOST_EXCEPTION,
-                            IwlanError.IKE_INIT_TIMEOUT,
-                            IwlanError.IKE_MOBILITY_TIMEOUT,
-                            IwlanError.IKE_DPD_TIMEOUT ->
+                    IwlanError.IKE_NETWORK_LOST_EXCEPTION,
+                    IwlanError.IKE_INIT_TIMEOUT,
+                    IwlanError.IKE_MOBILITY_TIMEOUT,
+                    IwlanError.IKE_DPD_TIMEOUT ->
                     true;
             default -> false;
         };

@@ -661,7 +661,6 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testMultipleSaProposals() throws Exception {
         when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
-        when(mFakeFeatureFlags.multipleSaProposals()).thenReturn(true);
         final String apnName = "ims";
 
         int[] aeadAlgos = {
@@ -722,8 +721,6 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testSaProposalsReorder() throws Exception {
         when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
-        when(mFakeFeatureFlags.multipleSaProposals()).thenReturn(true);
-        when(mFakeFeatureFlags.highSecureTransformsPrioritized()).thenReturn(true);
 
         final String apnName = "ims";
         int[] aeadAlgos = {
@@ -802,7 +799,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testAddDHGroupForKePayloadInChildSaParamsForRekey() throws Exception {
-        when(mFakeFeatureFlags.multipleSaProposals()).thenReturn(true);
         final String apnName = "ims";
 
         IwlanCarrierConfig.putTestConfigBoolean(
@@ -2166,7 +2162,7 @@ public class EpdgTunnelManagerTest {
             if (configRequest
                     instanceof
                     TunnelModeChildSessionParams.ConfigRequestIpv6Address
-                                    configRequestIpv6Address) {
+                            configRequestIpv6Address) {
                 ipv6ConfigRequestPresent = true;
                 assertEquals(testAddressV6, configRequestIpv6Address.getAddress());
                 assertEquals(
@@ -2177,7 +2173,7 @@ public class EpdgTunnelManagerTest {
             if (configRequest
                     instanceof
                     TunnelModeChildSessionParams.ConfigRequestIpv4Address
-                                    configRequestIpv4Address) {
+                            configRequestIpv4Address) {
                 ipv4ConfigRequestPresent = true;
                 assertEquals(testAddressV4, configRequestIpv4Address.getAddress());
             }

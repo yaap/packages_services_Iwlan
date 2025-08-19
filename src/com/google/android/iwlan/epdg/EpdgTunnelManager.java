@@ -1417,10 +1417,6 @@ public class EpdgTunnelManager {
     }
 
     private boolean isChildSessionAeadAlgosAvailable() {
-        if (!mFeatureFlags.aeadAlgosEnabled()) {
-            return false;
-        }
-
         int[] encryptionAlgos =
                 IwlanCarrierConfig.getConfigIntArray(
                         mContext,
@@ -1451,10 +1447,6 @@ public class EpdgTunnelManager {
     }
 
     private boolean isIkeSessionAeadAlgosAvailable() {
-        if (!mFeatureFlags.aeadAlgosEnabled()) {
-            return false;
-        }
-
         int[] encryptionAlgos =
                 IwlanCarrierConfig.getConfigIntArray(
                         mContext,

@@ -607,7 +607,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testAeadSaProposals() throws Exception {
-        when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
         final String apnName = "ims";
         int[] aeadAlgos = {
             SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8,
@@ -660,7 +659,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testMultipleSaProposals() throws Exception {
-        when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
         final String apnName = "ims";
 
         int[] aeadAlgos = {
@@ -720,8 +718,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testSaProposalsReorder() throws Exception {
-        when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
-
         final String apnName = "ims";
         int[] aeadAlgos = {
             SaProposal.ENCRYPTION_ALGORITHM_AES_CBC,

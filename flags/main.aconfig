@@ -2,12 +2,6 @@ package: "com.google.android.iwlan.flags"
 container: "system_ext"
 
 flag {
-    name: "aead_algos_enabled"
-    namespace: "iwlan_telephony"
-    description: "Add AES_GCM algorithm support in IWLAN."
-    bug: "306119890"
-}
-flag {
     name: "epdg_selection_exclude_failed_ip_address"
     namespace: "iwlan_telephony"
     description: "Exclude the failed ip address in epdg selection until tunnel establish successfully or all ip address candidates are failed"

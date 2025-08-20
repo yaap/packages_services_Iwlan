@@ -700,7 +700,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testTemporaryExcludedIpAddressWhenDisabledExcludeFailedIp() throws Exception {
-        doReturn(false).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final IkeIOException mockIkeIOException = mock(IkeIOException.class);
@@ -746,7 +745,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testTemporaryExcludedIpAddressWhenEnabledExcludeFailedIp() throws Exception {
-        doReturn(true).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final String fqdnFromRplmn = "epdg.epc.mnc122.mcc300.pub.3gppnetwork.org";
@@ -879,7 +877,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testShouldNotTemporaryExcludedIpAddressWhenInternalError() throws Exception {
-        doReturn(true).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final String fqdnFromRplmn = "epdg.epc.mnc122.mcc300.pub.3gppnetwork.org";
@@ -1212,10 +1209,8 @@ public class EpdgSelectorTest {
         }
     }
 
-    @SuppressWarnings("FutureReturnValueIgnored")
     @Test
     public void testMultipleBackToBackSetupDataCallRequest() {
-        when(mfakeFeatureFlags.preventEpdgSelectionThreadsExhausted()).thenReturn(true);
         EpdgSelector epdgSelector =
                 new EpdgSelector(mMockContext, DEFAULT_SLOT_INDEX, mfakeFeatureFlags);
         Runnable runnable = mock(Runnable.class);
@@ -1225,23 +1220,6 @@ public class EpdgSelectorTest {
         epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false);
         // Second set up data call
         epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false);
-    }
-
-    @SuppressWarnings("FutureReturnValueIgnored")
-    @Test
-    public void testBackToBackSetupDataCallRequest() {
-        when(mfakeFeatureFlags.preventEpdgSelectionThreadsExhausted()).thenReturn(false);
-        EpdgSelector epdgSelector =
-                new EpdgSelector(mMockContext, DEFAULT_SLOT_INDEX, mfakeFeatureFlags);
-        Runnable runnable = mock(Runnable.class);
-        // Prefetch
-        epdgSelector.trySubmitEpdgSelectionExecutor(runnable, true, false);
-        // First set up data call
-        epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false);
-        // Second set up data call request exhausts the thread pool
-        assertThrows(
-                RejectedExecutionException.class,
-                () -> epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false));
     }
 
     private void sendCarrierSignalPcoValue(int apnType, int pcoId, byte[] pcoData) {

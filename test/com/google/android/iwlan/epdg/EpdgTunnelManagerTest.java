@@ -246,7 +246,6 @@ public class EpdgTunnelManagerTest {
                 .thenReturn(mMockTelephonyManager);
         when(mMockTelephonyManager.getSimCarrierId()).thenReturn(0);
         when(mMockContext.getSystemService(eq(IpSecManager.class))).thenReturn(mMockIpSecManager);
-        when(mFakeFeatureFlags.epdgSelectionExcludeFailedIpAddress()).thenReturn(false);
         when(mMockConnectivityManager.getNetworkCapabilities(any(Network.class)))
                 .thenReturn(mMockNetworkCapabilities);
         when(mMockNetworkCapabilities.hasCapability(anyInt())).thenReturn(false);
@@ -607,7 +606,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testAeadSaProposals() throws Exception {
-        when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
         final String apnName = "ims";
         int[] aeadAlgos = {
             SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8,
@@ -660,8 +658,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testMultipleSaProposals() throws Exception {
-        when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
-        when(mFakeFeatureFlags.multipleSaProposals()).thenReturn(true);
         final String apnName = "ims";
 
         int[] aeadAlgos = {
@@ -721,10 +717,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testSaProposalsReorder() throws Exception {
-        when(mFakeFeatureFlags.aeadAlgosEnabled()).thenReturn(true);
-        when(mFakeFeatureFlags.multipleSaProposals()).thenReturn(true);
-        when(mFakeFeatureFlags.highSecureTransformsPrioritized()).thenReturn(true);
-
         final String apnName = "ims";
         int[] aeadAlgos = {
             SaProposal.ENCRYPTION_ALGORITHM_AES_CBC,
@@ -802,7 +794,6 @@ public class EpdgTunnelManagerTest {
 
     @Test
     public void testAddDHGroupForKePayloadInChildSaParamsForRekey() throws Exception {
-        when(mFakeFeatureFlags.multipleSaProposals()).thenReturn(true);
         final String apnName = "ims";
 
         IwlanCarrierConfig.putTestConfigBoolean(
@@ -1094,58 +1085,8 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
-    public void testGetValidEpdgAddress_NextAddr() throws Exception {
-        String testApnName = "www.xyz.com";
-
-        List<InetAddress> ipList1 = new ArrayList<>();
-        ipList1.add(InetAddress.getByName("1.1.1.1"));
-        ipList1.add(InetAddress.getByName("8.8.8.8"));
-        mEpdgTunnelManager.validateAndSetEpdgAddress(ipList1);
-
-        IwlanError error = new IwlanError(new IkeInternalException(new IOException()));
-
-        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
-
-        doReturn(null)
-                .doReturn(null)
-                .when(mMockIkeSessionCreator)
-                .createIkeSession(
-                        eq(mMockContext),
-                        any(IkeSessionParams.class),
-                        any(ChildSessionParams.class),
-                        any(Executor.class),
-                        any(IkeSessionCallback.class),
-                        any(ChildSessionCallback.class));
-
-        boolean ret =
-                mEpdgTunnelManager.bringUpTunnel(
-                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
-                        mMockIwlanTunnelCallback);
-        assertTrue(ret);
-        mTestLooper.dispatchAll();
-
-        ArrayList<InetAddress> ipList2 = new ArrayList<>();
-        ipList2.add(InetAddress.getByName("1.1.1.1"));
-        ipList2.add(InetAddress.getByName("8.8.8.8"));
-        mEpdgTunnelManager.sendSelectionRequestComplete(
-                ipList2, new IwlanError(IwlanError.NO_ERROR), 1);
-        mTestLooper.dispatchAll();
-
-        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback =
-                verifyCreateIkeSession(ipList2.get(1));
-        ikeSessionCallback.onClosedWithException(
-                new IkeInternalException(new IOException("Retransmitting failure")));
-        mTestLooper.dispatchAll();
-
-        verify(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
-        verify(mMockIwlanTunnelCallback).onClosed(eq(testApnName), eq(error), any());
-    }
-
-    @Test
     public void testGetValidEpdgAddress_WhenExcludeFailedIpEnabled() throws Exception {
         String testApnName = "www.xyz.com";
-        when(mFakeFeatureFlags.epdgSelectionExcludeFailedIpAddress()).thenReturn(true);
-
         List<InetAddress> ipList1 =
                 List.of(InetAddress.getByName("1.1.1.1"), InetAddress.getByName("8.8.8.8"));
         mEpdgTunnelManager.validateAndSetEpdgAddress(ipList1);
@@ -2166,7 +2107,7 @@ public class EpdgTunnelManagerTest {
             if (configRequest
                     instanceof
                     TunnelModeChildSessionParams.ConfigRequestIpv6Address
-                                    configRequestIpv6Address) {
+                            configRequestIpv6Address) {
                 ipv6ConfigRequestPresent = true;
                 assertEquals(testAddressV6, configRequestIpv6Address.getAddress());
                 assertEquals(
@@ -2177,7 +2118,7 @@ public class EpdgTunnelManagerTest {
             if (configRequest
                     instanceof
                     TunnelModeChildSessionParams.ConfigRequestIpv4Address
-                                    configRequestIpv4Address) {
+                            configRequestIpv4Address) {
                 ipv4ConfigRequestPresent = true;
                 assertEquals(testAddressV4, configRequestIpv4Address.getAddress());
             }
@@ -2880,7 +2821,6 @@ public class EpdgTunnelManagerTest {
     public void testEmergencyPdnFailedEstablishWithImsPdn_establishWithSeparateEpdg()
             throws Exception {
         when(mFakeFeatureFlags.distinctEpdgSelectionForEmergencySessions()).thenReturn(true);
-        when(mFakeFeatureFlags.epdgSelectionExcludeFailedIpAddress()).thenReturn(true);
         IwlanCarrierConfig.putTestConfigBoolean(
                 IwlanCarrierConfig.KEY_DISTINCT_EPDG_FOR_EMERGENCY_ALLOWED_BOOL, true);
         assertTrue(

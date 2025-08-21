@@ -83,22 +83,17 @@ public class NetworkSliceSelectionAssistanceInformation {
     }
 
     private static int getSD(byte[] snssai, int offset) {
-        int sliceDescriptor = NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
         /*
          * Slice Descriptor is 3 bytes long
          * The SD field has a reserved value "no SD value associated with the SST"
          * defined as hexadecimal FFFFFF
          */
         if (offset >= 0 && snssai.length >= offset + 3) {
-            int sd = 0;
-            sd =
-                    (sd | snssai[offset + 2])
-                            | ((sd | snssai[offset + 1]) << 8)
-                            | ((sd | snssai[offset]) << 16);
-            if (sd != 0xFFFFFF) {
-                sliceDescriptor = sd;
-            }
+            // Constructs the 24-bit integer from 3 bytes (Big-Endian/Network Order)
+            return ((snssai[offset] & 0xFF) << 16)
+                    | ((snssai[offset + 1] & 0xFF) << 8)
+                    | ((snssai[offset + 2] & 0xFF));
         }
-        return sliceDescriptor;
+        return NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
     }
 }

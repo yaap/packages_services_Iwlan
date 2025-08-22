@@ -158,7 +158,7 @@ public class EpdgTunnelManagerTest {
 
     private EpdgTunnelManager mEpdgTunnelManager;
 
-    private static class IwlanTunnelCallback implements EpdgTunnelManager.TunnelCallback {
+    private static class IwlanTunnelCallback implements EpdgTunnelCallback {
         public void onOpened(
                 String apnName,
                 TunnelLinkProperties linkProperties,
@@ -167,6 +167,9 @@ public class EpdgTunnelManagerTest {
         public void onClosed(String apnName, IwlanError error, OnClosedMetrics onClosedMetrics) {}
 
         public void onNetworkValidationStatusChanged(String apnName, int status) {}
+
+        public void onTunnelLinkPropertiesChanged(
+                String apnName, TunnelLinkProperties linkProperties) {}
     }
 
     private final TestLooper mTestLooper = new TestLooper();
@@ -394,7 +397,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
 
         boolean ret = mEpdgTunnelManager.bringUpTunnel(TSR, mMockIwlanTunnelCallback);
         assertTrue(ret);
@@ -850,7 +854,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
 
         mEpdgTunnelManager.closeTunnel(
                 testApnName,
@@ -875,7 +880,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
 
         mEpdgTunnelManager.closeTunnel(
                 testApnName,
@@ -1158,7 +1164,15 @@ public class EpdgTunnelManagerTest {
         InetAddress src = InetAddress.getByName("2600:381:4872:5d1e:0:10:3582:a501");
         EpdgTunnelManager.TunnelConfig tf =
                 mEpdgTunnelManager
-                .new TunnelConfig(null, null, mMockIpSecTunnelInterface, src, 64, false, a1);
+                .new TunnelConfig(
+                        null,
+                        null,
+                        mMockIpSecTunnelInterface,
+                        src,
+                        64,
+                        false,
+                        a1,
+                        mMockDefaultNetwork);
         assertTrue(tf.isPrefixSameAsSrcIP(l1));
 
         // different prefix length
@@ -1325,7 +1339,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                InetAddresses.parseNumericAddress(EPDG_ADDRESS));
+                InetAddresses.parseNumericAddress(EPDG_ADDRESS),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
         mEpdgTunnelManager.onConnectedToEpdg(true);
@@ -1378,7 +1393,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                epdgAddress);
+                epdgAddress,
+                mMockDefaultNetwork);
         mEpdgTunnelManager.mEpdgMonitor.onApnConnectToEpdg(apnName, epdgAddress);
         mEpdgTunnelManager.onConnectedToEpdg(true);
     }
@@ -1543,7 +1559,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                InetAddresses.parseNumericAddress(EPDG_ADDRESS));
+                InetAddresses.parseNumericAddress(EPDG_ADDRESS),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
         mEpdgTunnelManager.onConnectedToEpdg(true);
@@ -1603,7 +1620,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
         when(mMockIkeSessionConfiguration.getPcscfServers()).thenReturn(EXPECTED_EPDG_ADDRESSES);
@@ -1643,10 +1661,15 @@ public class EpdgTunnelManagerTest {
 
         IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
                 verifyBringUpTunnelWithDnsQuery(testApnName, mMockDefaultNetwork, mMockIkeSession);
+        IkeSessionCallback ikeSessionCallback =
+                ikeSessionArgumentCaptors.mIkeSessionCallbackCaptor.getValue();
         ChildSessionCallback childSessionCallback =
                 ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+
+        ikeSessionCallback.onOpened(mMockIkeSessionConfiguration);
         childSessionCallback.onIpSecTransformCreated(
                 mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        childSessionCallback.onOpened(mMockChildSessionConfiguration);
 
         mEpdgTunnelManager
                 .getTmIkeSessionCallback(testApnName, DEFAULT_TOKEN)
@@ -1654,6 +1677,7 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIpSecTunnelInterface).setUnderlyingNetwork(mMockDefaultNetwork);
+        verify(mMockIwlanTunnelCallback).onTunnelLinkPropertiesChanged(eq(testApnName), any());
     }
 
     @Test
@@ -1826,7 +1850,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                InetAddresses.parseNumericAddress(EPDG_ADDRESS));
+                InetAddresses.parseNumericAddress(EPDG_ADDRESS),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
         mEpdgTunnelManager.onConnectedToEpdg(true);
@@ -2587,7 +2612,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
         mEpdgTunnelManager.requestNetworkValidationForApn(testApnName);
@@ -2637,7 +2663,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
 
         mEpdgTunnelManager.requestNetworkValidationForApn(testApnName);
         mTestLooper.dispatchAll();
@@ -2687,7 +2714,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
 
         int[][] orderedUpdateEvents = {
@@ -2733,7 +2761,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIpv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 false /* isEmergency */,
-                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession());
+                mEpdgTunnelManager.mEpdgMonitor.getEpdgAddressForNormalSession(),
+                mMockDefaultNetwork);
         int token = mEpdgTunnelManager.incrementAndGetCurrentTokenForApn(testApnName);
         int unknown_liveness_status = 9999;
 
@@ -2775,7 +2804,8 @@ public class EpdgTunnelManagerTest {
                 null /* srcIPv6Addr */,
                 0 /* srcIPv6AddrPrefixLen */,
                 true /* isEmergency */,
-                epdgAddress);
+                epdgAddress,
+                mMockDefaultNetwork);
         mEpdgTunnelManager.mEpdgMonitor.onApnConnectToEpdg(apnName, epdgAddress);
         mEpdgTunnelManager.onConnectedToEpdg(true);
     }

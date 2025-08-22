@@ -349,31 +349,31 @@ public class EpdgTunnelManager {
             mEpdgAddress = epdgAddress;
         }
 
-        public IkeSessionState getIkeSessionState() {
+        IkeSessionState getIkeSessionState() {
             return mIkeSessionState;
         }
 
-        public void setIkeSessionState(IkeSessionState ikeSessionState) {
+        void setIkeSessionState(IkeSessionState ikeSessionState) {
             mIkeSessionState = ikeSessionState;
         }
 
-        public NetworkSliceInfo getSliceInfo() {
+        NetworkSliceInfo getSliceInfo() {
             return mSliceInfo;
         }
 
-        public void setSliceInfo(NetworkSliceInfo si) {
+        void setSliceInfo(NetworkSliceInfo si) {
             mSliceInfo = si;
         }
 
-        public boolean isBackoffTimeValid() {
+        boolean isBackoffTimeValid() {
             return mIsBackoffTimeValid;
         }
 
-        public long getBackoffTime() {
+        long getBackoffTime() {
             return mBackoffTime;
         }
 
-        public void setBackoffTime(long backoffTime) {
+        void setBackoffTime(long backoffTime) {
             mIsBackoffTimeValid = true;
             mBackoffTime = backoffTime;
         }
@@ -391,15 +391,15 @@ public class EpdgTunnelManager {
             mPcscfAddrList = pcscfAddrList;
         }
 
-        public List<InetAddress> getDnsAddrList() {
+        List<InetAddress> getDnsAddrList() {
             return mDnsAddrList;
         }
 
-        public void setDnsAddrList(List<InetAddress> dnsAddrList) {
+        void setDnsAddrList(List<InetAddress> dnsAddrList) {
             this.mDnsAddrList = dnsAddrList;
         }
 
-        public List<LinkAddress> getInternalAddrList() {
+        List<LinkAddress> getInternalAddrList() {
             return mInternalAddrList;
         }
 
@@ -412,7 +412,7 @@ public class EpdgTunnelManager {
             return false;
         }
 
-        public void setInternalAddrList(List<LinkAddress> internalAddrList) {
+        void setInternalAddrList(List<LinkAddress> internalAddrList) {
             mInternalAddrList = new ArrayList<LinkAddress>(internalAddrList);
             if (getSrcIpv6Address() != null) {
                 // check if we can reuse src ipv6 address (i.e. if prefix is same)
@@ -440,35 +440,35 @@ public class EpdgTunnelManager {
         }
 
         @NonNull
-        public IkeSession getIkeSession() {
+        IkeSession getIkeSession() {
             return mIkeSession;
         }
 
-        public IwlanError getError() {
+        IwlanError getError() {
             return mError;
         }
 
-        public void setError(IwlanError error) {
+        void setError(IwlanError error) {
             this.mError = error;
         }
 
-        public IpSecManager.IpSecTunnelInterface getIface() {
+        IpSecManager.IpSecTunnelInterface getIface() {
             return mIface;
         }
 
-        public InetAddress getSrcIpv6Address() {
+        InetAddress getSrcIpv6Address() {
             return mSrcIpv6Address;
         }
 
-        public boolean isEmergency() {
+        boolean isEmergency() {
             return mIsEmergency;
         }
 
-        public InetAddress getEpdgAddress() {
+        InetAddress getEpdgAddress() {
             return mEpdgAddress;
         }
 
-        public boolean hasTunnelOpened() {
+        boolean hasTunnelOpened() {
             return mInternalAddrList != null
                     && !mInternalAddrList.isEmpty() /* The child session is opened */
                     && mIface != null; /* The tunnel interface is bring up */
@@ -2618,11 +2618,11 @@ public class EpdgTunnelManager {
             mLinkProperties = linkProperties;
         }
 
-        public Network getNetwork() {
+        Network getNetwork() {
             return mNetwork;
         }
 
-        public LinkProperties getLinkProperties() {
+        LinkProperties getLinkProperties() {
             return mLinkProperties;
         }
     }
@@ -2638,11 +2638,11 @@ public class EpdgTunnelManager {
             mSetupRequest = setupRequest;
         }
 
-        public TunnelSetupRequest getSetupRequest() {
+        TunnelSetupRequest getSetupRequest() {
             return mSetupRequest;
         }
 
-        public TunnelCallback getTunnelCallback() {
+        TunnelCallback getTunnelCallback() {
             return mTunnelCallback;
         }
     }
@@ -2668,15 +2668,15 @@ public class EpdgTunnelManager {
     private static final class EpdgSelectorResult {
         private final List<InetAddress> mValidIpList;
 
-        public List<InetAddress> getValidIpList() {
+        List<InetAddress> getValidIpList() {
             return mValidIpList;
         }
 
-        public IwlanError getEpdgError() {
+        IwlanError getEpdgError() {
             return mEpdgError;
         }
 
-        public int getTransactionId() {
+        int getTransactionId() {
             return mTransactionId;
         }
 
@@ -2768,15 +2768,15 @@ public class EpdgTunnelManager {
             mDirection = direction;
         }
 
-        public IpSecTransform getTransform() {
+        IpSecTransform getTransform() {
             return mTransform;
         }
 
-        public int getDirection() {
+        int getDirection() {
             return mDirection;
         }
 
-        public String getApnName() {
+        String getApnName() {
             return super.mApnName;
         }
     }
@@ -2800,20 +2800,20 @@ public class EpdgTunnelManager {
             mIndex = 0;
         }
 
-        public List<InetAddress> getAddrList() {
+        List<InetAddress> getAddrList() {
             return mAddrList;
         }
 
-        public void setAddrList(@NonNull List<InetAddress> AddrList) {
+        void setAddrList(@NonNull List<InetAddress> AddrList) {
             mAddrList = AddrList;
             resetIndex();
         }
 
-        public int getIndex() {
+        int getIndex() {
             return mIndex;
         }
 
-        public void incrementIndex() {
+        void incrementIndex() {
             if (getIndex() >= getAddrList().size() - 1) {
                 resetIndex();
             } else {
@@ -2821,7 +2821,7 @@ public class EpdgTunnelManager {
             }
         }
 
-        public void resetIndex() {
+        void resetIndex() {
             mIndex = 0;
         }
     }

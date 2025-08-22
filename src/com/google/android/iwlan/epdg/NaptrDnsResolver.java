@@ -213,7 +213,7 @@ final class NaptrDnsResolver {
         private final Executor mUserExecutor;
 
         private static class LazyExecutor {
-            public static final Executor INSTANCE = Executors.newSingleThreadExecutor();
+            static final Executor INSTANCE = Executors.newSingleThreadExecutor();
         }
 
         static Executor getInternalExecutor() {

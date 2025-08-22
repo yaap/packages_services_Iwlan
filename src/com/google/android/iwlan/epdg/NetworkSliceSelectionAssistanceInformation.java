@@ -44,28 +44,27 @@ public class NetworkSliceSelectionAssistanceInformation {
         }
 
         switch (len) {
-            case 1: // get SST
-                siBuilder.setSliceServiceType(getSST(snssai, 0));
-                break;
-            case 2: // get SST and mapped SST
+            case 1 -> // get SST
+                    siBuilder.setSliceServiceType(getSST(snssai, 0));
+            case 2 -> { // get SST and mapped SST
                 siBuilder.setSliceServiceType(getSST(snssai, 0));
                 siBuilder.setMappedHplmnSliceServiceType(getSST(snssai, 1));
-                break;
-            case 4: // get SST and SD
+            }
+            case 4 -> { // get SST and SD
                 siBuilder.setSliceServiceType(getSST(snssai, 0));
                 siBuilder.setSliceDifferentiator(getSD(snssai, 1));
-                break;
-            case 5: // get SST, SD and mapped SST
+            }
+            case 5 -> { // get SST, SD and mapped SST
                 siBuilder.setSliceServiceType(getSST(snssai, 0));
                 siBuilder.setSliceDifferentiator(getSD(snssai, 1));
                 siBuilder.setMappedHplmnSliceServiceType(getSST(snssai, 4));
-                break;
-            case 8: // get SST, SD, mapped SST, mapped SD
+            }
+            case 8 -> { // get SST, SD, mapped SST, mapped SD
                 siBuilder.setSliceServiceType(getSST(snssai, 0));
                 siBuilder.setSliceDifferentiator(getSD(snssai, 1));
                 siBuilder.setMappedHplmnSliceServiceType(getSST(snssai, 4));
                 siBuilder.setMappedHplmnSliceDifferentiator(getSD(snssai, 5));
-                break;
+            }
         }
 
         return siBuilder.build();

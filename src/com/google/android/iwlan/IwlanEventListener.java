@@ -279,7 +279,7 @@ public class IwlanEventListener {
     public static synchronized void onBroadcastReceived(Intent intent) {
         int event = UNKNOWN_EVENT;
         switch (intent.getAction()) {
-            case Intent.ACTION_AIRPLANE_MODE_CHANGED:
+            case Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
                 Boolean isAirplaneModeOn = intent.getBooleanExtra("state", false);
                 if (sIsAirplaneModeOn != null && sIsAirplaneModeOn.equals(isAirplaneModeOn)) {
                     // no change in apm state
@@ -291,8 +291,8 @@ public class IwlanEventListener {
                     IwlanEventListener instance = entry.getValue();
                     instance.updateHandlers(event);
                 }
-                break;
-            case WifiManager.WIFI_STATE_CHANGED_ACTION:
+            }
+            case WifiManager.WIFI_STATE_CHANGED_ACTION -> {
                 int wifiState =
                         intent.getIntExtra(
                                 WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN);
@@ -303,10 +303,11 @@ public class IwlanEventListener {
                         instance.updateHandlers(event);
                     }
                 }
-                break;
-            case Intent.ACTION_SCREEN_ON:
-                mInstances.values().forEach(instance -> instance.updateHandlers(SCREEN_ON_EVENT));
-                break;
+            }
+            case Intent.ACTION_SCREEN_ON ->
+                    mInstances
+                            .values()
+                            .forEach(instance -> instance.updateHandlers(SCREEN_ON_EVENT));
         }
     }
 

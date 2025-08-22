@@ -312,21 +312,18 @@ public class EpdgSelector {
                 continue;
             }
             switch (filter) {
-                case PROTO_FILTER_IPV4:
+                case PROTO_FILTER_IPV4 -> {
                     if (ipAddress instanceof Inet4Address) {
                         validIpList.add(ipAddress);
                     }
-                    break;
-                case PROTO_FILTER_IPV6:
+                }
+                case PROTO_FILTER_IPV6 -> {
                     if (ipAddress instanceof Inet6Address) {
                         validIpList.add(ipAddress);
                     }
-                    break;
-                case PROTO_FILTER_IPV4V6:
-                    validIpList.add(ipAddress);
-                    break;
-                default:
-                    Log.d(TAG, "Invalid ProtoFilter : " + filter);
+                }
+                case PROTO_FILTER_IPV4V6 -> validIpList.add(ipAddress);
+                default -> Log.d(TAG, "Invalid ProtoFilter : " + filter);
             }
         }
         return validIpList;
@@ -571,25 +568,20 @@ public class EpdgSelector {
         List<String> combinedList = new ArrayList<>();
         for (int plmnType : prioritizedPlmnTypes) {
             switch (plmnType) {
-                case CarrierConfigManager.Iwlan.EPDG_PLMN_RPLMN:
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_RPLMN -> {
                     if (isInEpdgSelectionInfo(registeredPlmn)) {
                         combinedList.add(registeredPlmn);
                     }
-                    break;
-                case CarrierConfigManager.Iwlan.EPDG_PLMN_HPLMN:
-                    combinedList.add(plmnFromImsi);
-                    break;
-                case CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_ALL:
-                    combinedList.addAll(getEhplmns());
-                    break;
-                case CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_FIRST:
+                }
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_HPLMN -> combinedList.add(plmnFromImsi);
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_ALL ->
+                        combinedList.addAll(getEhplmns());
+                case CarrierConfigManager.Iwlan.EPDG_PLMN_EHPLMN_FIRST -> {
                     if (!ehplmns.isEmpty()) {
                         combinedList.add(ehplmns.getFirst());
                     }
-                    break;
-                default:
-                    Log.e(TAG, "Unknown PLMN type: " + plmnType);
-                    break;
+                }
+                default -> Log.e(TAG, "Unknown PLMN type: " + plmnType);
             }
         }
 
@@ -973,30 +965,29 @@ public class EpdgSelector {
                 IwlanCarrierConfig.getConfigInt(
                         mContext, mSlotId, CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT);
         switch (filter) {
-            case PROTO_FILTER_IPV4:
+            case PROTO_FILTER_IPV4 -> {
                 if (mV4PcoId != epdgIPv4PcoId) {
                     clearPcoData();
                 } else {
                     getInetAddressWithPcoData(mV4PcoData, validIpList);
                 }
-                break;
-            case PROTO_FILTER_IPV6:
+            }
+            case PROTO_FILTER_IPV6 -> {
                 if (mV6PcoId != epdgIPv6PcoId) {
                     clearPcoData();
                 } else {
                     getInetAddressWithPcoData(mV6PcoData, validIpList);
                 }
-                break;
-            case PROTO_FILTER_IPV4V6:
+            }
+            case PROTO_FILTER_IPV4V6 -> {
                 if ((mV4PcoId != epdgIPv4PcoId) || (mV6PcoId != epdgIPv6PcoId)) {
                     clearPcoData();
                 } else {
                     getInetAddressWithPcoData(mV4PcoData, validIpList);
                     getInetAddressWithPcoData(mV6PcoData, validIpList);
                 }
-                break;
-            default:
-                Log.d(TAG, "Invalid ProtoFilter : " + filter);
+            }
+            default -> Log.d(TAG, "Invalid ProtoFilter : " + filter);
         }
     }
 
@@ -1297,29 +1288,22 @@ public class EpdgSelector {
                     Map<String, List<InetAddress>> plmnDomainNamesToIpAddress = null;
                     for (int addrResolutionMethod : addrResolutionMethods) {
                         switch (addrResolutionMethod) {
-                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC:
-                                resolveByStaticMethod(filter, validIpList, network);
-                                break;
-
-                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN:
-                                plmnDomainNamesToIpAddress =
-                                        resolveByPlmnBasedFqdn(
-                                                filter, validIpList, isEmergency, network);
-                                break;
-
-                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PCO:
-                                resolveByPcoMethod(filter, validIpList);
-                                break;
-
-                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_CELLULAR_LOC:
-                                resolveByTaiBasedFqdn(filter, validIpList, isEmergency, network);
-                                break;
-
-                            default:
-                                Log.d(
-                                        TAG,
-                                        "Incorrect address resolution method "
-                                                + addrResolutionMethod);
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC ->
+                                    resolveByStaticMethod(filter, validIpList, network);
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN ->
+                                    plmnDomainNamesToIpAddress =
+                                            resolveByPlmnBasedFqdn(
+                                                    filter, validIpList, isEmergency, network);
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PCO ->
+                                    resolveByPcoMethod(filter, validIpList);
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_CELLULAR_LOC ->
+                                    resolveByTaiBasedFqdn(
+                                            filter, validIpList, isEmergency, network);
+                            default ->
+                                    Log.d(
+                                            TAG,
+                                            "Incorrect address resolution method "
+                                                    + addrResolutionMethod);
                         }
                     }
 

@@ -63,11 +63,10 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         Log.d(TAG, "onReceive: " + action);
         switch (action) {
-            case Intent.ACTION_AIRPLANE_MODE_CHANGED:
-            case WifiManager.WIFI_STATE_CHANGED_ACTION:
-            case Intent.ACTION_SCREEN_ON:
-                IwlanEventListener.onBroadcastReceived(intent);
-                break;
+            case Intent.ACTION_AIRPLANE_MODE_CHANGED,
+                    WifiManager.WIFI_STATE_CHANGED_ACTION,
+                    Intent.ACTION_SCREEN_ON ->
+                    IwlanEventListener.onBroadcastReceived(intent);
         }
     }
 }

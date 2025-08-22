@@ -243,20 +243,18 @@ public class IwlanNetworkService extends NetworkService {
             int slotId;
 
             switch (msg.what) {
-                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
-                case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
+                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT,
+                        IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT -> {
                     iwlanNetworkServiceProvider = getNetworkServiceProvider(msg.arg1);
                     iwlanNetworkServiceProvider.notifyNetworkRegistrationInfoChanged();
-                    break;
-
-                case EVENT_NETWORK_REGISTRATION_INFO_REQUEST:
+                }
+                case EVENT_NETWORK_REGISTRATION_INFO_REQUEST -> {
                     NetworkRegistrationInfoRequestData networkRegistrationInfoRequestData =
                             (NetworkRegistrationInfoRequestData) msg.obj;
                     int domain = networkRegistrationInfoRequestData.mDomain;
                     NetworkServiceCallback callback = networkRegistrationInfoRequestData.mCallback;
                     iwlanNetworkServiceProvider =
                             networkRegistrationInfoRequestData.mIwlanNetworkServiceProvider;
-
                     if (callback == null) {
                         Log.d(TAG, "Error: callback is null. returning");
                         return;
@@ -266,7 +264,6 @@ public class IwlanNetworkService extends NetworkService {
                                 NetworkServiceCallback.RESULT_ERROR_UNSUPPORTED, null);
                         return;
                     }
-
                     NetworkRegistrationInfo.Builder nriBuilder =
                             new NetworkRegistrationInfo.Builder();
                     nriBuilder
@@ -275,7 +272,6 @@ public class IwlanNetworkService extends NetworkService {
                             .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
                             .setEmergencyOnly(!iwlanNetworkServiceProvider.mIsSubActive)
                             .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
-
                     slotId = iwlanNetworkServiceProvider.getSlotIndex();
                     if (!IwlanNetworkService.isNetworkConnected(
                             isActiveDataOnOtherSub(slotId),
@@ -295,22 +291,17 @@ public class IwlanNetworkService extends NetworkService {
                                 .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN);
                         Log.d(TAG + "[" + slotId + "]", ": reg state REGISTRATION_STATE_HOME");
                     }
-
                     callback.onRequestNetworkRegistrationInfoComplete(
                             NetworkServiceCallback.RESULT_SUCCESS, nriBuilder.build());
-                    break;
-
-                case EVENT_CREATE_NETWORK_SERVICE_PROVIDER:
+                }
+                case EVENT_CREATE_NETWORK_SERVICE_PROVIDER -> {
                     iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
-
                     if (sIwlanNetworkServiceProviders.isEmpty()) {
                         initCallback();
                     }
-
                     addIwlanNetworkServiceProvider(iwlanNetworkServiceProvider);
-                    break;
-
-                case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER:
+                }
+                case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER -> {
                     iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
                     slotId = iwlanNetworkServiceProvider.getSlotIndex();
                     IwlanNetworkServiceProvider nsp = sIwlanNetworkServiceProviders.remove(slotId);
@@ -323,10 +314,8 @@ public class IwlanNetworkService extends NetworkService {
                     if (sIwlanNetworkServiceProviders.isEmpty()) {
                         deinitCallback();
                     }
-                    break;
-
-                default:
-                    throw new IllegalStateException("Unexpected value: " + msg.what);
+                }
+                default -> throw new IllegalStateException("Unexpected value: " + msg.what);
             }
         }
 

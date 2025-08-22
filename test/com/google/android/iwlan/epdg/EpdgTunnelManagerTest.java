@@ -1294,20 +1294,18 @@ public class EpdgTunnelManagerTest {
                 .setApnIpProtocol(apnIpProtocol)
                 .setPduSessionId(1);
         switch (apnIpProtocol) {
-            case ApnSetting.PROTOCOL_IP:
-                bld.setSrcIpv4Address(InetAddresses.parseNumericAddress("10.10.10.10"));
-                break;
-            case ApnSetting.PROTOCOL_IPV6:
-                bld.setSrcIpv6Address(
-                        InetAddresses.parseNumericAddress(
-                                "2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
-                break;
-            case ApnSetting.PROTOCOL_IPV4V6:
+            case ApnSetting.PROTOCOL_IP ->
+                    bld.setSrcIpv4Address(InetAddresses.parseNumericAddress("10.10.10.10"));
+            case ApnSetting.PROTOCOL_IPV6 ->
+                    bld.setSrcIpv6Address(
+                            InetAddresses.parseNumericAddress(
+                                    "2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
+            case ApnSetting.PROTOCOL_IPV4V6 -> {
                 bld.setSrcIpv4Address(InetAddresses.parseNumericAddress("10.10.10.10"));
                 bld.setSrcIpv6Address(
                         InetAddresses.parseNumericAddress(
                                 "2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
-                break;
+            }
         }
         return bld.build();
     }
@@ -1757,7 +1755,7 @@ public class EpdgTunnelManagerTest {
         ChildSessionParams childSessionParams = childSessionParamsCaptor.getValue();
 
         switch (apnProtocol) {
-            case ApnSetting.PROTOCOL_IPV4V6:
+            case ApnSetting.PROTOCOL_IPV4V6 -> {
                 assertEquals(2, childSessionParams.getInboundTrafficSelectors().size());
                 assertEquals(2, childSessionParams.getOutboundTrafficSelectors().size());
                 assertNotSame(
@@ -1766,8 +1764,8 @@ public class EpdgTunnelManagerTest {
                 assertNotSame(
                         childSessionParams.getInboundTrafficSelectors().get(0).startingAddress,
                         childSessionParams.getInboundTrafficSelectors().get(1).startingAddress);
-                break;
-            case ApnSetting.PROTOCOL_IPV6:
+            }
+            case ApnSetting.PROTOCOL_IPV6 -> {
                 assertEquals(1, childSessionParams.getInboundTrafficSelectors().size());
                 assertEquals(1, childSessionParams.getOutboundTrafficSelectors().size());
                 assertEquals(
@@ -1780,8 +1778,8 @@ public class EpdgTunnelManagerTest {
                 assertEquals(
                         InetAddresses.parseNumericAddress("::"),
                         childSessionParams.getInboundTrafficSelectors().get(0).startingAddress);
-                break;
-            case ApnSetting.PROTOCOL_IP:
+            }
+            case ApnSetting.PROTOCOL_IP -> {
                 assertEquals(1, childSessionParams.getInboundTrafficSelectors().size());
                 assertEquals(1, childSessionParams.getOutboundTrafficSelectors().size());
                 assertEquals(
@@ -1793,7 +1791,7 @@ public class EpdgTunnelManagerTest {
                 assertEquals(
                         InetAddresses.parseNumericAddress("0.0.0.0"),
                         childSessionParams.getInboundTrafficSelectors().get(0).startingAddress);
-                break;
+            }
         }
     }
 

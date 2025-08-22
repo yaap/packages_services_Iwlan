@@ -765,24 +765,23 @@ public class IwlanDataService extends DataService {
                             + " rsp:"
                             + rsp);
             switch (callbackType) {
-                case CALLBACK_TYPE_DEACTIVATE_DATACALL_COMPLETE:
+                case CALLBACK_TYPE_DEACTIVATE_DATACALL_COMPLETE -> {
                     callback.onDeactivateDataCallComplete(result);
                     // always update current datacalllist
                     notifyDataCallListChanged(getCallList());
-                    break;
-
-                case CALLBACK_TYPE_SETUP_DATACALL_COMPLETE:
+                }
+                case CALLBACK_TYPE_SETUP_DATACALL_COMPLETE -> {
                     if (result == DataServiceCallback.RESULT_SUCCESS && rsp == null) {
                         Log.d(SUB_TAG, "Warning: null rsp for success case");
                     }
                     callback.onSetupDataCallComplete(result, rsp);
                     // always update current datacalllist
                     notifyDataCallListChanged(getCallList());
-                    break;
-
-                case CALLBACK_TYPE_GET_DATACALL_LIST_COMPLETE:
+                }
+                case CALLBACK_TYPE_GET_DATACALL_LIST_COMPLETE -> {
                     callback.onRequestDataCallListComplete(result, getCallList());
                     // TODO: add code for the rest of the cases
+                }
             }
         }
 
@@ -1325,47 +1324,37 @@ public class IwlanDataService extends DataService {
             DataServiceCallback callback;
 
             switch (msg.what) {
-                case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
+                case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
-
                     iwlanDataServiceProvider.mCarrierConfigReady = true;
                     iwlanDataServiceProvider.dnsPrefetchCheck();
-                    break;
-
-                case IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT:
+                }
+                case IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
-
                     iwlanDataServiceProvider.mCarrierConfigReady = false;
-                    break;
-
-                case IwlanEventListener.WIFI_CALLING_ENABLE_EVENT:
+                }
+                case IwlanEventListener.WIFI_CALLING_ENABLE_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
-
                     iwlanDataServiceProvider.mWfcEnabled = true;
                     iwlanDataServiceProvider.dnsPrefetchCheck();
-                    break;
-
-                case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
+                }
+                case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
-
                     iwlanDataServiceProvider.mWfcEnabled = false;
-                    break;
-
-                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                }
+                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
                     iwlanDataServiceProvider.updateNetwork(sNetwork, sLinkProperties);
-                    break;
-
-                case IwlanEventListener.CELLINFO_CHANGED_EVENT:
+                }
+                case IwlanEventListener.CELLINFO_CHANGED_EVENT -> {
                     List<CellInfo> cellInfolist = (List<CellInfo>) msg.obj;
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
-
                     if (cellInfolist != null
                             && iwlanDataServiceProvider.isRegisteredCellInfoChanged(cellInfolist)) {
                         int[] addrResolutionMethods =
@@ -1381,46 +1370,39 @@ public class IwlanDataService extends DataService {
                             }
                         }
                     }
-                    break;
-
-                case IwlanEventListener.SCREEN_ON_EVENT:
+                }
+                case IwlanEventListener.SCREEN_ON_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
                     iwlanDataServiceProvider.mEpdgTunnelManager.validateUnderlyingNetwork(
                             IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_SCREEN_ON);
-                    break;
-
-                case IwlanEventListener.CALL_STATE_CHANGED_EVENT:
+                }
+                case IwlanEventListener.CALL_STATE_CHANGED_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
-
                     int previousCallState = iwlanDataServiceProvider.mCallState;
                     int currentCallState = iwlanDataServiceProvider.mCallState = msg.arg2;
                     boolean isCallInitiating =
                             previousCallState == TelephonyManager.CALL_STATE_IDLE
                                     && currentCallState == TelephonyManager.CALL_STATE_OFFHOOK;
-
                     if (isCallInitiating) {
                         iwlanDataServiceProvider.mEpdgTunnelManager.validateUnderlyingNetwork(
                                 IwlanCarrierConfig.NETWORK_VALIDATION_EVENT_MAKING_CALL);
                     }
-
                     if (!IwlanCarrierConfig.getConfigBoolean(
                             mContext,
                             iwlanDataServiceProvider.getSlotIndex(),
                             IwlanCarrierConfig.KEY_UPDATE_N1_MODE_ON_UI_CHANGE_BOOL)) {
                         break;
                     }
-
                     // Disconnect PDN if call ends and re-establishment needed.
                     if (previousCallState != currentCallState
                             && currentCallState == TelephonyManager.CALL_STATE_IDLE
                             && iwlanDataServiceProvider.isPdnReestablishNeededOnIdleN1Update()) {
                         iwlanDataServiceProvider.disconnectPdnForN1ModeUpdate();
                     }
-                    break;
-
-                case IwlanEventListener.PREFERRED_NETWORK_TYPE_CHANGED_EVENT:
+                }
+                case IwlanEventListener.PREFERRED_NETWORK_TYPE_CHANGED_EVENT -> {
                     iwlanDataServiceProvider =
                             (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
                     if (!IwlanCarrierConfig.getConfigBoolean(
@@ -1431,44 +1413,31 @@ public class IwlanDataService extends DataService {
                     }
                     long allowedNetworkType = (long) msg.obj;
                     onPreferredNetworkTypeChanged(iwlanDataServiceProvider, allowedNetworkType);
-                    break;
-
-                case EVENT_DEACTIVATE_DATA_CALL:
-                    handleDeactivateDataCall((DeactivateDataCallData) msg.obj);
-                    break;
-
-                case EVENT_DEACTIVATE_DATA_CALL_WITH_DELAY:
-                    handleDeactivateDataCallWithDelay((DeactivateDataCallData) msg.obj);
-                    break;
-
-                case EVENT_DATA_CALL_LIST_REQUEST:
+                }
+                case EVENT_DEACTIVATE_DATA_CALL ->
+                        handleDeactivateDataCall((DeactivateDataCallData) msg.obj);
+                case EVENT_DEACTIVATE_DATA_CALL_WITH_DELAY ->
+                        handleDeactivateDataCallWithDelay((DeactivateDataCallData) msg.obj);
+                case EVENT_DATA_CALL_LIST_REQUEST -> {
                     DataCallRequestData dataCallRequestData = (DataCallRequestData) msg.obj;
                     callback = dataCallRequestData.mCallback;
                     iwlanDataServiceProvider = dataCallRequestData.mIwlanDataServiceProvider;
-
                     iwlanDataServiceProvider.deliverCallback(
                             IwlanDataServiceProvider.CALLBACK_TYPE_GET_DATACALL_LIST_COMPLETE,
                             DataServiceCallback.RESULT_SUCCESS,
                             callback,
                             null);
-                    break;
-
-                case EVENT_FORCE_CLOSE_TUNNEL:
+                }
+                case EVENT_FORCE_CLOSE_TUNNEL -> {
                     for (IwlanDataServiceProvider dp : sDataServiceProviders.values()) {
                         dp.forceCloseTunnels(EpdgTunnelManager.BRINGDOWN_REASON_UNKNOWN);
                     }
-                    break;
-
-                case EVENT_ON_LIVENESS_STATUS_CHANGED:
-                    handleLivenessStatusChange((TunnelValidationStatusData) msg.obj);
-                    break;
-
-                case EVENT_REQUEST_NETWORK_VALIDATION:
-                    handleNetworkValidationRequest((NetworkValidationInfo) msg.obj);
-                    break;
-
-                default:
-                    throw new IllegalStateException("Unexpected value: " + msg.what);
+                }
+                case EVENT_ON_LIVENESS_STATUS_CHANGED ->
+                        handleLivenessStatusChange((TunnelValidationStatusData) msg.obj);
+                case EVENT_REQUEST_NETWORK_VALIDATION ->
+                        handleNetworkValidationRequest((NetworkValidationInfo) msg.obj);
+                default -> throw new IllegalStateException("Unexpected value: " + msg.what);
             }
         }
 

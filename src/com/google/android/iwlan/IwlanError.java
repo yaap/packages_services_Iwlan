@@ -175,28 +175,26 @@ public class IwlanError {
         }
 
         switch (mErrorType) {
-            case IKE_GENERIC_EXCEPTION:
+            case IKE_GENERIC_EXCEPTION -> {
                 sb.append("MSG: ").append(mException.getMessage()).append("\n CAUSE: ");
                 sb.append(mException.getCause());
-                break;
-            case IKE_PROTOCOL_EXCEPTION:
+            }
+            case IKE_PROTOCOL_EXCEPTION -> {
                 sb.append("ERR: ")
                         .append(((IkeProtocolException) mException).getErrorType())
                         .append("\nDATA:");
                 for (byte b : ((IkeProtocolException) mException).getErrorData()) {
                     sb.append(String.format("%02x ", b));
                 }
-                break;
-            case IKE_NETWORK_LOST_EXCEPTION:
-                sb.append("ERR: ")
-                        .append(mException.getMessage())
-                        .append("\n CAUSE: ")
-                        .append(mException.getCause())
-                        .append("\n NETWORK: ")
-                        .append(((IkeNetworkLostException) mException).getNetwork());
-                break;
-            default:
-                sb.append("-No Details-");
+            }
+            case IKE_NETWORK_LOST_EXCEPTION ->
+                    sb.append("ERR: ")
+                            .append(mException.getMessage())
+                            .append("\n CAUSE: ")
+                            .append(mException.getCause())
+                            .append("\n NETWORK: ")
+                            .append(((IkeNetworkLostException) mException).getNetwork());
+            default -> sb.append("-No Details-");
         }
         return sb.toString();
     }

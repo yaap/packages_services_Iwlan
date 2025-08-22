@@ -23,12 +23,10 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSess
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -93,7 +91,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -1396,5 +1393,51 @@ public class EpdgSelectorTest {
         }
 
         mTestLinkProperties.setLinkAddresses(addresses);
+    }
+
+    @Test
+    public void testRemoveLoopbackAddress_EmptyResult() throws Exception {
+        when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
+
+        // Set DnsResolver query mock to return only loopback addresses
+        final String testStaticAddress = "epdg.epc.mnc088.mcc888.pub.3gppnetwork.org";
+        mFakeDns.setAnswer(
+                testStaticAddress,
+                new String[] {TEST_IPV4_LOOPBACK_ADDRESS, TEST_IPV6_LOOPBACK_ADDRESS},
+                TYPE_A);
+
+        IwlanCarrierConfig.putTestConfigIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        IwlanCarrierConfig.putTestConfigString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        final IwlanError[] error = new IwlanError[1];
+
+        mEpdgSelector.getValidatedServerList(
+                /* transactionId= */ 1234,
+                EpdgSelector.PROTO_FILTER_IPV4V6,
+                EpdgSelector.IPV4_PREFERRED,
+                /* isRoaming= */ false,
+                /* isEmergency= */ false,
+                mMockNetwork,
+                new EpdgSelector.EpdgSelectorCallback() {
+                    @Override
+                    public void onServerListChanged(
+                            int transactionId, List<InetAddress> validIPList) {
+                        // Should not be called
+                        latch.countDown();
+                    }
+
+                    @Override
+                    public void onError(int transactionId, IwlanError epdgSelectorError) {
+                        error[0] = epdgSelectorError;
+                        latch.countDown();
+                    }
+                });
+
+        latch.await(1, TimeUnit.SECONDS);
+        assertEquals(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED, error[0].getErrorType());
     }
 }

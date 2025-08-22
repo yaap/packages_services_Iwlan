@@ -87,7 +87,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class EpdgSelector {
-    private final FeatureFlags mFeatureFlags;
+
     private static final String TAG = "EpdgSelector";
     private final Context mContext;
     private final int mSlotId;
@@ -172,7 +172,6 @@ public class EpdgSelector {
     EpdgSelector(Context context, int slotId, FeatureFlags featureFlags) {
         mContext = context;
         mSlotId = slotId;
-        mFeatureFlags = featureFlags;
 
         mConnectivityManager = context.getSystemService(ConnectivityManager.class);
 

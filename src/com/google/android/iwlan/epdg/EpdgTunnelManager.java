@@ -42,7 +42,6 @@ import android.net.NetworkRequest;
 import android.net.eap.EapAkaInfo;
 import android.net.eap.EapInfo;
 import android.net.eap.EapSessionConfig;
-import android.net.ipsec.ike.ChildSaProposal;
 import android.net.ipsec.ike.ChildSessionCallback;
 import android.net.ipsec.ike.ChildSessionConfiguration;
 import android.net.ipsec.ike.ChildSessionParams;
@@ -50,7 +49,6 @@ import android.net.ipsec.ike.IkeFqdnIdentification;
 import android.net.ipsec.ike.IkeIdentification;
 import android.net.ipsec.ike.IkeKeyIdIdentification;
 import android.net.ipsec.ike.IkeRfc822AddrIdentification;
-import android.net.ipsec.ike.IkeSaProposal;
 import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
@@ -179,8 +177,6 @@ public class EpdgTunnelManager {
 
     private final Queue<TunnelRequestWrapper> mPendingBringUpRequests = new ArrayDeque<>();
 
-    private final EpdgInfo mValidEpdgInfo = new EpdgInfo();
-
     // The most recently updated system default network as seen by IwlanDataService.
     @Nullable private Network mDefaultNetwork;
     // The latest Network provided to the IKE session. Only for debugging purposes.
@@ -204,59 +200,22 @@ public class EpdgTunnelManager {
     private long mEpdgServerSelectionStartTime = 0;
     private long mIkeTunnelEstablishmentStartTime = 0;
 
-    private static final Set<Integer> VALID_DH_GROUPS;
-    private static final Set<Integer> VALID_KEY_LENGTHS;
-    private static final Set<Integer> VALID_PRF_ALGOS;
-    private static final Set<Integer> VALID_INTEGRITY_ALGOS;
     private static final Set<Integer> VALID_ENCRYPTION_ALGOS;
     private static final Set<Integer> VALID_AEAD_ALGOS;
 
-    private static final String CONFIG_TYPE_DH_GROUP = "dh group";
-    private static final String CONFIG_TYPE_KEY_LEN = "algorithm key length";
-    private static final String CONFIG_TYPE_PRF_ALGO = "prf algorithm";
-    private static final String CONFIG_TYPE_INTEGRITY_ALGO = "integrity algorithm";
     private static final String CONFIG_TYPE_ENCRYPT_ALGO = "encryption algorithm";
 
     static {
-        VALID_DH_GROUPS =
-                Set.of(
-                        SaProposal.DH_GROUP_1024_BIT_MODP,
-                        SaProposal.DH_GROUP_1536_BIT_MODP,
-                        SaProposal.DH_GROUP_2048_BIT_MODP,
-                        SaProposal.DH_GROUP_3072_BIT_MODP,
-                        SaProposal.DH_GROUP_4096_BIT_MODP);
-        VALID_KEY_LENGTHS =
-                Set.of(
-                        SaProposal.KEY_LEN_AES_128,
-                        SaProposal.KEY_LEN_AES_192,
-                        SaProposal.KEY_LEN_AES_256);
-
         VALID_ENCRYPTION_ALGOS =
                 Set.of(
                         SaProposal.ENCRYPTION_ALGORITHM_AES_CBC,
                         SaProposal.ENCRYPTION_ALGORITHM_AES_CTR);
-
-        VALID_INTEGRITY_ALGOS =
-                Set.of(
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA1_96,
-                        SaProposal.INTEGRITY_ALGORITHM_AES_XCBC_96,
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_512_256);
 
         VALID_AEAD_ALGOS =
                 Set.of(
                         SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8,
                         SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12,
                         SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16);
-
-        VALID_PRF_ALGOS =
-                Set.of(
-                        SaProposal.PSEUDORANDOM_FUNCTION_HMAC_SHA1,
-                        SaProposal.PSEUDORANDOM_FUNCTION_AES128_XCBC,
-                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_256,
-                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_384,
-                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_512);
     }
 
     @VisibleForTesting protected EpdgMonitor mEpdgMonitor = new EpdgMonitor();
@@ -1595,138 +1554,6 @@ public class EpdgTunnelManager {
         return epdgIkeSaProposal;
     }
 
-    private IkeSaProposal buildIkeSaProposal() {
-        IkeSaProposal.Builder saProposalBuilder = new IkeSaProposal.Builder();
-
-        int[] dhGroups =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-        for (int dhGroup : dhGroups) {
-            if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                saProposalBuilder.addDhGroup(dhGroup);
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_IKE_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO);
-
-            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
-                int[] aesCbcKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_IKE_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
-                for (int aesCbcKeyLen : aesCbcKeyLens) {
-                    if (validateConfig(aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCbcKeyLen);
-                    }
-                }
-            }
-
-            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
-                int[] aesCtrKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_IKE_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
-                for (int aesCtrKeyLen : aesCtrKeyLens) {
-                    if (validateConfig(aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCtrKeyLen);
-                    }
-                }
-            }
-        }
-
-        int[] integrityAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY);
-        for (int integrityAlgo : integrityAlgos) {
-            if (validateConfig(integrityAlgo, VALID_INTEGRITY_ALGOS, CONFIG_TYPE_INTEGRITY_ALGO)) {
-                saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
-            }
-        }
-
-        int[] prfAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_PRF_ALGORITHMS_INT_ARRAY);
-        for (int prfAlgo : prfAlgos) {
-            if (validateConfig(prfAlgo, VALID_PRF_ALGOS, CONFIG_TYPE_PRF_ALGO)) {
-                saProposalBuilder.addPseudorandomFunction(prfAlgo);
-            }
-        }
-
-        return saProposalBuilder.build();
-    }
-
-    private IkeSaProposal buildIkeSaAeadProposal() {
-        IkeSaProposal.Builder saProposalBuilder = new IkeSaProposal.Builder();
-
-        int[] dhGroups =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-        for (int dhGroup : dhGroups) {
-            if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                saProposalBuilder.addDhGroup(dhGroup);
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_IKE_SESSION_AEAD_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            if (!validateConfig(encryptionAlgo, VALID_AEAD_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
-                continue;
-            }
-            if ((encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16)) {
-                int[] aesGcmKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_IKE_SESSION_AES_GCM_KEY_SIZE_INT_ARRAY);
-                for (int aesGcmKeyLen : aesGcmKeyLens) {
-                    if (validateConfig(aesGcmKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesGcmKeyLen);
-                    }
-                }
-            }
-        }
-
-        int[] prfAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_PRF_ALGORITHMS_INT_ARRAY);
-        for (int prfAlgo : prfAlgos) {
-            if (validateConfig(prfAlgo, VALID_PRF_ALGOS, CONFIG_TYPE_PRF_ALGO)) {
-                saProposalBuilder.addPseudorandomFunction(prfAlgo);
-            }
-        }
-
-        return saProposalBuilder.build();
-    }
-
     private boolean validateConfig(int config, Set<Integer> validConfigValues, String configType) {
         if (validConfigValues.contains(config)) {
             return true;
@@ -1734,135 +1561,6 @@ public class EpdgTunnelManager {
 
         Log.e(TAG, "Invalid config value for " + configType + ":" + config);
         return false;
-    }
-
-    private ChildSaProposal buildChildSaProposal() {
-        ChildSaProposal.Builder saProposalBuilder = new ChildSaProposal.Builder();
-
-        // IKE library doesn't add KE payload if dh groups are not set in child session params.
-        // Use the same groups as that of IKE session.
-        if (IwlanCarrierConfig.getConfigBoolean(
-                mContext,
-                mSlotId,
-                CarrierConfigManager.Iwlan.KEY_ADD_KE_TO_CHILD_SESSION_REKEY_BOOL)) {
-            int[] dhGroups =
-                    IwlanCarrierConfig.getConfigIntArray(
-                            mContext,
-                            mSlotId,
-                            CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-            for (int dhGroup : dhGroups) {
-                if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                    saProposalBuilder.addDhGroup(dhGroup);
-                }
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_CHILD_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            if (validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
-                if (ChildSaProposal.getSupportedEncryptionAlgorithms().contains(encryptionAlgo)) {
-                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
-                        int[] aesCbcKeyLens =
-                                IwlanCarrierConfig.getConfigIntArray(
-                                        mContext,
-                                        mSlotId,
-                                        CarrierConfigManager.Iwlan
-                                                .KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
-                        for (int aesCbcKeyLen : aesCbcKeyLens) {
-                            if (validateConfig(
-                                    aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                                saProposalBuilder.addEncryptionAlgorithm(
-                                        encryptionAlgo, aesCbcKeyLen);
-                            }
-                        }
-                    }
-
-                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
-                        int[] aesCtrKeyLens =
-                                IwlanCarrierConfig.getConfigIntArray(
-                                        mContext,
-                                        mSlotId,
-                                        CarrierConfigManager.Iwlan
-                                                .KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
-                        for (int aesCtrKeyLen : aesCtrKeyLens) {
-                            if (validateConfig(
-                                    aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                                saProposalBuilder.addEncryptionAlgorithm(
-                                        encryptionAlgo, aesCtrKeyLen);
-                            }
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "Device does not support encryption algo:  " + encryptionAlgo);
-                }
-            }
-        }
-
-        int[] integrityAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY);
-        for (int integrityAlgo : integrityAlgos) {
-            if (validateConfig(integrityAlgo, VALID_INTEGRITY_ALGOS, CONFIG_TYPE_INTEGRITY_ALGO)) {
-                if (ChildSaProposal.getSupportedIntegrityAlgorithms().contains(integrityAlgo)) {
-                    saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
-                } else {
-                    Log.w(TAG, "Device does not support integrity algo:  " + integrityAlgo);
-                }
-            }
-        }
-
-        return saProposalBuilder.build();
-    }
-
-    private ChildSaProposal buildAeadChildSaProposal() {
-        ChildSaProposal.Builder saProposalBuilder = new ChildSaProposal.Builder();
-
-        int[] dhGroups =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-        for (int dhGroup : dhGroups) {
-            if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                saProposalBuilder.addDhGroup(dhGroup);
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_CHILD_SESSION_AEAD_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            if (!validateConfig(encryptionAlgo, VALID_AEAD_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
-                continue;
-            }
-            if ((encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16)) {
-                int[] aesGcmKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_CHILD_SESSION_AES_GCM_KEY_SIZE_INT_ARRAY);
-                for (int aesGcmKeyLen : aesGcmKeyLens) {
-                    if (validateConfig(aesGcmKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesGcmKeyLen);
-                    }
-                }
-            }
-        }
-
-        return saProposalBuilder.build();
     }
 
     private IkeIdentification getLocalIdentification() throws IwlanSimNotReadyException {
@@ -2060,7 +1758,6 @@ public class EpdgTunnelManager {
                     mEpdgSelector.onEpdgConnectedSuccessfully();
                     mEpdgMonitor.onApnConnectToEpdg(apnName, tunnelConfig.getEpdgAddress());
                     onConnectedToEpdg(true);
-                    mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
                     tunnelConfig.setIkeSessionState(IkeSessionState.CHILD_SESSION_OPENED);
@@ -2560,7 +2257,6 @@ public class EpdgTunnelManager {
                             + sublist.get(0)
                             + " from available ePDG address list: "
                             + Arrays.toString(selectorResultList.toArray()));
-            mValidEpdgInfo.setAddrList(sublist);
             return sublist.get(0);
         }
 
@@ -2570,7 +2266,6 @@ public class EpdgTunnelManager {
                         + selectorResultList.get(0)
                         + " from available ePDG address list: "
                         + Arrays.toString(selectorResultList.toArray()));
-        mValidEpdgInfo.setAddrList(selectorResultList);
         return selectorResultList.get(0);
     }
 
@@ -2788,41 +2483,6 @@ public class EpdgTunnelManager {
         private IkeEventData(String apnName, int token) {
             mApnName = apnName;
             mToken = token;
-        }
-    }
-
-    private static final class EpdgInfo {
-        private List<InetAddress> mAddrList;
-        private int mIndex;
-
-        private EpdgInfo() {
-            mAddrList = null;
-            mIndex = 0;
-        }
-
-        List<InetAddress> getAddrList() {
-            return mAddrList;
-        }
-
-        void setAddrList(@NonNull List<InetAddress> AddrList) {
-            mAddrList = AddrList;
-            resetIndex();
-        }
-
-        int getIndex() {
-            return mIndex;
-        }
-
-        void incrementIndex() {
-            if (getIndex() >= getAddrList().size() - 1) {
-                resetIndex();
-            } else {
-                mIndex++;
-            }
-        }
-
-        void resetIndex() {
-            mIndex = 0;
         }
     }
 

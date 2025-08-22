@@ -371,7 +371,7 @@ public class IwlanNetworkService extends NetworkService {
 
         if (specifier instanceof TelephonyNetworkSpecifier telephonyNetworkSpecifier) {
             connectedDataSub = telephonyNetworkSpecifier.getSubscriptionId();
-        } else if (transportInfo instanceof VcnTransportInfo vcnTransportInfo) {
+        } else if (transportInfo instanceof VcnTransportInfo) {
             connectedDataSub =
                     VcnUtils.getSubIdFromVcnCaps(connectivityManager, networkCapabilities);
         }

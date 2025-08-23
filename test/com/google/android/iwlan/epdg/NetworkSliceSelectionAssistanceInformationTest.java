@@ -6,129 +6,119 @@ import static org.junit.Assert.assertNull;
 
 import android.telephony.data.NetworkSliceInfo;
 
-import org.junit.After;
-import org.junit.Before;
+import com.google.common.collect.ImmutableList;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.util.List;
+
 @RunWith(JUnit4.class)
 public class NetworkSliceSelectionAssistanceInformationTest {
-    private static final String TAG = "NssaiTest";
-
-    @Before
-    public void setUp() throws Exception {}
-
-    @After
-    public void cleanUp() throws Exception {}
 
     @Test
-    public void testNullNssai() throws Exception {
-        NetworkSliceInfo si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(null);
-        assertNull(si);
+    public void testGtSliceInfo_withNullNssai_returnsNull() {
+        assertNull(NetworkSliceSelectionAssistanceInformation.getSliceInfo(null));
     }
 
     @Test
-    public void testNssaiWithInvalidLength() throws Exception {
-        // only these lengths are valid: 1, 2, 4, 5, 8
+    public void testGetSliceInfo_withInvalidLengthNssai_returnsNull() {
+        // Valid lengths are 1, 2, 4, 5, 8.
+        List<byte[]> invalidNssais =
+                ImmutableList.of(
+                        new byte[] {}, // length 0
+                        new byte[] {1, 1, 1}, // length 3
+                        new byte[] {1, 1, 1, 2, 1, 1}, // length 6
+                        new byte[] {1, 1, 1, 2, 1, 1, 2, 1, 1, 1} // length 10
+                        );
 
-        byte[] nssai0 = {}; // length 0
-        byte[] nssai3 = {1, 1, 1}; // length 3
-        byte[] nssai6 = {1, 1, 1, 2, 1, 1}; // length 6
-        byte[] nssai10 = {1, 1, 1, 2, 1, 1, 2, 1, 1, 1}; // length 10
-
-        NetworkSliceInfo si;
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai0);
-        assertNull(si);
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai3);
-        assertNull(si);
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai6);
-        assertNull(si);
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai10);
-        assertNull(si);
+        for (byte[] nssai : invalidNssais) {
+            assertNull(NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai));
+        }
     }
 
     @Test
-    public void testNssaiWithSST() throws Exception {
+    public void testGetSliceInfo_sstOnly() {
         byte[] nssai = {3}; // SST = 3
-        NetworkSliceInfo si;
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
-
-        assertNotNull(si);
-        assertEquals(3, si.getSliceServiceType());
-        assertEquals(NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE, si.getMappedHplmnSliceServiceType());
-        assertEquals(NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE, si.getSliceDifferentiator());
-        assertEquals(
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
-                si.getMappedHplmnSliceDifferentiator());
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                /* expectedMappedSst= */ NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
     }
 
     @Test
-    public void testNssaiWithSSTandMappedSST() throws Exception {
-        byte[] nssai = {3, 2}; // SST = 3, mapped SST=2
-        NetworkSliceInfo si;
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
-
-        assertNotNull(si);
-        assertEquals(3, si.getSliceServiceType());
-        assertEquals(2, si.getMappedHplmnSliceServiceType());
-        assertEquals(NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE, si.getSliceDifferentiator());
-        assertEquals(
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
-                si.getMappedHplmnSliceDifferentiator());
+    public void testGetSliceInfo_sstAndMappedSst() {
+        byte[] nssai = {3, 2}; // SST = 3, Mapped SST = 2
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                /* expectedMappedSst= */ 2,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
     }
 
     @Test
-    public void testNssaiWithSSTandSD() throws Exception {
-        byte[] nssai = {3, 0x0a, 0x0b, 0x0c}; // SST = 3, SD=0x0a0b0c
-        NetworkSliceInfo si;
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
-
-        assertNotNull(si);
-        assertEquals(3, si.getSliceServiceType());
-        assertEquals(NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE, si.getMappedHplmnSliceServiceType());
-        assertEquals(0x0a0b0c, si.getSliceDifferentiator());
-        assertEquals(
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
-                si.getMappedHplmnSliceDifferentiator());
+    public void testGetSliceInfo_sstAndSd() {
+        byte[] nssai = {3, 0x0a, 0x0b, 0x0c}; // SST = 3, SD = 0x0A0B0C
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ 0x0A0B0C,
+                /* expectedMappedSst= */ NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
     }
 
     @Test
-    public void testNssaiWithSSTandSDandMappedSST() throws Exception {
-        byte[] nssai = {3, 0x0a, 0x0b, 0x0c, 3}; // SST = 3, SD=0x0a0b0c, Mapped SST=3
-        NetworkSliceInfo si;
-
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
-
-        assertNotNull(si);
-        assertEquals(3, si.getSliceServiceType());
-        assertEquals(3, si.getMappedHplmnSliceServiceType());
-        assertEquals(0x0a0b0c, si.getSliceDifferentiator());
-        assertEquals(
-                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
-                si.getMappedHplmnSliceDifferentiator());
+    public void testGetSliceInfo_sstAndSd_handlesUnsignedConversion() {
+        byte[] nssai = {1, (byte) 0xFF, (byte) 0xFF, (byte) 0xEF}; // SST = 1, SD = 0xFFFFEF
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 1,
+                /* expectedSd= */ 0xFFFFEF,
+                /* expectedMappedSst= */ NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
     }
 
     @Test
-    public void testNssaiWithSSTandSDandMappedSSTandMappedSD() throws Exception {
+    public void testGetSliceInfo_sstSdAndMappedSst() {
+        byte[] nssai = {3, 0x0a, 0x0b, 0x0c, 2}; // SST = 3, SD = 0x0A0B0C, Mapped SST = 2
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ 0x0A0B0C,
+                /* expectedMappedSst= */ 2,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+    }
+
+    @Test
+    public void testGetSliceInfo_allFields() {
         byte[] nssai = {
             3, 0x0a, 0x0b, 0x0c, 2, 0x0F, 0x0E, 0x0D
-        }; // SST = 3, SD=0x0a0b0c, Mapped SST=2, Mapped SD =0x0f0e0d
-        NetworkSliceInfo si;
+        }; // SST=3, SD=0x0A0B0C, Mapped SST=2, Mapped SD=0x0F0E0D
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ 0x0A0B0C,
+                /* expectedMappedSst= */ 2,
+                /* expectedMappedSd= */ 0x0F0E0D);
+    }
 
-        si = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
+    /** Helper method to parse NSSAI and assert the state of the resulting NetworkSliceInfo. */
+    private void parseAndAssertSliceInfo(
+            byte[] nssai,
+            int expectedSst,
+            int expectedSd,
+            int expectedMappedSst,
+            int expectedMappedSd) {
+        NetworkSliceInfo sliceInfo = NetworkSliceSelectionAssistanceInformation.getSliceInfo(nssai);
 
-        assertNotNull(si);
-        assertEquals(3, si.getSliceServiceType());
-        assertEquals(2, si.getMappedHplmnSliceServiceType());
-        assertEquals(0x0a0b0c, si.getSliceDifferentiator());
-        assertEquals(0x0f0e0d, si.getMappedHplmnSliceDifferentiator());
+        assertNotNull(sliceInfo);
+        assertEquals(expectedSst, sliceInfo.getSliceServiceType());
+        assertEquals(expectedSd, sliceInfo.getSliceDifferentiator());
+        assertEquals(expectedMappedSst, sliceInfo.getMappedHplmnSliceServiceType());
+        assertEquals(expectedMappedSd, sliceInfo.getMappedHplmnSliceDifferentiator());
     }
 }

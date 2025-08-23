@@ -42,7 +42,6 @@ import android.net.NetworkRequest;
 import android.net.eap.EapAkaInfo;
 import android.net.eap.EapInfo;
 import android.net.eap.EapSessionConfig;
-import android.net.ipsec.ike.ChildSaProposal;
 import android.net.ipsec.ike.ChildSessionCallback;
 import android.net.ipsec.ike.ChildSessionConfiguration;
 import android.net.ipsec.ike.ChildSessionParams;
@@ -50,7 +49,6 @@ import android.net.ipsec.ike.IkeFqdnIdentification;
 import android.net.ipsec.ike.IkeIdentification;
 import android.net.ipsec.ike.IkeKeyIdIdentification;
 import android.net.ipsec.ike.IkeRfc822AddrIdentification;
-import android.net.ipsec.ike.IkeSaProposal;
 import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
@@ -179,8 +177,6 @@ public class EpdgTunnelManager {
 
     private final Queue<TunnelRequestWrapper> mPendingBringUpRequests = new ArrayDeque<>();
 
-    private final EpdgInfo mValidEpdgInfo = new EpdgInfo();
-
     // The most recently updated system default network as seen by IwlanDataService.
     @Nullable private Network mDefaultNetwork;
     // The latest Network provided to the IKE session. Only for debugging purposes.
@@ -204,59 +200,22 @@ public class EpdgTunnelManager {
     private long mEpdgServerSelectionStartTime = 0;
     private long mIkeTunnelEstablishmentStartTime = 0;
 
-    private static final Set<Integer> VALID_DH_GROUPS;
-    private static final Set<Integer> VALID_KEY_LENGTHS;
-    private static final Set<Integer> VALID_PRF_ALGOS;
-    private static final Set<Integer> VALID_INTEGRITY_ALGOS;
     private static final Set<Integer> VALID_ENCRYPTION_ALGOS;
     private static final Set<Integer> VALID_AEAD_ALGOS;
 
-    private static final String CONFIG_TYPE_DH_GROUP = "dh group";
-    private static final String CONFIG_TYPE_KEY_LEN = "algorithm key length";
-    private static final String CONFIG_TYPE_PRF_ALGO = "prf algorithm";
-    private static final String CONFIG_TYPE_INTEGRITY_ALGO = "integrity algorithm";
     private static final String CONFIG_TYPE_ENCRYPT_ALGO = "encryption algorithm";
 
     static {
-        VALID_DH_GROUPS =
-                Set.of(
-                        SaProposal.DH_GROUP_1024_BIT_MODP,
-                        SaProposal.DH_GROUP_1536_BIT_MODP,
-                        SaProposal.DH_GROUP_2048_BIT_MODP,
-                        SaProposal.DH_GROUP_3072_BIT_MODP,
-                        SaProposal.DH_GROUP_4096_BIT_MODP);
-        VALID_KEY_LENGTHS =
-                Set.of(
-                        SaProposal.KEY_LEN_AES_128,
-                        SaProposal.KEY_LEN_AES_192,
-                        SaProposal.KEY_LEN_AES_256);
-
         VALID_ENCRYPTION_ALGOS =
                 Set.of(
                         SaProposal.ENCRYPTION_ALGORITHM_AES_CBC,
                         SaProposal.ENCRYPTION_ALGORITHM_AES_CTR);
-
-        VALID_INTEGRITY_ALGOS =
-                Set.of(
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA1_96,
-                        SaProposal.INTEGRITY_ALGORITHM_AES_XCBC_96,
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
-                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_512_256);
 
         VALID_AEAD_ALGOS =
                 Set.of(
                         SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8,
                         SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12,
                         SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16);
-
-        VALID_PRF_ALGOS =
-                Set.of(
-                        SaProposal.PSEUDORANDOM_FUNCTION_HMAC_SHA1,
-                        SaProposal.PSEUDORANDOM_FUNCTION_AES128_XCBC,
-                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_256,
-                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_384,
-                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_512);
     }
 
     @VisibleForTesting protected EpdgMonitor mEpdgMonitor = new EpdgMonitor();
@@ -349,31 +308,31 @@ public class EpdgTunnelManager {
             mEpdgAddress = epdgAddress;
         }
 
-        public IkeSessionState getIkeSessionState() {
+        IkeSessionState getIkeSessionState() {
             return mIkeSessionState;
         }
 
-        public void setIkeSessionState(IkeSessionState ikeSessionState) {
+        void setIkeSessionState(IkeSessionState ikeSessionState) {
             mIkeSessionState = ikeSessionState;
         }
 
-        public NetworkSliceInfo getSliceInfo() {
+        NetworkSliceInfo getSliceInfo() {
             return mSliceInfo;
         }
 
-        public void setSliceInfo(NetworkSliceInfo si) {
+        void setSliceInfo(NetworkSliceInfo si) {
             mSliceInfo = si;
         }
 
-        public boolean isBackoffTimeValid() {
+        boolean isBackoffTimeValid() {
             return mIsBackoffTimeValid;
         }
 
-        public long getBackoffTime() {
+        long getBackoffTime() {
             return mBackoffTime;
         }
 
-        public void setBackoffTime(long backoffTime) {
+        void setBackoffTime(long backoffTime) {
             mIsBackoffTimeValid = true;
             mBackoffTime = backoffTime;
         }
@@ -391,15 +350,15 @@ public class EpdgTunnelManager {
             mPcscfAddrList = pcscfAddrList;
         }
 
-        public List<InetAddress> getDnsAddrList() {
+        List<InetAddress> getDnsAddrList() {
             return mDnsAddrList;
         }
 
-        public void setDnsAddrList(List<InetAddress> dnsAddrList) {
+        void setDnsAddrList(List<InetAddress> dnsAddrList) {
             this.mDnsAddrList = dnsAddrList;
         }
 
-        public List<LinkAddress> getInternalAddrList() {
+        List<LinkAddress> getInternalAddrList() {
             return mInternalAddrList;
         }
 
@@ -412,7 +371,7 @@ public class EpdgTunnelManager {
             return false;
         }
 
-        public void setInternalAddrList(List<LinkAddress> internalAddrList) {
+        void setInternalAddrList(List<LinkAddress> internalAddrList) {
             mInternalAddrList = new ArrayList<LinkAddress>(internalAddrList);
             if (getSrcIpv6Address() != null) {
                 // check if we can reuse src ipv6 address (i.e. if prefix is same)
@@ -440,35 +399,35 @@ public class EpdgTunnelManager {
         }
 
         @NonNull
-        public IkeSession getIkeSession() {
+        IkeSession getIkeSession() {
             return mIkeSession;
         }
 
-        public IwlanError getError() {
+        IwlanError getError() {
             return mError;
         }
 
-        public void setError(IwlanError error) {
+        void setError(IwlanError error) {
             this.mError = error;
         }
 
-        public IpSecManager.IpSecTunnelInterface getIface() {
+        IpSecManager.IpSecTunnelInterface getIface() {
             return mIface;
         }
 
-        public InetAddress getSrcIpv6Address() {
+        InetAddress getSrcIpv6Address() {
             return mSrcIpv6Address;
         }
 
-        public boolean isEmergency() {
+        boolean isEmergency() {
             return mIsEmergency;
         }
 
-        public InetAddress getEpdgAddress() {
+        InetAddress getEpdgAddress() {
             return mEpdgAddress;
         }
 
-        public boolean hasTunnelOpened() {
+        boolean hasTunnelOpened() {
             return mInternalAddrList != null
                     && !mInternalAddrList.isEmpty() /* The child session is opened */
                     && mIface != null; /* The tunnel interface is bring up */
@@ -580,23 +539,20 @@ public class EpdgTunnelManager {
             Log.d(
                     TAG,
                     "Ike liveness status changed for apn: " + mApnName + " with status: " + status);
-            @NetworkValidationStatus int validationStatus;
-            switch (status) {
-                case IkeSessionCallback.LIVENESS_STATUS_ON_DEMAND_STARTED:
-                case IkeSessionCallback.LIVENESS_STATUS_BACKGROUND_STARTED:
-                case IkeSessionCallback.LIVENESS_STATUS_ON_DEMAND_ONGOING:
-                case IkeSessionCallback.LIVENESS_STATUS_BACKGROUND_ONGOING:
-                    validationStatus = PreciseDataConnectionState.NETWORK_VALIDATION_IN_PROGRESS;
-                    break;
-                case IkeSessionCallback.LIVENESS_STATUS_SUCCESS:
-                    validationStatus = PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS;
-                    break;
-                case IkeSessionCallback.LIVENESS_STATUS_FAILURE:
-                    validationStatus = PreciseDataConnectionState.NETWORK_VALIDATION_FAILURE;
-                    break;
-                default:
-                    validationStatus = PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS;
-            }
+            @NetworkValidationStatus
+            int validationStatus =
+                    switch (status) {
+                        case IkeSessionCallback.LIVENESS_STATUS_ON_DEMAND_STARTED,
+                                IkeSessionCallback.LIVENESS_STATUS_BACKGROUND_STARTED,
+                                IkeSessionCallback.LIVENESS_STATUS_ON_DEMAND_ONGOING,
+                                IkeSessionCallback.LIVENESS_STATUS_BACKGROUND_ONGOING ->
+                                PreciseDataConnectionState.NETWORK_VALIDATION_IN_PROGRESS;
+                        case IkeSessionCallback.LIVENESS_STATUS_SUCCESS ->
+                                PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS;
+                        case IkeSessionCallback.LIVENESS_STATUS_FAILURE ->
+                                PreciseDataConnectionState.NETWORK_VALIDATION_FAILURE;
+                        default -> PreciseDataConnectionState.NETWORK_VALIDATION_SUCCESS;
+                    };
 
             mHandler.obtainMessage(
                             EVENT_IKE_LIVENESS_STATUS_CHANGED,
@@ -1598,138 +1554,6 @@ public class EpdgTunnelManager {
         return epdgIkeSaProposal;
     }
 
-    private IkeSaProposal buildIkeSaProposal() {
-        IkeSaProposal.Builder saProposalBuilder = new IkeSaProposal.Builder();
-
-        int[] dhGroups =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-        for (int dhGroup : dhGroups) {
-            if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                saProposalBuilder.addDhGroup(dhGroup);
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_IKE_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO);
-
-            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
-                int[] aesCbcKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_IKE_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
-                for (int aesCbcKeyLen : aesCbcKeyLens) {
-                    if (validateConfig(aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCbcKeyLen);
-                    }
-                }
-            }
-
-            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
-                int[] aesCtrKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_IKE_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
-                for (int aesCtrKeyLen : aesCtrKeyLens) {
-                    if (validateConfig(aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCtrKeyLen);
-                    }
-                }
-            }
-        }
-
-        int[] integrityAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY);
-        for (int integrityAlgo : integrityAlgos) {
-            if (validateConfig(integrityAlgo, VALID_INTEGRITY_ALGOS, CONFIG_TYPE_INTEGRITY_ALGO)) {
-                saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
-            }
-        }
-
-        int[] prfAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_PRF_ALGORITHMS_INT_ARRAY);
-        for (int prfAlgo : prfAlgos) {
-            if (validateConfig(prfAlgo, VALID_PRF_ALGOS, CONFIG_TYPE_PRF_ALGO)) {
-                saProposalBuilder.addPseudorandomFunction(prfAlgo);
-            }
-        }
-
-        return saProposalBuilder.build();
-    }
-
-    private IkeSaProposal buildIkeSaAeadProposal() {
-        IkeSaProposal.Builder saProposalBuilder = new IkeSaProposal.Builder();
-
-        int[] dhGroups =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-        for (int dhGroup : dhGroups) {
-            if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                saProposalBuilder.addDhGroup(dhGroup);
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_IKE_SESSION_AEAD_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            if (!validateConfig(encryptionAlgo, VALID_AEAD_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
-                continue;
-            }
-            if ((encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16)) {
-                int[] aesGcmKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_IKE_SESSION_AES_GCM_KEY_SIZE_INT_ARRAY);
-                for (int aesGcmKeyLen : aesGcmKeyLens) {
-                    if (validateConfig(aesGcmKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesGcmKeyLen);
-                    }
-                }
-            }
-        }
-
-        int[] prfAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_PRF_ALGORITHMS_INT_ARRAY);
-        for (int prfAlgo : prfAlgos) {
-            if (validateConfig(prfAlgo, VALID_PRF_ALGOS, CONFIG_TYPE_PRF_ALGO)) {
-                saProposalBuilder.addPseudorandomFunction(prfAlgo);
-            }
-        }
-
-        return saProposalBuilder.build();
-    }
-
     private boolean validateConfig(int config, Set<Integer> validConfigValues, String configType) {
         if (validConfigValues.contains(config)) {
             return true;
@@ -1737,135 +1561,6 @@ public class EpdgTunnelManager {
 
         Log.e(TAG, "Invalid config value for " + configType + ":" + config);
         return false;
-    }
-
-    private ChildSaProposal buildChildSaProposal() {
-        ChildSaProposal.Builder saProposalBuilder = new ChildSaProposal.Builder();
-
-        // IKE library doesn't add KE payload if dh groups are not set in child session params.
-        // Use the same groups as that of IKE session.
-        if (IwlanCarrierConfig.getConfigBoolean(
-                mContext,
-                mSlotId,
-                CarrierConfigManager.Iwlan.KEY_ADD_KE_TO_CHILD_SESSION_REKEY_BOOL)) {
-            int[] dhGroups =
-                    IwlanCarrierConfig.getConfigIntArray(
-                            mContext,
-                            mSlotId,
-                            CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-            for (int dhGroup : dhGroups) {
-                if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                    saProposalBuilder.addDhGroup(dhGroup);
-                }
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_CHILD_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            if (validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
-                if (ChildSaProposal.getSupportedEncryptionAlgorithms().contains(encryptionAlgo)) {
-                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
-                        int[] aesCbcKeyLens =
-                                IwlanCarrierConfig.getConfigIntArray(
-                                        mContext,
-                                        mSlotId,
-                                        CarrierConfigManager.Iwlan
-                                                .KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
-                        for (int aesCbcKeyLen : aesCbcKeyLens) {
-                            if (validateConfig(
-                                    aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                                saProposalBuilder.addEncryptionAlgorithm(
-                                        encryptionAlgo, aesCbcKeyLen);
-                            }
-                        }
-                    }
-
-                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
-                        int[] aesCtrKeyLens =
-                                IwlanCarrierConfig.getConfigIntArray(
-                                        mContext,
-                                        mSlotId,
-                                        CarrierConfigManager.Iwlan
-                                                .KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
-                        for (int aesCtrKeyLen : aesCtrKeyLens) {
-                            if (validateConfig(
-                                    aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                                saProposalBuilder.addEncryptionAlgorithm(
-                                        encryptionAlgo, aesCtrKeyLen);
-                            }
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "Device does not support encryption algo:  " + encryptionAlgo);
-                }
-            }
-        }
-
-        int[] integrityAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY);
-        for (int integrityAlgo : integrityAlgos) {
-            if (validateConfig(integrityAlgo, VALID_INTEGRITY_ALGOS, CONFIG_TYPE_INTEGRITY_ALGO)) {
-                if (ChildSaProposal.getSupportedIntegrityAlgorithms().contains(integrityAlgo)) {
-                    saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
-                } else {
-                    Log.w(TAG, "Device does not support integrity algo:  " + integrityAlgo);
-                }
-            }
-        }
-
-        return saProposalBuilder.build();
-    }
-
-    private ChildSaProposal buildAeadChildSaProposal() {
-        ChildSaProposal.Builder saProposalBuilder = new ChildSaProposal.Builder();
-
-        int[] dhGroups =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan.KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY);
-        for (int dhGroup : dhGroups) {
-            if (validateConfig(dhGroup, VALID_DH_GROUPS, CONFIG_TYPE_DH_GROUP)) {
-                saProposalBuilder.addDhGroup(dhGroup);
-            }
-        }
-
-        int[] encryptionAlgos =
-                IwlanCarrierConfig.getConfigIntArray(
-                        mContext,
-                        mSlotId,
-                        CarrierConfigManager.Iwlan
-                                .KEY_SUPPORTED_CHILD_SESSION_AEAD_ALGORITHMS_INT_ARRAY);
-        for (int encryptionAlgo : encryptionAlgos) {
-            if (!validateConfig(encryptionAlgo, VALID_AEAD_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
-                continue;
-            }
-            if ((encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12)
-                    || (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16)) {
-                int[] aesGcmKeyLens =
-                        IwlanCarrierConfig.getConfigIntArray(
-                                mContext,
-                                mSlotId,
-                                CarrierConfigManager.Iwlan
-                                        .KEY_CHILD_SESSION_AES_GCM_KEY_SIZE_INT_ARRAY);
-                for (int aesGcmKeyLen : aesGcmKeyLens) {
-                    if (validateConfig(aesGcmKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesGcmKeyLen);
-                    }
-                }
-            }
-        }
-
-        return saProposalBuilder.build();
     }
 
     private IkeIdentification getLocalIdentification() throws IwlanSimNotReadyException {
@@ -1967,15 +1662,15 @@ public class EpdgTunnelManager {
             ConnectivityManager connectivityManager;
             boolean isNetworkValidated;
             switch (msg.what) {
-                case EVENT_CHILD_SESSION_OPENED:
-                case EVENT_IKE_SESSION_CLOSED:
-                case EVENT_IPSEC_TRANSFORM_CREATED:
-                case EVENT_IPSEC_TRANSFORM_DELETED:
-                case EVENT_CHILD_SESSION_CLOSED:
-                case EVENT_IKE_SESSION_OPENED:
-                case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED:
-                case EVENT_IKE_3GPP_DATA_RECEIVED:
-                case EVENT_IKE_LIVENESS_STATUS_CHANGED:
+                case EVENT_CHILD_SESSION_OPENED,
+                        EVENT_IKE_SESSION_CLOSED,
+                        EVENT_IPSEC_TRANSFORM_CREATED,
+                        EVENT_IPSEC_TRANSFORM_DELETED,
+                        EVENT_CHILD_SESSION_CLOSED,
+                        EVENT_IKE_SESSION_OPENED,
+                        EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED,
+                        EVENT_IKE_3GPP_DATA_RECEIVED,
+                        EVENT_IKE_LIVENESS_STATUS_CHANGED -> {
                     IkeEventData ikeEventData = (IkeEventData) msg.obj;
                     if (isObsoleteToken(ikeEventData.mApnName, ikeEventData.mToken)) {
                         Log.d(
@@ -1985,28 +1680,24 @@ public class EpdgTunnelManager {
                                         + ikeEventData.mToken);
                         return;
                     }
+                }
             }
 
             long mIkeTunnelEstablishmentDuration;
             switch (msg.what) {
-                case EVENT_TUNNEL_BRINGUP_REQUEST:
-                    handleTunnelBringUpRequest((TunnelRequestWrapper) msg.obj);
-                    break;
-
-                case EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE:
+                case EVENT_TUNNEL_BRINGUP_REQUEST ->
+                        handleTunnelBringUpRequest((TunnelRequestWrapper) msg.obj);
+                case EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE -> {
                     EpdgSelectorResult selectorResult = (EpdgSelectorResult) msg.obj;
                     printRequestQueue("EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE");
-
                     if (selectorResult.getTransactionId() != mTransactionId) {
                         Log.e(TAG, "Mismatched transactionId");
                         break;
                     }
-
                     if (mPendingBringUpRequests.isEmpty()) {
                         Log.d(TAG, "Empty request queue");
                         break;
                     }
-
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
                             && selectorResult.getValidIpList() != null) {
                         tunnelRequestWrapper = mPendingBringUpRequests.remove();
@@ -2022,18 +1713,14 @@ public class EpdgTunnelManager {
                                         : selectorResult.getEpdgError();
                         failAllPendingRequests(error);
                     }
-                    break;
-
-                case EVENT_CHILD_SESSION_OPENED:
+                }
+                case EVENT_CHILD_SESSION_OPENED -> {
                     TunnelOpenedData tunnelOpenedData = (TunnelOpenedData) msg.obj;
                     apnName = tunnelOpenedData.mApnName;
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-
                     tunnelConfig.setDnsAddrList(tunnelOpenedData.mInternalDnsServers);
                     tunnelConfig.setInternalAddrList(tunnelOpenedData.mInternalAddresses);
-
                     IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
-
                     for (LinkAddress address : tunnelConfig.getInternalAddrList()) {
                         try {
                             tunnelInterface.addAddress(
@@ -2042,7 +1729,6 @@ public class EpdgTunnelManager {
                             Log.e(TAG, "Adding internal addresses to interface failed.");
                         }
                     }
-
                     TunnelLinkProperties linkProperties =
                             TunnelLinkProperties.builder()
                                     .setInternalAddresses(tunnelConfig.getInternalAddrList())
@@ -2051,7 +1737,6 @@ public class EpdgTunnelManager {
                                     .setIfaceName(tunnelConfig.getIface().getInterfaceName())
                                     .setSliceInfo(tunnelConfig.getSliceInfo())
                                     .build();
-
                     mIkeTunnelEstablishmentDuration =
                             System.currentTimeMillis() - mIkeTunnelEstablishmentStartTime;
                     mIkeTunnelEstablishmentStartTime = 0;
@@ -2069,29 +1754,23 @@ public class EpdgTunnelManager {
                     tunnelConfig
                             .getTunnelCallback()
                             .onOpened(apnName, linkProperties, onOpenedMetrics);
-
                     reportIwlanError(apnName, new IwlanError(IwlanError.NO_ERROR));
                     mEpdgSelector.onEpdgConnectedSuccessfully();
-
                     mEpdgMonitor.onApnConnectToEpdg(apnName, tunnelConfig.getEpdgAddress());
                     onConnectedToEpdg(true);
-                    mValidEpdgInfo.resetIndex();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
                     tunnelConfig.setIkeSessionState(IkeSessionState.CHILD_SESSION_OPENED);
-                    break;
-
-                case EVENT_IKE_SESSION_CLOSED:
+                }
+                case EVENT_IKE_SESSION_CLOSED -> {
                     printRequestQueue("EVENT_IKE_SESSION_CLOSED");
                     SessionClosedData sessionClosedData = (SessionClosedData) msg.obj;
                     apnName = sessionClosedData.mApnName;
-
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     if (tunnelConfig == null) {
                         Log.e(TAG, "No callback found for apn: " + apnName);
                         return;
                     }
-
                     // If IKE session closed exceptionally, we retrieve IwlanError directly from the
                     // exception; otherwise, it is still possible that we triggered an IKE session
                     // close due to an error (e.g. IwlanError.TUNNEL_TRANSFORM_FAILED), or because
@@ -2116,12 +1795,10 @@ public class EpdgTunnelManager {
                             iwlanError = tunnelConfig.getError();
                         }
                     }
-
                     IpSecManager.IpSecTunnelInterface iface = tunnelConfig.getIface();
                     if (iface != null) {
                         iface.close();
                     }
-
                     if (!tunnelConfig.hasTunnelOpened()) {
                         if (tunnelConfig.isBackoffTimeValid()) {
                             reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
@@ -2138,10 +1815,8 @@ public class EpdgTunnelManager {
                         /* PDN disconnected case */
                         triggerUnderlyingNetworkValidationOnError(iwlanError);
                     }
-
                     Log.d(TAG, "Tunnel Closed: " + iwlanError);
                     tunnelConfig.setIkeSessionState(IkeSessionState.NO_IKE_SESSION);
-
                     onClosedMetricsBuilder = new OnClosedMetrics.Builder().setApnName(apnName);
                     if (!mEpdgMonitor.hasEpdgConnected()) {
                         failAllPendingRequests(iwlanError);
@@ -2152,7 +1827,6 @@ public class EpdgTunnelManager {
                                                 - mIkeTunnelEstablishmentStartTime
                                         : 0;
                         mIkeTunnelEstablishmentStartTime = 0;
-
                         isNetworkValidated = isUnderlyingNetworkValidated(mIkeSessionNetwork);
                         onClosedMetricsBuilder
                                 .setEpdgServerAddress(tunnelConfig.getEpdgAddress())
@@ -2164,20 +1838,17 @@ public class EpdgTunnelManager {
                     tunnelConfig
                             .getTunnelCallback()
                             .onClosed(apnName, iwlanError, onClosedMetricsBuilder.build());
-
                     mApnNameToTunnelConfig.remove(apnName);
                     mEpdgMonitor.onApnDisconnectFromEpdg(apnName);
                     if (mApnNameToTunnelConfig.isEmpty() && mPendingBringUpRequests.isEmpty()) {
                         onConnectedToEpdg(false);
                     }
-                    break;
-
-                case EVENT_UPDATE_NETWORK:
+                }
+                case EVENT_UPDATE_NETWORK -> {
                     UpdateNetworkWrapper updatedNetwork = (UpdateNetworkWrapper) msg.obj;
                     mDefaultNetwork = updatedNetwork.getNetwork();
                     LinkProperties defaultLinkProperties = updatedNetwork.getLinkProperties();
                     String paraString = "Network: " + mDefaultNetwork;
-
                     if (mEpdgMonitor.hasEpdgConnected()) {
                         if (Objects.isNull(mDefaultNetwork)) {
                             Log.w(TAG, "The default network has been removed.");
@@ -2219,9 +1890,8 @@ public class EpdgTunnelManager {
                             }
                         }
                     }
-                    break;
-
-                case EVENT_TUNNEL_BRINGDOWN_REQUEST:
+                }
+                case EVENT_TUNNEL_BRINGDOWN_REQUEST -> {
                     TunnelBringdownRequest bringdownRequest = (TunnelBringdownRequest) msg.obj;
                     apnName = bringdownRequest.mApnName;
                     boolean forceClose = bringdownRequest.mForceClose;
@@ -2258,20 +1928,18 @@ public class EpdgTunnelManager {
                     if (tunnelConfig == null && numClosed == 0) {
                         // IwlanDataService expected to close a (pending or up) tunnel but was not
                         // found. Recovers state in IwlanDataService through TunnelCallback.
-                        iwlanError = new IwlanError(IwlanError.TUNNEL_NOT_FOUND);
+                        IwlanError iwlanError = new IwlanError(IwlanError.TUNNEL_NOT_FOUND);
                         reportIwlanError(apnName, iwlanError);
                         bringdownRequest.mTunnelCallback.onClosed(
                                 apnName,
                                 iwlanError,
                                 new OnClosedMetrics.Builder().setApnName(apnName).build());
                     }
-                    break;
-
-                case EVENT_IPSEC_TRANSFORM_CREATED:
+                }
+                case EVENT_IPSEC_TRANSFORM_CREATED -> {
                     IpsecTransformData transformData = (IpsecTransformData) msg.obj;
                     apnName = transformData.getApnName();
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-
                     try {
                         mIpSecManager.applyTunnelModeTransform(
                                 tunnelConfig.getIface(),
@@ -2289,19 +1957,16 @@ public class EpdgTunnelManager {
                             == IkeSessionState.IKE_MOBILITY_IN_PROGRESS) {
                         tunnelConfig.setIkeSessionState(IkeSessionState.CHILD_SESSION_OPENED);
                     }
-                    break;
-
-                case EVENT_IPSEC_TRANSFORM_DELETED:
-                    transformData = (IpsecTransformData) msg.obj;
+                }
+                case EVENT_IPSEC_TRANSFORM_DELETED -> {
+                    IpsecTransformData transformData = (IpsecTransformData) msg.obj;
                     IpSecTransform transform = transformData.getTransform();
                     transform.close();
                     mApnNameToIpsecTransform.remove(transformData.getApnName());
-                    break;
-
-                case EVENT_CHILD_SESSION_CLOSED:
-                    sessionClosedData = (SessionClosedData) msg.obj;
+                }
+                case EVENT_CHILD_SESSION_CLOSED -> {
+                    SessionClosedData sessionClosedData = (SessionClosedData) msg.obj;
                     apnName = sessionClosedData.mApnName;
-
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     if (tunnelConfig == null) {
                         Log.d(TAG, "No tunnel callback for apn: " + apnName);
@@ -2314,17 +1979,14 @@ public class EpdgTunnelManager {
                                         tunnelConfig.getIkeSessionState()));
                     }
                     tunnelConfig.getIkeSession().close();
-                    break;
-
-                case EVENT_IKE_SESSION_OPENED:
+                }
+                case EVENT_IKE_SESSION_OPENED -> {
                     IkeSessionOpenedData ikeSessionOpenedData = (IkeSessionOpenedData) msg.obj;
                     apnName = ikeSessionOpenedData.mApnName;
                     IkeSessionConfiguration sessionConfiguration =
                             ikeSessionOpenedData.mIkeSessionConfiguration;
-
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     tunnelConfig.setPcscfAddrList(sessionConfiguration.getPcscfServers());
-
                     boolean enabledFastReauth =
                             IwlanCarrierConfig.getConfigBoolean(
                                     mContext,
@@ -2335,7 +1997,6 @@ public class EpdgTunnelManager {
                             TAG,
                             "CarrierConfigManager.Iwlan.KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL "
                                     + enabledFastReauth);
-
                     if (enabledFastReauth) {
                         EapInfo eapInfo = sessionConfiguration.getEapInfo();
                         if (eapInfo instanceof EapAkaInfo eapAkaInfo) {
@@ -2345,24 +2006,21 @@ public class EpdgTunnelManager {
                             mNextReauthId = null;
                         }
                     }
-                    break;
-
-                case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED:
+                }
+                case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED -> {
                     IkeSessionConnectionInfoData ikeSessionConnectionInfoData =
                             (IkeSessionConnectionInfoData) msg.obj;
                     Network network =
                             ikeSessionConnectionInfoData.mIkeSessionConnectionInfo.getNetwork();
                     apnName = ikeSessionConnectionInfoData.mApnName;
-
                     connectivityManager = mContext.getSystemService(ConnectivityManager.class);
                     if (Objects.requireNonNull(connectivityManager).getLinkProperties(network)
                             == null) {
                         Log.e(TAG, "Network " + network + " has null LinkProperties!");
                         return;
                     }
-
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-                    tunnelInterface = tunnelConfig.getIface();
+                    IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
                     try {
                         tunnelInterface.setUnderlyingNetwork(network);
                     } catch (IOException | IllegalArgumentException e) {
@@ -2373,9 +2031,8 @@ public class EpdgTunnelManager {
                                         + " exception: "
                                         + e);
                     }
-                    break;
-
-                case EVENT_IKE_3GPP_DATA_RECEIVED:
+                }
+                case EVENT_IKE_3GPP_DATA_RECEIVED -> {
                     Ike3gppDataReceived ike3gppDataReceived = (Ike3gppDataReceived) msg.obj;
                     apnName = ike3gppDataReceived.mApnName;
                     List<Ike3gppData> ike3gppData = ike3gppDataReceived.mIke3gppData;
@@ -2405,9 +2062,8 @@ public class EpdgTunnelManager {
                     } else {
                         Log.e(TAG, "Null or empty payloads received:");
                     }
-                    break;
-
-                case EVENT_IKE_LIVENESS_STATUS_CHANGED:
+                }
+                case EVENT_IKE_LIVENESS_STATUS_CHANGED -> {
                     IkeSessionValidationStatusData ikeLivenessData =
                             (IkeSessionValidationStatusData) msg.obj;
                     @NetworkValidationStatus int validationStatus = ikeLivenessData.mStatus;
@@ -2420,9 +2076,8 @@ public class EpdgTunnelManager {
                     tunnelConfig
                             .getTunnelCallback()
                             .onNetworkValidationStatusChanged(apnName, validationStatus);
-                    break;
-
-                case EVENT_REQUEST_NETWORK_VALIDATION_CHECK:
+                }
+                case EVENT_REQUEST_NETWORK_VALIDATION_CHECK -> {
                     apnName = (String) msg.obj;
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     if (tunnelConfig == null) {
@@ -2430,10 +2085,8 @@ public class EpdgTunnelManager {
                         return;
                     }
                     tunnelConfig.getIkeSession().requestLivenessCheck();
-                    break;
-
-                default:
-                    throw new IllegalStateException("Unexpected value: " + msg.what);
+                }
+                default -> throw new IllegalStateException("Unexpected value: " + msg.what);
             }
         }
 
@@ -2533,22 +2186,18 @@ public class EpdgTunnelManager {
         int protoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
         int epdgAddressOrder = EpdgSelector.SYSTEM_PREFERRED;
         switch (ipPreference) {
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_PREFERRED:
-                epdgAddressOrder = EpdgSelector.IPV4_PREFERRED;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_PREFERRED:
-                epdgAddressOrder = EpdgSelector.IPV6_PREFERRED;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY:
-                protoFilter = EpdgSelector.PROTO_FILTER_IPV4;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY:
-                protoFilter = EpdgSelector.PROTO_FILTER_IPV6;
-                break;
-            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_SYSTEM_PREFERRED:
-                break;
-            default:
-                Log.w(TAG, "Invalid Ip preference : " + ipPreference);
+            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_PREFERRED ->
+                    epdgAddressOrder = EpdgSelector.IPV4_PREFERRED;
+            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_PREFERRED ->
+                    epdgAddressOrder = EpdgSelector.IPV6_PREFERRED;
+            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV4_ONLY ->
+                    protoFilter = EpdgSelector.PROTO_FILTER_IPV4;
+            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_IPV6_ONLY ->
+                    protoFilter = EpdgSelector.PROTO_FILTER_IPV6;
+            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_SYSTEM_PREFERRED -> {
+                /* Do nothing */
+            }
+            default -> Log.w(TAG, "Invalid Ip preference : " + ipPreference);
         }
 
         IwlanError epdgError =
@@ -2608,7 +2257,6 @@ public class EpdgTunnelManager {
                             + sublist.get(0)
                             + " from available ePDG address list: "
                             + Arrays.toString(selectorResultList.toArray()));
-            mValidEpdgInfo.setAddrList(sublist);
             return sublist.get(0);
         }
 
@@ -2618,7 +2266,6 @@ public class EpdgTunnelManager {
                         + selectorResultList.get(0)
                         + " from available ePDG address list: "
                         + Arrays.toString(selectorResultList.toArray()));
-        mValidEpdgInfo.setAddrList(selectorResultList);
         return selectorResultList.get(0);
     }
 
@@ -2666,11 +2313,11 @@ public class EpdgTunnelManager {
             mLinkProperties = linkProperties;
         }
 
-        public Network getNetwork() {
+        Network getNetwork() {
             return mNetwork;
         }
 
-        public LinkProperties getLinkProperties() {
+        LinkProperties getLinkProperties() {
             return mLinkProperties;
         }
     }
@@ -2686,11 +2333,11 @@ public class EpdgTunnelManager {
             mSetupRequest = setupRequest;
         }
 
-        public TunnelSetupRequest getSetupRequest() {
+        TunnelSetupRequest getSetupRequest() {
             return mSetupRequest;
         }
 
-        public TunnelCallback getTunnelCallback() {
+        TunnelCallback getTunnelCallback() {
             return mTunnelCallback;
         }
     }
@@ -2716,15 +2363,15 @@ public class EpdgTunnelManager {
     private static final class EpdgSelectorResult {
         private final List<InetAddress> mValidIpList;
 
-        public List<InetAddress> getValidIpList() {
+        List<InetAddress> getValidIpList() {
             return mValidIpList;
         }
 
-        public IwlanError getEpdgError() {
+        IwlanError getEpdgError() {
             return mEpdgError;
         }
 
-        public int getTransactionId() {
+        int getTransactionId() {
             return mTransactionId;
         }
 
@@ -2816,15 +2463,15 @@ public class EpdgTunnelManager {
             mDirection = direction;
         }
 
-        public IpSecTransform getTransform() {
+        IpSecTransform getTransform() {
             return mTransform;
         }
 
-        public int getDirection() {
+        int getDirection() {
             return mDirection;
         }
 
-        public String getApnName() {
+        String getApnName() {
             return super.mApnName;
         }
     }
@@ -2836,41 +2483,6 @@ public class EpdgTunnelManager {
         private IkeEventData(String apnName, int token) {
             mApnName = apnName;
             mToken = token;
-        }
-    }
-
-    private static final class EpdgInfo {
-        private List<InetAddress> mAddrList;
-        private int mIndex;
-
-        private EpdgInfo() {
-            mAddrList = null;
-            mIndex = 0;
-        }
-
-        public List<InetAddress> getAddrList() {
-            return mAddrList;
-        }
-
-        public void setAddrList(@NonNull List<InetAddress> AddrList) {
-            mAddrList = AddrList;
-            resetIndex();
-        }
-
-        public int getIndex() {
-            return mIndex;
-        }
-
-        public void incrementIndex() {
-            if (getIndex() >= getAddrList().size() - 1) {
-                resetIndex();
-            } else {
-                mIndex++;
-            }
-        }
-
-        public void resetIndex() {
-            mIndex = 0;
         }
     }
 

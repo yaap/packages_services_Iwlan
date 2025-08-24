@@ -267,7 +267,11 @@ public class IwlanDataServiceTest {
 
         when(mMockConnectivityManager.getLinkProperties(eq(mMockNetwork)))
                 .thenReturn(mLinkProperties);
+        when(mMockConnectivityManager.getNetworkCapabilities(eq(mMockNetwork)))
+                .thenReturn(
+                        new NetworkCapabilities.Builder().addTransportType(TRANSPORT_WIFI).build());
         when(mMockTunnelLinkProperties.ifaceName()).thenReturn("mockipsec0");
+        when(mMockTunnelLinkProperties.underlyingNetwork()).thenReturn(mMockNetwork);
 
         doReturn(mTestLooper.getLooper()).when(mIwlanDataService).getLooper();
 
@@ -600,7 +604,7 @@ public class IwlanDataServiceTest {
         List<InetAddress> mPCSFAddressList;
 
         IwlanDataServiceCallback callback = new IwlanDataServiceCallback();
-        TunnelLinkProperties mLinkProperties = createTunnelLinkProperties();
+        TunnelLinkProperties mLinkProperties = createTestTunnelLinkProperties();
         mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 new DataServiceCallback(callback),
@@ -811,7 +815,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
-        TunnelLinkProperties tp = createTunnelLinkProperties();
+        TunnelLinkProperties tp = createTestTunnelLinkProperties();
 
         ArgumentCaptor<DataCallResponse> dataCallResponseCaptor =
                 ArgumentCaptor.forClass(DataCallResponse.class);
@@ -2012,7 +2016,7 @@ public class IwlanDataServiceTest {
                         eq(BRINGDOWN_REASON_NETWORK_UPDATE_WHEN_TUNNEL_IN_BRINGUP));
     }
 
-    public static TunnelLinkProperties createTunnelLinkProperties() throws Exception {
+    public TunnelLinkProperties createTestTunnelLinkProperties() throws Exception {
         final String IP_ADDRESS = "192.0.2.1";
         final String DNS_ADDRESS = "8.8.8.8";
         final String PSCF_ADDRESS = "10.159.204.230";
@@ -2034,6 +2038,7 @@ public class IwlanDataServiceTest {
                 .setPcscfAddresses(mPCSFAddressList)
                 .setIfaceName(INTERFACE_NAME)
                 .setSliceInfo(SLICE_INFO)
+                .setUnderlyingNetwork(mMockNetwork)
                 .build();
     }
 

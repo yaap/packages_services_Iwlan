@@ -48,6 +48,7 @@ import android.os.Message;
 import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.telephony.AccessNetworkConstants;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellInfo;
@@ -57,6 +58,7 @@ import android.telephony.CellInfoNr;
 import android.telephony.CellInfoWcdma;
 import android.telephony.DataFailCause;
 import android.telephony.PreciseDataConnectionState;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.DataCallResponse;
@@ -71,6 +73,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.google.android.iwlan.TunnelMetricsInterface.OnClosedMetrics;
 import com.google.android.iwlan.TunnelMetricsInterface.OnOpenedMetrics;
+import com.google.android.iwlan.epdg.EpdgTunnelCallback;
 import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelSetupRequest;
@@ -452,7 +455,7 @@ public class IwlanDataService extends DataService {
         }
 
         @VisibleForTesting
-        class IwlanTunnelCallback implements EpdgTunnelManager.TunnelCallback {
+        class IwlanTunnelCallback implements EpdgTunnelCallback {
 
             IwlanDataServiceProvider mIwlanDataServiceProvider;
 
@@ -504,6 +507,14 @@ public class IwlanDataService extends DataService {
                                 new TunnelValidationStatusData(
                                         apnName, status, mIwlanDataServiceProvider))
                         .sendToTarget();
+            }
+
+            public void onTunnelLinkPropertiesChanged(
+                    String apnName, TunnelLinkProperties properties) {
+                postToHandler(
+                        () ->
+                                handleTunnelPropertiesChanged(
+                                        apnName, properties, mIwlanDataServiceProvider));
             }
         }
 
@@ -702,6 +713,29 @@ public class IwlanDataService extends DataService {
                             state == TunnelState.TUNNEL_UP
                                     ? DataCallResponse.LINK_STATUS_ACTIVE
                                     : DataCallResponse.LINK_STATUS_INACTIVE);
+
+            SubscriptionManager subscriptionManager =
+                    mContext.getSystemService(SubscriptionManager.class);
+
+            NetworkCapabilities networkCapabilities =
+                    mConnectivityManager.getNetworkCapabilities(
+                            tunnelLinkProperties.underlyingNetwork());
+
+            if (networkCapabilities == null) {
+                Log.w(TAG, "Network capabilities are null for underlying network.");
+            } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
+                responseBuilder.setPhysicalNetworkTransportType(
+                        AccessNetworkConstants.TRANSPORT_TYPE_WLAN);
+            } else if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
+                responseBuilder.setPhysicalNetworkTransportType(
+                        AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+                networkCapabilities.getSubscriptionIds().stream()
+                        .findFirst()
+                        .ifPresent(
+                                subId ->
+                                        responseBuilder.setPhysicalNetworkSlotIndex(
+                                                subscriptionManager.getSlotIndex(subId)));
+            }
 
             // fill wildcard address for gatewayList (used by DataConnection to add routes)
             List<InetAddress> gatewayList = new ArrayList<>();
@@ -2296,6 +2330,16 @@ public class IwlanDataService extends DataService {
             return;
         }
         tunnelState.setNetworkValidationStatus(validationStatusData.mStatus);
+        iwlanDataServiceProvider.notifyDataCallListChanged(iwlanDataServiceProvider.getCallList());
+    }
+
+    private void handleTunnelPropertiesChanged(
+            String apnName,
+            TunnelLinkProperties tunnelProperties,
+            IwlanDataServiceProvider iwlanDataServiceProvider) {
+        IwlanDataServiceProvider.TunnelState tunnelState =
+                iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
+        tunnelState.setTunnelLinkProperties(tunnelProperties);
         iwlanDataServiceProvider.notifyDataCallListChanged(iwlanDataServiceProvider.getCallList());
     }
 

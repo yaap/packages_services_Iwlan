@@ -269,7 +269,7 @@ public class EpdgTunnelManager {
 
     @VisibleForTesting
     class TunnelConfig {
-        @NonNull final TunnelCallback mTunnelCallback;
+        @NonNull final EpdgTunnelCallback mEpdgTunnelCallback;
         // TODO: Change this to TunnelLinkProperties after removing autovalue
         private List<InetAddress> mPcscfAddrList;
         private List<InetAddress> mDnsAddrList;
@@ -288,16 +288,18 @@ public class EpdgTunnelManager {
         private IkeSessionState mIkeSessionState;
         private final boolean mIsEmergency;
         private final InetAddress mEpdgAddress;
+        private Network mUnderlyingNetwork;
 
         public TunnelConfig(
                 IkeSession ikeSession,
-                TunnelCallback tunnelCallback,
+                EpdgTunnelCallback tunnelCallback,
                 IpSecManager.IpSecTunnelInterface iface,
                 InetAddress srcIpv6Addr,
                 int srcIpv6PrefixLength,
                 boolean isEmergency,
-                InetAddress epdgAddress) {
-            mTunnelCallback = tunnelCallback;
+                InetAddress epdgAddress,
+                Network underlyingNetwork) {
+            mEpdgTunnelCallback = tunnelCallback;
             mIkeSession = ikeSession;
             mError = new IwlanError(IwlanError.NO_ERROR);
             mSrcIpv6Address = srcIpv6Addr;
@@ -306,6 +308,7 @@ public class EpdgTunnelManager {
             setIkeSessionState(IkeSessionState.IKE_SESSION_INIT_IN_PROGRESS);
             mIsEmergency = isEmergency;
             mEpdgAddress = epdgAddress;
+            mUnderlyingNetwork = underlyingNetwork;
         }
 
         IkeSessionState getIkeSessionState() {
@@ -338,8 +341,8 @@ public class EpdgTunnelManager {
         }
 
         @NonNull
-        TunnelCallback getTunnelCallback() {
-            return mTunnelCallback;
+        EpdgTunnelCallback getEpdgTunnelCallback() {
+            return mEpdgTunnelCallback;
         }
 
         List<InetAddress> getPcscfAddrList() {
@@ -431,6 +434,14 @@ public class EpdgTunnelManager {
             return mInternalAddrList != null
                     && !mInternalAddrList.isEmpty() /* The child session is opened */
                     && mIface != null; /* The tunnel interface is bring up */
+        }
+
+        public void setUnderlyingNetwork(Network network) {
+            mUnderlyingNetwork = network;
+        }
+
+        public Network getUnderlyingNetwork() {
+            return mUnderlyingNetwork;
         }
 
         @Override
@@ -856,45 +867,10 @@ public class EpdgTunnelManager {
         mTunnelManagerInstances.values().forEach(EpdgTunnelManager::reset);
     }
 
-    public interface TunnelCallback {
-        /**
-         * Called when the tunnel is opened.
-         *
-         * @param apnName apn for which the tunnel was opened
-         * @param linkProperties link properties of the tunnel
-         * @param onOpenedMetrics metrics for the tunnel
-         */
-        void onOpened(
-                @NonNull String apnName,
-                @NonNull TunnelLinkProperties linkProperties,
-                OnOpenedMetrics onOpenedMetrics);
-
-        /**
-         * Called when the tunnel is closed OR if bring up fails
-         *
-         * @param apnName apn for which the tunnel was closed
-         * @param error IwlanError carrying details of the error
-         * @param onClosedMetrics metrics for the tunnel
-         */
-        void onClosed(
-                @NonNull String apnName,
-                @NonNull IwlanError error,
-                OnClosedMetrics onClosedMetrics);
-
-        /**
-         * Called when updates upon network validation status change.
-         *
-         * @param apnName APN affected.
-         * @param status The updated validation status of the network.
-         */
-        void onNetworkValidationStatusChanged(
-                @NonNull String apnName, @NetworkValidationStatus int status);
-    }
-
     /**
-     * Close tunnel for an apn. Confirmation of closing will be delivered in TunnelCallback that was
-     * provided in {@link #bringUpTunnel}. If no tunnel was available, callback will be delivered
-     * using client-provided provided tunnelCallback and iwlanTunnelMetrics
+     * Close tunnel for an apn. Confirmation of closing will be delivered in EpdgTunnelCallback that
+     * was provided in {@link #bringUpTunnel}. If no tunnel was available, callback will be
+     * delivered using client-provided provided tunnelCallback and iwlanTunnelMetrics
      *
      * @param apnName APN name
      * @param forceClose if {@code true}, triggers a local cleanup of the tunnel; if {@code false},
@@ -905,7 +881,7 @@ public class EpdgTunnelManager {
     public void closeTunnel(
             @NonNull String apnName,
             boolean forceClose,
-            @NonNull TunnelCallback tunnelCallback,
+            @NonNull EpdgTunnelCallback tunnelCallback,
             @TunnelBringDownReason int reason) {
         mHandler.obtainMessage(
                         EVENT_TUNNEL_BRINGDOWN_REQUEST,
@@ -931,12 +907,12 @@ public class EpdgTunnelManager {
      * requests and tunnels are expected to be on the same network.
      *
      * @param setupRequest {@link TunnelSetupRequest} tunnel configurations
-     * @param tunnelCallback {@link TunnelCallback} interface to notify clients about the tunnel
+     * @param tunnelCallback {@link EpdgTunnelCallback} interface to notify clients about the tunnel
      *     state
      * @return true if params are valid and no existing tunnel. False otherwise.
      */
     public boolean bringUpTunnel(
-            @NonNull TunnelSetupRequest setupRequest, @NonNull TunnelCallback tunnelCallback) {
+            @NonNull TunnelSetupRequest setupRequest, @NonNull EpdgTunnelCallback tunnelCallback) {
         String apnName = setupRequest.apnName();
 
         if (getTunnelSetupRequestApnName(setupRequest) == null) {
@@ -990,7 +966,7 @@ public class EpdgTunnelManager {
     private void onBringUpTunnel(
             TunnelRequestWrapper tunnelRequestWrapper, InetAddress epdgAddress) {
         TunnelSetupRequest setupRequest = tunnelRequestWrapper.getSetupRequest();
-        TunnelCallback tunnelCallback = tunnelRequestWrapper.getTunnelCallback();
+        EpdgTunnelCallback tunnelCallback = tunnelRequestWrapper.getEpdgTunnelCallback();
         String apnName = setupRequest.apnName();
         IkeSessionParams ikeSessionParams;
         IpSecManager.IpSecTunnelInterface iface;
@@ -1042,7 +1018,8 @@ public class EpdgTunnelManager {
                 isSrcIpv6Present ? setupRequest.srcIpv6Address().get() : null,
                 setupRequest.srcIpv6AddressPrefixLength(),
                 setupRequest.isEmergency(),
-                epdgAddress);
+                epdgAddress,
+                ikeSessionParams.getNetwork());
     }
 
     /**
@@ -1651,6 +1628,17 @@ public class EpdgTunnelManager {
 
     private final class TmHandler extends Handler {
 
+        TunnelLinkProperties buildTunnelLinkProperties(TunnelConfig tunnelConfig) {
+            return TunnelLinkProperties.builder()
+                    .setInternalAddresses(tunnelConfig.getInternalAddrList())
+                    .setDnsAddresses(tunnelConfig.getDnsAddrList())
+                    .setPcscfAddresses(tunnelConfig.getPcscfAddrList())
+                    .setIfaceName(tunnelConfig.getIface().getInterfaceName())
+                    .setSliceInfo(tunnelConfig.getSliceInfo())
+                    .setUnderlyingNetwork(tunnelConfig.getUnderlyingNetwork())
+                    .build();
+        }
+
         @Override
         public void handleMessage(Message msg) {
             Log.d(TAG, "msg.what = " + eventToString(msg.what));
@@ -1729,14 +1717,7 @@ public class EpdgTunnelManager {
                             Log.e(TAG, "Adding internal addresses to interface failed.");
                         }
                     }
-                    TunnelLinkProperties linkProperties =
-                            TunnelLinkProperties.builder()
-                                    .setInternalAddresses(tunnelConfig.getInternalAddrList())
-                                    .setDnsAddresses(tunnelConfig.getDnsAddrList())
-                                    .setPcscfAddresses(tunnelConfig.getPcscfAddrList())
-                                    .setIfaceName(tunnelConfig.getIface().getInterfaceName())
-                                    .setSliceInfo(tunnelConfig.getSliceInfo())
-                                    .build();
+
                     mIkeTunnelEstablishmentDuration =
                             System.currentTimeMillis() - mIkeTunnelEstablishmentStartTime;
                     mIkeTunnelEstablishmentStartTime = 0;
@@ -1752,8 +1733,12 @@ public class EpdgTunnelManager {
                                     .setIsNetworkValidated(isNetworkValidated)
                                     .build();
                     tunnelConfig
-                            .getTunnelCallback()
-                            .onOpened(apnName, linkProperties, onOpenedMetrics);
+                            .getEpdgTunnelCallback()
+                            .onOpened(
+                                    apnName,
+                                    buildTunnelLinkProperties(tunnelConfig),
+                                    onOpenedMetrics);
+
                     reportIwlanError(apnName, new IwlanError(IwlanError.NO_ERROR));
                     mEpdgSelector.onEpdgConnectedSuccessfully();
                     mEpdgMonitor.onApnConnectToEpdg(apnName, tunnelConfig.getEpdgAddress());
@@ -1836,7 +1821,7 @@ public class EpdgTunnelManager {
                                 .setIsNetworkValidated(isNetworkValidated);
                     }
                     tunnelConfig
-                            .getTunnelCallback()
+                            .getEpdgTunnelCallback()
                             .onClosed(apnName, iwlanError, onClosedMetricsBuilder.build());
                     mApnNameToTunnelConfig.remove(apnName);
                     mEpdgMonitor.onApnDisconnectFromEpdg(apnName);
@@ -1930,7 +1915,7 @@ public class EpdgTunnelManager {
                         // found. Recovers state in IwlanDataService through TunnelCallback.
                         IwlanError iwlanError = new IwlanError(IwlanError.TUNNEL_NOT_FOUND);
                         reportIwlanError(apnName, iwlanError);
-                        bringdownRequest.mTunnelCallback.onClosed(
+                        bringdownRequest.mEpdgTunnelCallback.onClosed(
                                 apnName,
                                 iwlanError,
                                 new OnClosedMetrics.Builder().setApnName(apnName).build());
@@ -2020,7 +2005,9 @@ public class EpdgTunnelManager {
                         return;
                     }
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                    tunnelConfig.setUnderlyingNetwork(network);
                     IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
+
                     try {
                         tunnelInterface.setUnderlyingNetwork(network);
                     } catch (IOException | IllegalArgumentException e) {
@@ -2031,6 +2018,11 @@ public class EpdgTunnelManager {
                                         + " exception: "
                                         + e);
                     }
+
+                    tunnelConfig
+                            .getEpdgTunnelCallback()
+                            .onTunnelLinkPropertiesChanged(
+                                    apnName, buildTunnelLinkProperties(tunnelConfig));
                 }
                 case EVENT_IKE_3GPP_DATA_RECEIVED -> {
                     Ike3gppDataReceived ike3gppDataReceived = (Ike3gppDataReceived) msg.obj;
@@ -2074,7 +2066,7 @@ public class EpdgTunnelManager {
                         return;
                     }
                     tunnelConfig
-                            .getTunnelCallback()
+                            .getEpdgTunnelCallback()
                             .onNetworkValidationStatusChanged(apnName, validationStatus);
                 }
                 case EVENT_REQUEST_NETWORK_VALIDATION_CHECK -> {
@@ -2097,7 +2089,7 @@ public class EpdgTunnelManager {
             IwlanError bringUpError = canBringUpTunnel(apnName, setupRequest.isEmergency());
             if (Objects.nonNull(bringUpError)) {
                 tunnelRequestWrapper
-                        .getTunnelCallback()
+                        .getEpdgTunnelCallback()
                         .onClosed(
                                 apnName,
                                 bringUpError,
@@ -2228,7 +2220,7 @@ public class EpdgTunnelManager {
             TunnelRequestWrapper requestWrapper = mPendingBringUpRequests.remove();
             if (requestWrapper.getSetupRequest().apnName().equals(apnName)) {
                 requestWrapper
-                        .getTunnelCallback()
+                        .getEpdgTunnelCallback()
                         .onClosed(
                                 apnName,
                                 new IwlanError(IwlanError.NO_ERROR),
@@ -2284,7 +2276,7 @@ public class EpdgTunnelManager {
             TunnelSetupRequest setupRequest = request.getSetupRequest();
             String apnName = setupRequest.apnName();
             reportIwlanError(apnName, error);
-            request.getTunnelCallback()
+            request.getEpdgTunnelCallback()
                     .onClosed(
                             apnName,
                             error,
@@ -2325,11 +2317,11 @@ public class EpdgTunnelManager {
     // Tunnel request + tunnel callback
     private static final class TunnelRequestWrapper {
         private final TunnelSetupRequest mSetupRequest;
-        private final TunnelCallback mTunnelCallback;
+        private final EpdgTunnelCallback mEpdgTunnelCallback;
 
         private TunnelRequestWrapper(
-                TunnelSetupRequest setupRequest, TunnelCallback tunnelCallback) {
-            mTunnelCallback = tunnelCallback;
+                TunnelSetupRequest setupRequest, EpdgTunnelCallback tunnelCallback) {
+            mEpdgTunnelCallback = tunnelCallback;
             mSetupRequest = setupRequest;
         }
 
@@ -2337,25 +2329,25 @@ public class EpdgTunnelManager {
             return mSetupRequest;
         }
 
-        TunnelCallback getTunnelCallback() {
-            return mTunnelCallback;
+        EpdgTunnelCallback getEpdgTunnelCallback() {
+            return mEpdgTunnelCallback;
         }
     }
 
     private static final class TunnelBringdownRequest {
         final String mApnName;
         final boolean mForceClose;
-        final TunnelCallback mTunnelCallback;
+        final EpdgTunnelCallback mEpdgTunnelCallback;
         final int mBringDownReason;
 
         private TunnelBringdownRequest(
                 String apnName,
                 boolean forceClose,
-                TunnelCallback tunnelCallback,
+                EpdgTunnelCallback tunnelCallback,
                 @TunnelBringDownReason int reason) {
             mApnName = apnName;
             mForceClose = forceClose;
-            mTunnelCallback = tunnelCallback;
+            mEpdgTunnelCallback = tunnelCallback;
             mBringDownReason = reason;
         }
     }
@@ -2583,12 +2575,13 @@ public class EpdgTunnelManager {
     void putApnNameToTunnelConfig(
             String apnName,
             IkeSession ikeSession,
-            TunnelCallback tunnelCallback,
+            EpdgTunnelCallback tunnelCallback,
             IpSecManager.IpSecTunnelInterface iface,
             InetAddress srcIpv6Addr,
             int srcIPv6AddrPrefixLen,
             boolean isEmergency,
-            InetAddress epdgAddress) {
+            InetAddress epdgAddress,
+            Network underlyingNetwork) {
         mApnNameToTunnelConfig.put(
                 apnName,
                 new TunnelConfig(
@@ -2598,7 +2591,8 @@ public class EpdgTunnelManager {
                         srcIpv6Addr,
                         srcIPv6AddrPrefixLen,
                         isEmergency,
-                        epdgAddress));
+                        epdgAddress,
+                        underlyingNetwork));
         Log.d(TAG, "Added APN: " + apnName + " to TunnelConfig");
     }
 

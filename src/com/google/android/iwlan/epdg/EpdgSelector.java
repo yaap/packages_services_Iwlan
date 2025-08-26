@@ -1329,7 +1329,11 @@ public class EpdgSelector {
                         }
 
                         if (!validIpList.isEmpty()) {
+                            // After removing Loopback address, it could be an empty list.
                             validIpList = removeLoopbackAddress(validIpList);
+                        }
+                        if (!validIpList.isEmpty()) {
+                            // Following operations will at least keep one address in the list.
                             validIpList = removeDuplicateIp(validIpList);
                             validIpList = filterExcludedAddresses(validIpList);
                             validIpList = prioritizeIp(validIpList, order);

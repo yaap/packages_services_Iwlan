@@ -2195,6 +2195,8 @@ public class IwlanDataService extends DataService {
                         iwlanDataServiceProvider.getIwlanTunnelCallback());
         Log.d(TAG + "[" + slotId + "]", "bringup Tunnel with result:" + result);
         if (!result) {
+            iwlanDataServiceProvider.mTunnelStateForApn.remove(
+                    dataProfile.getApnSetting().getApnName());
             iwlanDataServiceProvider.deliverCallback(
                     IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
                     DataServiceCallback.RESULT_ERROR_INVALID_ARG,

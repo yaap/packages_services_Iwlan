@@ -267,9 +267,17 @@ public class IwlanDataServiceTest {
 
         when(mMockConnectivityManager.getLinkProperties(eq(mMockNetwork)))
                 .thenReturn(mLinkProperties);
+        when(mMockConnectivityManager.getNetworkCapabilities(eq(mMockNetwork)))
+                .thenReturn(
+                        new NetworkCapabilities.Builder().addTransportType(TRANSPORT_WIFI).build());
         when(mMockTunnelLinkProperties.ifaceName()).thenReturn("mockipsec0");
+        when(mMockTunnelLinkProperties.underlyingNetwork()).thenReturn(mMockNetwork);
 
         doReturn(mTestLooper.getLooper()).when(mIwlanDataService).getLooper();
+
+        when(mMockEpdgTunnelManager.bringUpTunnel(
+                        any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class)))
+                .thenReturn(true);
 
         doNothing().when(mMockEpdgTunnelManager).close();
 
@@ -600,7 +608,7 @@ public class IwlanDataServiceTest {
         List<InetAddress> mPCSFAddressList;
 
         IwlanDataServiceCallback callback = new IwlanDataServiceCallback();
-        TunnelLinkProperties mLinkProperties = createTunnelLinkProperties();
+        TunnelLinkProperties mLinkProperties = createTestTunnelLinkProperties();
         mIwlanDataServiceProvider.setTunnelState(
                 dp,
                 new DataServiceCallback(callback),
@@ -811,7 +819,7 @@ public class IwlanDataServiceTest {
                 .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
 
         /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
-        TunnelLinkProperties tp = createTunnelLinkProperties();
+        TunnelLinkProperties tp = createTestTunnelLinkProperties();
 
         ArgumentCaptor<DataCallResponse> dataCallResponseCaptor =
                 ArgumentCaptor.forClass(DataCallResponse.class);
@@ -2012,7 +2020,7 @@ public class IwlanDataServiceTest {
                         eq(BRINGDOWN_REASON_NETWORK_UPDATE_WHEN_TUNNEL_IN_BRINGUP));
     }
 
-    public static TunnelLinkProperties createTunnelLinkProperties() throws Exception {
+    public TunnelLinkProperties createTestTunnelLinkProperties() throws Exception {
         final String IP_ADDRESS = "192.0.2.1";
         final String DNS_ADDRESS = "8.8.8.8";
         final String PSCF_ADDRESS = "10.159.204.230";
@@ -2034,6 +2042,7 @@ public class IwlanDataServiceTest {
                 .setPcscfAddresses(mPCSFAddressList)
                 .setIfaceName(INTERFACE_NAME)
                 .setSliceInfo(SLICE_INFO)
+                .setUnderlyingNetwork(mMockNetwork)
                 .build();
     }
 
@@ -2880,5 +2889,63 @@ public class IwlanDataServiceTest {
         when(mMockOnOpenedMetrics.getEpdgServerSelectionDuration()).thenReturn(200);
         when(mMockOnOpenedMetrics.getIkeTunnelEstablishmentDuration()).thenReturn(1000);
         when(mMockOnOpenedMetrics.isNetworkValidated()).thenReturn(true);
+    }
+
+    @Test
+    public void testSetupDataCall_cleansUpStateAfterBringUpTunnelFailure() {
+        // Verifies that a setupDataCall failure is handled gracefully, allowing a
+        // subsequent setupDataCall request to succeed. This ensures that the TunnelState
+        // is cleaned up properly after a bringUpTunnel failure.
+        DataProfile dp = buildImsDataProfile();
+
+        when(mMockEpdgTunnelManager.bringUpTunnel(
+                        any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class)))
+                .thenReturn(false);
+
+        mIwlanDataServiceProvider.setupDataCall(
+                /* accessNetworkType */ AccessNetworkType.IWLAN,
+                /* dataProfile */ dp,
+                /* isRoaming */ false,
+                /* allowRoaming */ true,
+                /* reason */ DataService.REQUEST_REASON_NORMAL,
+                /* linkProperties */ null,
+                /* pduSessionId */ 1,
+                /* sliceInfo */ null,
+                /* trafficDescriptor */ null,
+                /* matchAllRuleAllowed */ true,
+                /* callback */ mMockDataServiceCallback);
+        mTestLooper.dispatchAll();
+
+        verify(mMockDataServiceCallback)
+                .onSetupDataCallComplete(
+                        eq(DataServiceCallback.RESULT_ERROR_INVALID_ARG), isNull());
+
+        clearInvocations(mMockDataServiceCallback);
+        when(mMockEpdgTunnelManager.bringUpTunnel(
+                        any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class)))
+                .thenReturn(true);
+
+        mIwlanDataServiceProvider.setupDataCall(
+                /* accessNetworkType */ AccessNetworkType.IWLAN,
+                /* dataProfile */ dp,
+                /* isRoaming */ false,
+                /* allowRoaming */ true,
+                /* reason */ DataService.REQUEST_REASON_NORMAL,
+                /* linkProperties */ null,
+                /* pduSessionId */ 1,
+                /* sliceInfo */ null,
+                /* trafficDescriptor */ null,
+                /* matchAllRuleAllowed */ true,
+                /* callback */ mMockDataServiceCallback);
+        mTestLooper.dispatchAll();
+
+        stubMockOnOpenedMetrics();
+        mIwlanDataServiceProvider
+                .getIwlanTunnelCallback()
+                .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties, mMockOnOpenedMetrics);
+        mTestLooper.dispatchAll();
+        verify(mMockDataServiceCallback)
+                .onSetupDataCallComplete(
+                        eq(DataServiceCallback.RESULT_SUCCESS), any(DataCallResponse.class));
     }
 }

@@ -1275,7 +1275,7 @@ public class ErrorPolicyManager {
         public void handleMessage(Message msg) {
             Log.d(TAG, "msg.what = " + msg.what);
             switch (msg.what) {
-                case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
+                case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT -> {
                     Log.d(TAG, "On CARRIER_CONFIG_CHANGED_EVENT");
                     int currentCarrierId = IwlanHelper.getCarrierId(mContext, mSlotId);
                     if (isValidCarrierConfigChangedEvent(currentCarrierId)) {
@@ -1284,17 +1284,14 @@ public class ErrorPolicyManager {
                         readFromCarrierConfig(currentCarrierId);
                         updateUnthrottlingEvents();
                     }
-                    break;
-                case IwlanEventListener.APM_ENABLE_EVENT:
-                case IwlanEventListener.APM_DISABLE_EVENT:
-                case IwlanEventListener.WIFI_DISABLE_EVENT:
-                case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
-                case IwlanEventListener.WIFI_AP_CHANGED_EVENT:
-                    unthrottleLastErrorOnEvent(msg.what);
-                    break;
-                default:
-                    Log.d(TAG, "Unknown message received!");
-                    break;
+                }
+                case IwlanEventListener.APM_ENABLE_EVENT,
+                        IwlanEventListener.APM_DISABLE_EVENT,
+                        IwlanEventListener.WIFI_DISABLE_EVENT,
+                        IwlanEventListener.WIFI_CALLING_DISABLE_EVENT,
+                        IwlanEventListener.WIFI_AP_CHANGED_EVENT ->
+                        unthrottleLastErrorOnEvent(msg.what);
+                default -> Log.d(TAG, "Unknown message received!");
             }
         }
 

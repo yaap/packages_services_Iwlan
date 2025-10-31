@@ -55,20 +55,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanNetworkService extends NetworkService {
     private static final String TAG = IwlanNetworkService.class.getSimpleName();
-    private static Context mContext;
-    private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
-    private IwlanOnSubscriptionsChangedListener mSubsChangeListener;
-    private Handler mIwlanNetworkServiceHandler;
-    private HandlerThread mIwlanNetworkServiceHandlerThread;
-    private static boolean sNetworkConnected;
-    private static final Map<Integer, IwlanNetworkServiceProvider> sIwlanNetworkServiceProviders =
-            new ConcurrentHashMap<>();
-    private static final int INVALID_SUB_ID = -1;
-
-    // The current subscription with the active internet PDN. Need not be the default data sub.
-    // If internet is over WiFi, this value will be INVALID_SUB_ID.
-    private static int mConnectedDataSub = INVALID_SUB_ID;
-
     private static final int EVENT_BASE = IwlanEventListener.NETWORK_SERVICE_INTERNAL_EVENT_BASE;
     private static final int EVENT_NETWORK_REGISTRATION_INFO_REQUEST = EVENT_BASE;
     private static final int EVENT_CREATE_NETWORK_SERVICE_PROVIDER = EVENT_BASE + 1;
@@ -81,10 +67,22 @@ public class IwlanNetworkService extends NetworkService {
         WIFI
     }
 
-    private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
+    private final Map<Integer, IwlanNetworkServiceProvider> mIwlanNetworkServiceProviders =
+            new ConcurrentHashMap<>();
+
+    private Context mContext;
+    private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
+    private IwlanOnSubscriptionsChangedListener mSubsChangeListener;
+    private Handler mIwlanNetworkServiceHandler;
+    private HandlerThread mIwlanNetworkServiceHandlerThread;
+    private boolean mIsNetworkConnected;
+    // The current subscription with the active internet PDN. Need not be the default data sub.
+    // If internet is over WiFi, this value will be SubscriptionManager.INVALID_SUBSCRIPTION_ID.
+    private int mConnectedDataSub = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+    private Transport mDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
     // This callback runs in the same thread as IwlanNetworkServiceHandler
-    static final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
+    final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
         public void onAvailable(Network network) {
@@ -111,11 +109,14 @@ public class IwlanNetworkService extends NetworkService {
         @Override
         public void onLost(Network network) {
             Log.d(TAG, "onLost: " + network);
-            IwlanNetworkService.setConnectedDataSub(INVALID_SUB_ID);
-            IwlanNetworkService.setNetworkConnected(false, Transport.UNSPECIFIED_NETWORK);
+            updateNetworkStateAndNotifyIfChanged(
+                    /* isConnected= */ false,
+                    Transport.UNSPECIFIED_NETWORK,
+                    SubscriptionManager.INVALID_SUBSCRIPTION_ID);
         }
 
         /** Called when the network corresponding to this request changes {@link LinkProperties}. */
+
         @Override
         public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
             Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
@@ -130,22 +131,23 @@ public class IwlanNetworkService extends NetworkService {
 
         @Override
         public void onCapabilitiesChanged(
-                Network network, NetworkCapabilities networkCapabilities) {
+                @NonNull Network network, @NonNull NetworkCapabilities networkCapabilities) {
             // onCapabilitiesChanged is guaranteed to be called immediately after onAvailable per
             // API
             Log.d(TAG, "onCapabilitiesChanged: " + network);
             if (networkCapabilities != null) {
                 if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
-                    IwlanNetworkService.setConnectedDataSub(
+                    updateNetworkStateAndNotifyIfChanged(
+                            /* isConnected= */ true,
+                            Transport.MOBILE,
                             getConnectedDataSub(
                                     mContext.getSystemService(ConnectivityManager.class),
                                     networkCapabilities));
-                    IwlanNetworkService.setNetworkConnected(
-                            true, IwlanNetworkService.Transport.MOBILE);
                 } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
-                    IwlanNetworkService.setConnectedDataSub(INVALID_SUB_ID);
-                    IwlanNetworkService.setNetworkConnected(
-                            true, IwlanNetworkService.Transport.WIFI);
+                    updateNetworkStateAndNotifyIfChanged(
+                            /* isConnected= */ true,
+                            Transport.WIFI,
+                            SubscriptionManager.INVALID_SUBSCRIPTION_ID);
                 } else {
                     Log.w(TAG, "Network does not have cellular or wifi capability");
                 }
@@ -153,7 +155,7 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
-    static final class IwlanOnSubscriptionsChangedListener
+    final class IwlanOnSubscriptionsChangedListener
             extends SubscriptionManager.OnSubscriptionsChangedListener {
         /**
          * Callback invoked when there is any change to any SubscriptionInfo. Typically, this method
@@ -161,7 +163,7 @@ public class IwlanNetworkService extends NetworkService {
          */
         @Override
         public void onSubscriptionsChanged() {
-            for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviders.values()) {
+            for (IwlanNetworkServiceProvider np : mIwlanNetworkServiceProviders.values()) {
                 np.subscriptionChanged();
             }
         }
@@ -273,7 +275,7 @@ public class IwlanNetworkService extends NetworkService {
                             .setEmergencyOnly(!iwlanNetworkServiceProvider.mIsSubActive)
                             .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
                     slotId = iwlanNetworkServiceProvider.getSlotIndex();
-                    if (!IwlanNetworkService.isNetworkConnected(
+                    if (!isNetworkConnected(
                             isActiveDataOnOtherSub(slotId),
                             IwlanHelper.isCrossSimCallingEnabled(mContext, slotId))) {
                         nriBuilder
@@ -296,7 +298,7 @@ public class IwlanNetworkService extends NetworkService {
                 }
                 case EVENT_CREATE_NETWORK_SERVICE_PROVIDER -> {
                     iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
-                    if (sIwlanNetworkServiceProviders.isEmpty()) {
+                    if (mIwlanNetworkServiceProviders.isEmpty()) {
                         initCallback();
                     }
                     addIwlanNetworkServiceProvider(iwlanNetworkServiceProvider);
@@ -304,14 +306,14 @@ public class IwlanNetworkService extends NetworkService {
                 case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER -> {
                     iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
                     slotId = iwlanNetworkServiceProvider.getSlotIndex();
-                    IwlanNetworkServiceProvider nsp = sIwlanNetworkServiceProviders.remove(slotId);
+                    IwlanNetworkServiceProvider nsp = mIwlanNetworkServiceProviders.remove(slotId);
                     if (nsp == null) {
                         Log.w(
                                 TAG + "[" + slotId + "]",
                                 "No NetworkServiceProvider exists for slot!");
                         return;
                     }
-                    if (sIwlanNetworkServiceProviders.isEmpty()) {
+                    if (mIwlanNetworkServiceProviders.isEmpty()) {
                         deinitCallback();
                     }
                 }
@@ -359,66 +361,79 @@ public class IwlanNetworkService extends NetworkService {
         return np;
     }
 
-    static void setConnectedDataSub(int subId) {
-        mConnectedDataSub = subId;
-    }
-
-    static int getConnectedDataSub(
+    int getConnectedDataSub(
             ConnectivityManager connectivityManager, NetworkCapabilities networkCapabilities) {
-        int connectedDataSub = INVALID_SUB_ID;
+        int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+
         NetworkSpecifier specifier = networkCapabilities.getNetworkSpecifier();
         TransportInfo transportInfo = networkCapabilities.getTransportInfo();
 
         if (specifier instanceof TelephonyNetworkSpecifier telephonyNetworkSpecifier) {
-            connectedDataSub = telephonyNetworkSpecifier.getSubscriptionId();
+            subId = telephonyNetworkSpecifier.getSubscriptionId();
         } else if (transportInfo instanceof VcnTransportInfo) {
-            connectedDataSub =
-                    VcnUtils.getSubIdFromVcnCaps(connectivityManager, networkCapabilities);
+            subId = VcnUtils.getSubIdFromVcnCaps(connectivityManager, networkCapabilities);
         }
-        return connectedDataSub;
+        return subId;
     }
 
-    static boolean isActiveDataOnOtherSub(int slotId) {
+    boolean isActiveDataOnOtherSub(int slotId) {
         int subId = IwlanHelper.getSubId(mContext, slotId);
-        return mConnectedDataSub != INVALID_SUB_ID && subId != mConnectedDataSub;
+        return this.mConnectedDataSub != SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                && subId != this.mConnectedDataSub;
     }
 
-    public static boolean isNetworkConnected(boolean isActiveDataOnOtherSub, boolean isCstEnabled) {
+    public boolean isNetworkConnected(boolean isActiveDataOnOtherSub, boolean isCstEnabled) {
         if (isActiveDataOnOtherSub && isCstEnabled) {
             // For cross-SIM IWLAN (Transport.MOBILE), an active data PDN must be maintained on the
             // other subscription.
-            if (sNetworkConnected && (sDefaultDataTransport != Transport.MOBILE)) {
+            if (this.mIsNetworkConnected && (this.mDefaultDataTransport != Transport.MOBILE)) {
                 Log.e(TAG, "Internet is on other slot, but default transport is not MOBILE!");
             }
-            return sNetworkConnected;
+            return this.mIsNetworkConnected;
         } else {
             // For all other cases, only wifi transport can be used.
-            return ((sDefaultDataTransport == Transport.WIFI) && sNetworkConnected);
+            return ((this.mDefaultDataTransport == Transport.WIFI) && this.mIsNetworkConnected);
         }
     }
 
-    public static void setNetworkConnected(boolean connected, Transport transport) {
-        if (connected == sNetworkConnected && transport == sDefaultDataTransport) {
-            return;
+    private void updateNetworkStateAndNotifyIfChanged(
+            boolean isConnected, Transport transport, int subId) {
+        if (isConnected && (transport == Transport.UNSPECIFIED_NETWORK)) {
+            return; // Invalid state
         }
-        if (connected && (transport == IwlanNetworkService.Transport.UNSPECIFIED_NETWORK)) {
-            return;
-        }
-        sNetworkConnected = connected;
-        sDefaultDataTransport = transport;
 
-        for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviders.values()) {
+        boolean subIdChanged = (this.mConnectedDataSub != subId);
+        boolean connectionStateChanged = (this.mIsNetworkConnected != isConnected);
+        boolean transportChanged = (this.mDefaultDataTransport != transport);
+
+        if (subIdChanged) {
+            this.mConnectedDataSub = subId;
+        }
+        if (connectionStateChanged) {
+            this.mIsNetworkConnected = isConnected;
+        }
+        if (transportChanged) {
+            this.mDefaultDataTransport = transport;
+        }
+
+        if (subIdChanged || connectionStateChanged || transportChanged) {
+            notifyRegistrationInfoChanged();
+        }
+    }
+
+    private void notifyRegistrationInfoChanged() {
+        for (IwlanNetworkServiceProvider np : mIwlanNetworkServiceProviders.values()) {
             np.notifyNetworkRegistrationInfoChanged();
         }
     }
 
     void addIwlanNetworkServiceProvider(IwlanNetworkServiceProvider np) {
         int slotIndex = np.getSlotIndex();
-        if (sIwlanNetworkServiceProviders.containsKey(slotIndex)) {
+        if (mIwlanNetworkServiceProviders.containsKey(slotIndex)) {
             throw new IllegalStateException(
                     "NetworkServiceProvider already exists for slot " + slotIndex);
         }
-        sIwlanNetworkServiceProviders.put(slotIndex, np);
+        mIwlanNetworkServiceProviders.put(slotIndex, np);
     }
 
     public void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
@@ -465,7 +480,7 @@ public class IwlanNetworkService extends NetworkService {
 
     @VisibleForTesting
     IwlanNetworkServiceProvider getNetworkServiceProvider(int slotIndex) {
-        return sIwlanNetworkServiceProviders.get(slotIndex);
+        return mIwlanNetworkServiceProviders.get(slotIndex);
     }
 
     @VisibleForTesting

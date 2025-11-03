@@ -94,7 +94,7 @@ public class IwlanNetworkService extends NetworkService {
     private Dependencies mDependencies = new DefaultDependencies();
 
     // This callback runs in the same thread as IwlanNetworkServiceHandler
-    final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
+    private final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
         public void onAvailable(Network network) {
@@ -167,7 +167,7 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
-    final class IwlanOnSubscriptionsChangedListener
+    private final class IwlanOnSubscriptionsChangedListener
             extends SubscriptionManager.OnSubscriptionsChangedListener {
         /**
          * Callback invoked when there is any change to any SubscriptionInfo. Typically, this method
@@ -371,7 +371,7 @@ public class IwlanNetworkService extends NetworkService {
         return np;
     }
 
-    int getConnectedDataSub(
+    private int getConnectedDataSub(
             ConnectivityManager connectivityManager, NetworkCapabilities networkCapabilities) {
         int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
@@ -386,13 +386,13 @@ public class IwlanNetworkService extends NetworkService {
         return subId;
     }
 
-    boolean isActiveDataOnOtherSub(int slotId) {
+    private boolean isActiveDataOnOtherSub(int slotId) {
         int subId = IwlanHelper.getSubId(mContext, slotId);
         return this.mConnectedDataSub != SubscriptionManager.INVALID_SUBSCRIPTION_ID
                 && subId != this.mConnectedDataSub;
     }
 
-    public boolean isNetworkConnected(boolean isActiveDataOnOtherSub, boolean isCstEnabled) {
+    private boolean isNetworkConnected(boolean isActiveDataOnOtherSub, boolean isCstEnabled) {
         if (isActiveDataOnOtherSub && isCstEnabled) {
             // For cross-SIM IWLAN (Transport.MOBILE), an active data PDN must be maintained on the
             // other subscription.
@@ -446,7 +446,7 @@ public class IwlanNetworkService extends NetworkService {
         mIwlanNetworkServiceProviders.put(slotIndex, np);
     }
 
-    public void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
+    void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
         getIwlanNetworkServiceHandler()
                 .obtainMessage(EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np)
                 .sendToTarget();
@@ -468,7 +468,7 @@ public class IwlanNetworkService extends NetworkService {
         Log.d(TAG, "Registered with Subscription Service");
     }
 
-    void deinitCallback() {
+    private void deinitCallback() {
         // deinit network related stuff
         getConnectivityManager().unregisterNetworkCallback(mNetworkMonitorCallback);
         mNetworkMonitorCallback = null;
@@ -521,12 +521,12 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     @NonNull
-    ConnectivityManager getConnectivityManager() {
+    private ConnectivityManager getConnectivityManager() {
         return Objects.requireNonNull(mContext.getSystemService(ConnectivityManager.class));
     }
 
     @NonNull
-    SubscriptionManager getSubscriptionManager() {
+    private SubscriptionManager getSubscriptionManager() {
         return Objects.requireNonNull(mContext.getSystemService(SubscriptionManager.class));
     }
 }

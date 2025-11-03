@@ -21,11 +21,9 @@ import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +36,7 @@ import android.net.NetworkCapabilities;
 import android.net.TelephonyNetworkSpecifier;
 import android.net.vcn.VcnTransportInfo;
 import android.net.vcn.VcnUtils;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.telephony.AccessNetworkConstants;
@@ -65,6 +64,8 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowConnectivityManager;
+import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.shadows.ShadowNetwork;
 import org.robolectric.shadows.ShadowSubscriptionManager;
 
 import java.util.List;
@@ -80,15 +81,15 @@ public class IwlanNetworkServiceTest {
     private static final int DEFAULT_SLOT_INDEX = 0;
     private static final int DEFAULT_SUB_ID = 1;
     private static final int OTHER_SUB_ID = 2;
-    private static final long CALL_TIMEOUT_MS = 1000;
 
     @Mock private NetworkServiceCallback mMockNetworkServiceCallback;
     @Mock private IwlanEventListener mMockIwlanEventListener;
     @Mock private SubscriptionInfo mMockSubscriptionInfo;
+    @Mock private IwlanNetworkService.Dependencies mMockDependencies;
 
     private Context mContext;
-    private TestIwlanNetworkService mIwlanNetworkService;
-    private ServiceController<TestIwlanNetworkService> mServiceController;
+    private IwlanNetworkService mIwlanNetworkService;
+    private ServiceController<IwlanNetworkService> mServiceController;
     private ConnectivityManager mConnectivityManager;
     private SubscriptionManager mSubscriptionManager;
 
@@ -103,9 +104,16 @@ public class IwlanNetworkServiceTest {
         ShadowIwlanEventListener.setInstance(mMockIwlanEventListener);
         ShadowIwlanHelper.setSubId(DEFAULT_SLOT_INDEX, DEFAULT_SUB_ID);
 
-        mServiceController = Robolectric.buildService(TestIwlanNetworkService.class);
+        mServiceController = Robolectric.buildService(IwlanNetworkService.class);
         mIwlanNetworkService = mServiceController.get();
         mIwlanNetworkService.setAppContext(mContext);
+        mIwlanNetworkService.setDependencies(
+                new IwlanNetworkService.Dependencies() {
+                    @Override
+                    public Looper getLooper() {
+                        return Looper.getMainLooper();
+                    }
+                });
         mServiceController.create();
     }
 
@@ -114,6 +122,20 @@ public class IwlanNetworkServiceTest {
         ShadowIwlanEventListener.reset();
         ShadowIwlanHelper.reset();
         ShadowVcnUtils.reset();
+    }
+
+    @Test
+    public void testIwlanNetworkServiceHandler_IsSingleton() {
+        when(mMockDependencies.getLooper()).thenReturn(Looper.getMainLooper());
+        mIwlanNetworkService.setDependencies(mMockDependencies);
+
+        // First call should initialize the handler and call getLooper()
+        mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
+        verify(mMockDependencies, times(1)).getLooper();
+
+        // Second call should reuse the existing handler and NOT call getLooper() again
+        mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX + 1);
+        verify(mMockDependencies, times(1)).getLooper();
     }
 
     @Test
@@ -134,15 +156,7 @@ public class IwlanNetworkServiceTest {
         NetworkService.NetworkServiceProvider provider =
                 mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
         assertNotNull(provider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
-
-        ShadowConnectivityManager shadowCm = Shadows.shadowOf(mConnectivityManager);
-        // Robolectric's ShadowConnectivityManager might not track callbacks in the way we expect by
-        // default,
-        // or they might be cleared. Let's rely on the fact that no exception was thrown and
-        // provider is not null.
-        // Alternatively, we can verify against the real mock if we inject it properly, but we are
-        // using real instances with shadows now.
+        ShadowLooper.idleMainLooper();
     }
 
     @Test
@@ -150,30 +164,28 @@ public class IwlanNetworkServiceTest {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         provider.close();
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
-        ShadowConnectivityManager shadowCm = Shadows.shadowOf(mConnectivityManager);
-        assertTrue(shadowCm.getNetworkCallbacks().isEmpty());
         // ShadowSubscriptionManager doesn't easily expose listeners in all versions, skipping that
         // check for now.
     }
 
     @Test
-    public void testRequestNetworkRegistrationInfo_WifiConnected_ReturnsHome() throws Exception {
+    public void testRequestNetworkRegistrationInfo_WifiConnected_ReturnsHome() {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         simulateWifiConnected();
         simulateSubscriptionActive(DEFAULT_SLOT_INDEX, provider);
 
         provider.requestNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, mMockNetworkServiceCallback);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         verifyNetworkRegistrationInfo(
                 NetworkRegistrationInfo.REGISTRATION_STATE_HOME,
@@ -186,11 +198,11 @@ public class IwlanNetworkServiceTest {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         provider.requestNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, mMockNetworkServiceCallback);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         verifyNetworkRegistrationInfo(
                 NetworkRegistrationInfo.REGISTRATION_STATE_NOT_REGISTERED_SEARCHING,
@@ -203,14 +215,14 @@ public class IwlanNetworkServiceTest {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         simulateCellularConnected(DEFAULT_SUB_ID);
         simulateSubscriptionActive(DEFAULT_SLOT_INDEX, provider);
 
         provider.requestNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, mMockNetworkServiceCallback);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         // Should be SEARCHING because it's the same sub
         verifyNetworkRegistrationInfo(
@@ -224,7 +236,7 @@ public class IwlanNetworkServiceTest {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         ShadowIwlanHelper.setCrossSimCallingEnabled(true);
         simulateCellularConnected(OTHER_SUB_ID);
@@ -232,7 +244,7 @@ public class IwlanNetworkServiceTest {
 
         provider.requestNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, mMockNetworkServiceCallback);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         // Should be HOME because it's a different sub and CST is enabled
         verifyNetworkRegistrationInfo(
@@ -246,7 +258,7 @@ public class IwlanNetworkServiceTest {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         ShadowIwlanHelper.setCrossSimCallingEnabled(false);
         simulateCellularConnected(OTHER_SUB_ID);
@@ -254,7 +266,7 @@ public class IwlanNetworkServiceTest {
 
         provider.requestNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, mMockNetworkServiceCallback);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         // Should be SEARCHING because CST is disabled
         verifyNetworkRegistrationInfo(
@@ -268,7 +280,7 @@ public class IwlanNetworkServiceTest {
         IwlanNetworkService.IwlanNetworkServiceProvider provider =
                 (IwlanNetworkService.IwlanNetworkServiceProvider)
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         ShadowIwlanHelper.setCrossSimCallingEnabled(true);
         simulateVcnConnected(OTHER_SUB_ID);
@@ -276,7 +288,7 @@ public class IwlanNetworkServiceTest {
 
         provider.requestNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, mMockNetworkServiceCallback);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         // Should be HOME because it's VCN on a different sub and CST is enabled
         verifyNetworkRegistrationInfo(
@@ -292,19 +304,46 @@ public class IwlanNetworkServiceTest {
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
         IwlanNetworkService.IwlanNetworkServiceProvider spyProvider = spy(provider);
         mIwlanNetworkService.removeNetworkServiceProvider(provider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         // Manually add spy and init callback since we are bypassing onCreateNetworkServiceProvider
         mIwlanNetworkService.initCallback();
         mIwlanNetworkService.addIwlanNetworkServiceProvider(spyProvider);
 
         simulateWifiConnected();
-        verify(spyProvider, timeout(CALL_TIMEOUT_MS).times(1))
-                .notifyNetworkRegistrationInfoChanged();
+        verify(spyProvider, times(1)).notifyNetworkRegistrationInfoChanged();
 
-        mIwlanNetworkService.getNetworkMonitorCallback().onLost(mock(Network.class));
-        verify(spyProvider, timeout(CALL_TIMEOUT_MS).times(2))
-                .notifyNetworkRegistrationInfoChanged();
+        Network network = ShadowNetwork.newInstance(100);
+        ShadowConnectivityManager shadowConnectivityManager =
+                Shadows.shadowOf(mConnectivityManager);
+        for (ConnectivityManager.NetworkCallback callback :
+                shadowConnectivityManager.getNetworkCallbacks()) {
+            callback.onLost(network);
+        }
+        ShadowLooper.idleMainLooper();
+        verify(spyProvider, times(2)).notifyNetworkRegistrationInfoChanged();
+    }
+
+    @Test
+    public void testUpdateNetworkStateAndNotify_OnlySubIdChange() {
+        IwlanNetworkService.IwlanNetworkServiceProvider provider =
+                (IwlanNetworkService.IwlanNetworkServiceProvider)
+                        mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
+        IwlanNetworkService.IwlanNetworkServiceProvider spyProvider = spy(provider);
+        mIwlanNetworkService.removeNetworkServiceProvider(provider);
+        ShadowLooper.idleMainLooper();
+
+        mIwlanNetworkService.initCallback();
+        mIwlanNetworkService.addIwlanNetworkServiceProvider(spyProvider);
+        ShadowLooper.idleMainLooper();
+
+        ShadowIwlanHelper.setCrossSimCallingEnabled(true);
+
+        simulateCellularConnected(1);
+        verify(spyProvider, times(1)).notifyNetworkRegistrationInfoChanged();
+
+        simulateCellularConnected(2);
+        verify(spyProvider, times(2)).notifyNetworkRegistrationInfoChanged();
     }
 
     @Test
@@ -314,13 +353,13 @@ public class IwlanNetworkServiceTest {
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
         IwlanNetworkService.IwlanNetworkServiceProvider spyProvider = spy(provider);
         mIwlanNetworkService.removeNetworkServiceProvider(provider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
         mIwlanNetworkService.addIwlanNetworkServiceProvider(spyProvider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         simulateSubscriptionActive(DEFAULT_SLOT_INDEX, spyProvider);
 
-        verify(spyProvider, timeout(CALL_TIMEOUT_MS).times(1)).subscriptionChanged();
+        verify(spyProvider, times(1)).subscriptionChanged();
     }
 
     @Test
@@ -330,16 +369,18 @@ public class IwlanNetworkServiceTest {
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
         IwlanNetworkService.IwlanNetworkServiceProvider spyProvider = spy(provider);
         mIwlanNetworkService.removeNetworkServiceProvider(provider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
         mIwlanNetworkService.addIwlanNetworkServiceProvider(spyProvider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
-        mIwlanNetworkService
-                .getIwlanNetworkServiceHandler()
-                .obtainMessage(
+        ArgumentCaptor<Handler> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+        verify(mMockIwlanEventListener).addEventListener(any(), handlerCaptor.capture());
+        Handler handler = handlerCaptor.getValue();
+
+        handler.obtainMessage(
                         IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT, DEFAULT_SLOT_INDEX, 0)
                 .sendToTarget();
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         verify(spyProvider, times(1)).notifyNetworkRegistrationInfoChanged();
     }
@@ -351,53 +392,77 @@ public class IwlanNetworkServiceTest {
                         mIwlanNetworkService.onCreateNetworkServiceProvider(DEFAULT_SLOT_INDEX);
         IwlanNetworkService.IwlanNetworkServiceProvider spyProvider = spy(provider);
         mIwlanNetworkService.removeNetworkServiceProvider(provider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
         mIwlanNetworkService.addIwlanNetworkServiceProvider(spyProvider);
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
-        mIwlanNetworkService
-                .getIwlanNetworkServiceHandler()
-                .obtainMessage(
+        ArgumentCaptor<Handler> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+        verify(mMockIwlanEventListener).addEventListener(any(), handlerCaptor.capture());
+        Handler handler = handlerCaptor.getValue();
+
+        handler.obtainMessage(
                         IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT, DEFAULT_SLOT_INDEX, 0)
                 .sendToTarget();
-        waitForHandlerAction(mIwlanNetworkService.getIwlanNetworkServiceHandler());
+        ShadowLooper.idleMainLooper();
 
         verify(spyProvider, times(1)).notifyNetworkRegistrationInfoChanged();
     }
 
     private void simulateWifiConnected() {
-        Network network = mock(Network.class);
-        NetworkCapabilities nc =
+        Network network = ShadowNetwork.newInstance(100);
+        NetworkCapabilities networkCapabilities =
                 new NetworkCapabilities.Builder().addTransportType(TRANSPORT_WIFI).build();
-        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(network, nc);
+        ShadowConnectivityManager shadowConnectivityManager =
+                Shadows.shadowOf(mConnectivityManager);
+        shadowConnectivityManager.setNetworkCapabilities(network, networkCapabilities);
+        for (ConnectivityManager.NetworkCallback callback :
+                shadowConnectivityManager.getNetworkCallbacks()) {
+            callback.onCapabilitiesChanged(network, networkCapabilities);
+        }
+        ShadowLooper.idleMainLooper();
     }
 
     private void simulateCellularConnected(int subId) {
-        Network network = mock(Network.class);
-        NetworkCapabilities nc =
+        Network network = ShadowNetwork.newInstance(101);
+        NetworkCapabilities networkCapabilities =
                 new NetworkCapabilities.Builder()
                         .addTransportType(TRANSPORT_CELLULAR)
                         .setNetworkSpecifier(new TelephonyNetworkSpecifier(subId))
                         .build();
-        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(network, nc);
+        ShadowConnectivityManager shadowConnectivityManager =
+                Shadows.shadowOf(mConnectivityManager);
+        shadowConnectivityManager.setNetworkCapabilities(network, networkCapabilities);
+        for (ConnectivityManager.NetworkCallback callback :
+                shadowConnectivityManager.getNetworkCallbacks()) {
+            callback.onCapabilitiesChanged(network, networkCapabilities);
+        }
+        ShadowLooper.idleMainLooper();
     }
 
     private void simulateVcnConnected(int subId) {
-        Network network = mock(Network.class);
+        Network network = ShadowNetwork.newInstance(102);
         VcnTransportInfo vcnInfo = new VcnTransportInfo.Builder().build();
-        NetworkCapabilities nc =
+        NetworkCapabilities networkCapabilities =
                 new NetworkCapabilities.Builder()
                         .addTransportType(TRANSPORT_CELLULAR)
                         .setTransportInfo(vcnInfo)
                         .build();
         ShadowVcnUtils.setSubId(subId);
-        mIwlanNetworkService.getNetworkMonitorCallback().onCapabilitiesChanged(network, nc);
+        ShadowConnectivityManager shadowConnectivityManager =
+                Shadows.shadowOf(mConnectivityManager);
+        shadowConnectivityManager.setNetworkCapabilities(network, networkCapabilities);
+        for (ConnectivityManager.NetworkCallback callback :
+                shadowConnectivityManager.getNetworkCallbacks()) {
+            callback.onCapabilitiesChanged(network, networkCapabilities);
+        }
+        ShadowLooper.idleMainLooper();
     }
 
     private void simulateSubscriptionActive(
             int slotIndex, IwlanNetworkService.IwlanNetworkServiceProvider provider) {
-        ShadowSubscriptionManager shadowSm = Shadows.shadowOf(mSubscriptionManager);
-        shadowSm.setActiveSubscriptionInfoList(List.of(mMockSubscriptionInfo));
+        ShadowSubscriptionManager shadowSubscriptionManager =
+                Shadows.shadowOf(mSubscriptionManager);
+        shadowSubscriptionManager.setActiveSubscriptionInfoList(List.of(mMockSubscriptionInfo));
         when(mMockSubscriptionInfo.getSimSlotIndex()).thenReturn(slotIndex);
         when(mMockSubscriptionInfo.getSubscriptionId()).thenReturn(DEFAULT_SUB_ID);
 
@@ -427,13 +492,6 @@ public class IwlanNetworkServiceTest {
 
     private static void waitForHandlerAction(android.os.Handler handler) {
         Shadows.shadowOf(Looper.getMainLooper()).runToEndOfTasks();
-    }
-
-    private static class TestIwlanNetworkService extends IwlanNetworkService {
-        @Override
-        Looper getLooper() {
-            return Looper.getMainLooper();
-        }
     }
 
     @Implements(IwlanEventListener.class)

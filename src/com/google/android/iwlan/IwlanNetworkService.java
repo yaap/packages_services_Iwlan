@@ -53,10 +53,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanNetworkService extends NetworkService {
     private static final String TAG = IwlanNetworkService.class.getSimpleName();
-    private static final int EVENT_BASE = IwlanEventListener.NETWORK_SERVICE_INTERNAL_EVENT_BASE;
-    private static final int EVENT_NETWORK_REGISTRATION_INFO_REQUEST = EVENT_BASE;
-    private static final int EVENT_CREATE_NETWORK_SERVICE_PROVIDER = EVENT_BASE + 1;
-    private static final int EVENT_REMOVE_NETWORK_SERVICE_PROVIDER = EVENT_BASE + 2;
 
     private enum Transport {
         UNSPECIFIED_NETWORK,
@@ -207,10 +203,7 @@ public class IwlanNetworkService extends NetworkService {
         @Override
         public void requestNetworkRegistrationInfo(int domain, NetworkServiceCallback callback) {
             getIwlanNetworkServiceHandler()
-                    .obtainMessage(
-                            EVENT_NETWORK_REGISTRATION_INFO_REQUEST,
-                            new NetworkRegistrationInfoRequestData(domain, callback, this))
-                    .sendToTarget();
+                    .post(() -> handleRequestNetworkRegistrationInfo(domain, callback, this));
         }
 
         /**
@@ -252,80 +245,12 @@ public class IwlanNetworkService extends NetworkService {
             Log.d(TAG, "msg.what = " + eventToString(msg.what));
 
             IwlanNetworkServiceProvider iwlanNetworkServiceProvider;
-            int slotId;
 
             switch (msg.what) {
                 case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT,
                         IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT -> {
                     iwlanNetworkServiceProvider = mIwlanNetworkServiceProviders.get(msg.arg1);
                     iwlanNetworkServiceProvider.notifyNetworkRegistrationInfoChanged();
-                }
-                case EVENT_NETWORK_REGISTRATION_INFO_REQUEST -> {
-                    NetworkRegistrationInfoRequestData networkRegistrationInfoRequestData =
-                            (NetworkRegistrationInfoRequestData) msg.obj;
-                    int domain = networkRegistrationInfoRequestData.mDomain;
-                    NetworkServiceCallback callback = networkRegistrationInfoRequestData.mCallback;
-                    iwlanNetworkServiceProvider =
-                            networkRegistrationInfoRequestData.mIwlanNetworkServiceProvider;
-                    if (callback == null) {
-                        Log.d(TAG, "Error: callback is null. returning");
-                        return;
-                    }
-                    if (domain != NetworkRegistrationInfo.DOMAIN_PS) {
-                        callback.onRequestNetworkRegistrationInfoComplete(
-                                NetworkServiceCallback.RESULT_ERROR_UNSUPPORTED, null);
-                        return;
-                    }
-                    NetworkRegistrationInfo.Builder nriBuilder =
-                            new NetworkRegistrationInfo.Builder();
-                    nriBuilder
-                            .setAvailableServices(
-                                    List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                            .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
-                            .setEmergencyOnly(!iwlanNetworkServiceProvider.mIsSubActive)
-                            .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
-                    slotId = iwlanNetworkServiceProvider.getSlotIndex();
-                    if (!isNetworkConnected(
-                            isActiveDataOnOtherSub(slotId),
-                            IwlanHelper.isCrossSimCallingEnabled(mContext, slotId))) {
-                        nriBuilder
-                                .setRegistrationState(
-                                        NetworkRegistrationInfo
-                                                .REGISTRATION_STATE_NOT_REGISTERED_SEARCHING)
-                                .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_UNKNOWN);
-                        Log.d(
-                                TAG + "[" + slotId + "]",
-                                ": reg state" + " REGISTRATION_STATE_NOT_REGISTERED_SEARCHING");
-                    } else {
-                        nriBuilder
-                                .setRegistrationState(
-                                        NetworkRegistrationInfo.REGISTRATION_STATE_HOME)
-                                .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN);
-                        Log.d(TAG + "[" + slotId + "]", ": reg state REGISTRATION_STATE_HOME");
-                    }
-                    callback.onRequestNetworkRegistrationInfoComplete(
-                            NetworkServiceCallback.RESULT_SUCCESS, nriBuilder.build());
-                }
-                case EVENT_CREATE_NETWORK_SERVICE_PROVIDER -> {
-                    iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
-                    if (mIwlanNetworkServiceProviders.isEmpty()) {
-                        initCallback();
-                    }
-                    addIwlanNetworkServiceProvider(iwlanNetworkServiceProvider);
-                }
-                case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER -> {
-                    iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
-                    slotId = iwlanNetworkServiceProvider.getSlotIndex();
-                    IwlanNetworkServiceProvider nsp = mIwlanNetworkServiceProviders.remove(slotId);
-                    if (nsp == null) {
-                        Log.w(
-                                TAG + "[" + slotId + "]",
-                                "No NetworkServiceProvider exists for slot!");
-                        return;
-                    }
-                    if (mIwlanNetworkServiceProviders.isEmpty()) {
-                        deinitCallback();
-                    }
                 }
                 default -> throw new IllegalStateException("Unexpected value: " + msg.what);
             }
@@ -336,17 +261,44 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
-    private static final class NetworkRegistrationInfoRequestData {
-        final int mDomain;
-        final NetworkServiceCallback mCallback;
-        final IwlanNetworkServiceProvider mIwlanNetworkServiceProvider;
 
-        private NetworkRegistrationInfoRequestData(
-                int domain, NetworkServiceCallback callback, IwlanNetworkServiceProvider nsp) {
-            mDomain = domain;
-            mCallback = callback;
-            mIwlanNetworkServiceProvider = nsp;
+
+    private void handleRequestNetworkRegistrationInfo(
+            int domain, NetworkServiceCallback callback, IwlanNetworkServiceProvider np) {
+        if (callback == null) {
+            Log.d(TAG, "Error: callback is null. returning");
+            return;
         }
+        if (domain != NetworkRegistrationInfo.DOMAIN_PS) {
+            callback.onRequestNetworkRegistrationInfoComplete(
+                    NetworkServiceCallback.RESULT_ERROR_UNSUPPORTED, null);
+            return;
+        }
+        NetworkRegistrationInfo.Builder nriBuilder = new NetworkRegistrationInfo.Builder();
+        nriBuilder
+                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
+                .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
+                .setEmergencyOnly(!np.mIsSubActive)
+                .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
+        int slotId = np.getSlotIndex();
+        if (!isNetworkConnected(
+                isActiveDataOnOtherSub(slotId),
+                IwlanHelper.isCrossSimCallingEnabled(mContext, slotId))) {
+            nriBuilder
+                    .setRegistrationState(
+                            NetworkRegistrationInfo.REGISTRATION_STATE_NOT_REGISTERED_SEARCHING)
+                    .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_UNKNOWN);
+            Log.d(
+                    TAG + "[" + slotId + "]",
+                    ": reg state" + " REGISTRATION_STATE_NOT_REGISTERED_SEARCHING");
+        } else {
+            nriBuilder
+                    .setRegistrationState(NetworkRegistrationInfo.REGISTRATION_STATE_HOME)
+                    .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN);
+            Log.d(TAG + "[" + slotId + "]", ": reg state REGISTRATION_STATE_HOME");
+        }
+        callback.onRequestNetworkRegistrationInfoComplete(
+                NetworkServiceCallback.RESULT_SUCCESS, nriBuilder.build());
     }
 
     /**
@@ -365,9 +317,7 @@ public class IwlanNetworkService extends NetworkService {
         // TODO: validity check slot index
 
         IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex, this);
-        getIwlanNetworkServiceHandler()
-                .obtainMessage(EVENT_CREATE_NETWORK_SERVICE_PROVIDER, np)
-                .sendToTarget();
+        getIwlanNetworkServiceHandler().post(() -> handleNetworkServiceProviderCreated(np));
         return np;
     }
 
@@ -437,6 +387,13 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
+    private void handleNetworkServiceProviderCreated(IwlanNetworkServiceProvider np) {
+        if (mIwlanNetworkServiceProviders.isEmpty()) {
+            initCallback();
+        }
+        addIwlanNetworkServiceProvider(np);
+    }
+
     void addIwlanNetworkServiceProvider(IwlanNetworkServiceProvider np) {
         int slotIndex = np.getSlotIndex();
         if (mIwlanNetworkServiceProviders.containsKey(slotIndex)) {
@@ -447,9 +404,19 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
-        getIwlanNetworkServiceHandler()
-                .obtainMessage(EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np)
-                .sendToTarget();
+        getIwlanNetworkServiceHandler().post(() -> handleRemoveNetworkServiceProvider(np));
+    }
+
+    private void handleRemoveNetworkServiceProvider(IwlanNetworkServiceProvider np) {
+        int slotId = np.getSlotIndex();
+        IwlanNetworkServiceProvider nsp = mIwlanNetworkServiceProviders.remove(slotId);
+        if (nsp == null) {
+            Log.w(TAG + "[" + slotId + "]", "No NetworkServiceProvider exists for slot!");
+            return;
+        }
+        if (mIwlanNetworkServiceProviders.isEmpty()) {
+            deinitCallback();
+        }
     }
 
     void initCallback() {
@@ -501,10 +468,6 @@ public class IwlanNetworkService extends NetworkService {
                     "CROSS_SIM_CALLING_ENABLE_EVENT";
             case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT ->
                     "CROSS_SIM_CALLING_DISABLE_EVENT";
-            case EVENT_NETWORK_REGISTRATION_INFO_REQUEST ->
-                    "EVENT_NETWORK_REGISTRATION_INFO_REQUEST";
-            case EVENT_CREATE_NETWORK_SERVICE_PROVIDER -> "EVENT_CREATE_NETWORK_SERVICE_PROVIDER";
-            case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER -> "EVENT_REMOVE_NETWORK_SERVICE_PROVIDER";
             default -> "Unknown(" + event + ")";
         };
     }

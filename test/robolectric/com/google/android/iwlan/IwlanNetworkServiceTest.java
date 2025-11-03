@@ -35,7 +35,6 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.TelephonyNetworkSpecifier;
 import android.net.vcn.VcnTransportInfo;
-import android.net.vcn.VcnUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -61,8 +60,6 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.android.controller.ServiceController;
 import org.robolectric.annotation.Config;
-import org.robolectric.annotation.Implementation;
-import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowConnectivityManager;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.shadows.ShadowNetwork;
@@ -71,12 +68,7 @@ import org.robolectric.shadows.ShadowSubscriptionManager;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(
-        shadows = {
-            IwlanNetworkServiceTest.ShadowIwlanEventListener.class,
-            IwlanNetworkServiceTest.ShadowIwlanHelper.class,
-            IwlanNetworkServiceTest.ShadowVcnUtils.class
-        })
+@Config(shadows = {ShadowIwlanEventListener.class, ShadowIwlanHelper.class, ShadowVcnUtils.class})
 public class IwlanNetworkServiceTest {
     private static final int DEFAULT_SLOT_INDEX = 0;
     private static final int DEFAULT_SUB_ID = 1;
@@ -491,71 +483,5 @@ public class IwlanNetworkServiceTest {
 
     private static void waitForHandlerAction(android.os.Handler handler) {
         Shadows.shadowOf(Looper.getMainLooper()).runToEndOfTasks();
-    }
-
-    @Implements(IwlanEventListener.class)
-    public static class ShadowIwlanEventListener {
-        private static IwlanEventListener sInstance;
-
-        @Implementation
-        public static IwlanEventListener getInstance(Context context, int slotId) {
-            return sInstance;
-        }
-
-        public static void setInstance(IwlanEventListener instance) {
-            sInstance = instance;
-        }
-
-        public static void reset() {
-            sInstance = null;
-        }
-    }
-
-    @Implements(IwlanHelper.class)
-    public static class ShadowIwlanHelper {
-        private static int sSubId;
-        private static boolean sIsCrossSimCallingEnabled;
-
-        @Implementation
-        public static int getSubId(Context context, int slotId) {
-            return sSubId;
-        }
-
-        @Implementation
-        public static boolean isCrossSimCallingEnabled(Context context, int slotId) {
-            return sIsCrossSimCallingEnabled;
-        }
-
-        public static void setSubId(int slotId, int subId) {
-            sSubId = subId;
-        }
-
-        public static void setCrossSimCallingEnabled(boolean enabled) {
-            sIsCrossSimCallingEnabled = enabled;
-        }
-
-        public static void reset() {
-            sSubId = 0;
-            sIsCrossSimCallingEnabled = false;
-        }
-    }
-
-    @Implements(VcnUtils.class)
-    public static class ShadowVcnUtils {
-        private static int sSubId;
-
-        @Implementation
-        public static int getSubIdFromVcnCaps(
-                ConnectivityManager connectivityManager, NetworkCapabilities networkCapabilities) {
-            return sSubId;
-        }
-
-        public static void setSubId(int subId) {
-            sSubId = subId;
-        }
-
-        public static void reset() {
-            sSubId = 0;
-        }
     }
 }

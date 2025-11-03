@@ -178,7 +178,6 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     class IwlanNetworkServiceProvider extends NetworkServiceProvider {
-        private final IwlanNetworkService mIwlanNetworkService;
         private final String SUB_TAG;
         private boolean mIsSubActive = false;
 
@@ -187,10 +186,9 @@ public class IwlanNetworkService extends NetworkService {
          *
          * @param slotIndex SIM slot id the data service provider associated with.
          */
-        public IwlanNetworkServiceProvider(int slotIndex, IwlanNetworkService iwlanNetworkService) {
+        public IwlanNetworkServiceProvider(int slotIndex) {
             super(slotIndex);
             SUB_TAG = TAG + "[" + slotIndex + "]";
-            mIwlanNetworkService = iwlanNetworkService;
 
             // Register IwlanEventListener
             List<Integer> events = new ArrayList<Integer>();
@@ -213,7 +211,7 @@ public class IwlanNetworkService extends NetworkService {
          */
         @Override
         public void close() {
-            mIwlanNetworkService.removeNetworkServiceProvider(this);
+            removeNetworkServiceProvider(this);
             IwlanEventListener.getInstance(mContext, getSlotIndex())
                     .removeEventListener(getIwlanNetworkServiceHandler());
         }
@@ -316,7 +314,7 @@ public class IwlanNetworkService extends NetworkService {
 
         // TODO: validity check slot index
 
-        IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex, this);
+        IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex);
         getIwlanNetworkServiceHandler().post(() -> handleNetworkServiceProviderCreated(np));
         return np;
     }

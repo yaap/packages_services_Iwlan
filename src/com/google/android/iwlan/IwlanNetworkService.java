@@ -45,8 +45,6 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
-import com.android.internal.annotations.VisibleForTesting;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -80,7 +78,6 @@ public class IwlanNetworkService extends NetworkService {
     private int mConnectedDataSub = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private Transport mDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
-    @VisibleForTesting
     interface Dependencies {
         Looper getLooper();
     }
@@ -184,7 +181,6 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
-    @VisibleForTesting
     class IwlanNetworkServiceProvider extends NetworkServiceProvider {
         private final IwlanNetworkService mIwlanNetworkService;
         private final String SUB_TAG;
@@ -229,7 +225,6 @@ public class IwlanNetworkService extends NetworkService {
                     .removeEventListener(getIwlanNetworkServiceHandler());
         }
 
-        @VisibleForTesting
         void subscriptionChanged() {
             boolean subActive =
                     getSubscriptionManager()
@@ -488,12 +483,6 @@ public class IwlanNetworkService extends NetworkService {
         mIwlanNetworkServiceHandler = null;
     }
 
-    @VisibleForTesting
-    void setAppContext(Context appContext) {
-        mContext = appContext;
-    }
-
-    @VisibleForTesting
     void setDependencies(Dependencies dependencies) {
         mDependencies = dependencies;
     }

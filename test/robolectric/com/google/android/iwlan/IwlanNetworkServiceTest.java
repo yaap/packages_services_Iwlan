@@ -106,7 +106,6 @@ public class IwlanNetworkServiceTest {
 
         mServiceController = Robolectric.buildService(IwlanNetworkService.class);
         mIwlanNetworkService = mServiceController.get();
-        mIwlanNetworkService.setAppContext(mContext);
         mIwlanNetworkService.setDependencies(
                 new IwlanNetworkService.Dependencies() {
                     @Override

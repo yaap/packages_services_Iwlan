@@ -78,11 +78,11 @@ prebuilt_etc {
 android_test {
     name: "IwlanTests",
 
-    manifest: "test/AndroidManifest.xml",
+    manifest: "test/instrumentation/AndroidManifest.xml",
 
     srcs: [
         "src/**/*.java",
-        "test/**/*.java",
+        "test/instrumentation/**/*.java",
         ":statslog-Iwlan-java-gen",
     ],
 
@@ -132,4 +132,42 @@ android_test {
         "libstaticjvmtiagent",
         "libmultiplejvmtiagentsinterferenceagent",
     ],
+}
+
+android_robolectric_test {
+    name: "IwlanRobolectricTests",
+    strict_mode: false,
+    srcs: [
+        "src/**/*.java",
+        "test/robolectric/**/*.java",
+        ":statslog-Iwlan-java-gen",
+    ],
+    test_suites: [
+        "automotive-general-tests",
+        "general-tests",
+    ],
+    static_libs: [
+        "Robolectric_all-target",
+        "androidx.test.core",
+        "androidx.test.rules",
+        "mockito-robolectric-prebuilt",
+        "truth",
+        "iwlan_telephony_flags_lib",
+        "android.net.ipsec.ike.stubs.system",
+        "auto_value_annotations",
+        "framework-annotations-lib",
+        "modules-utils-handlerexecutor",
+        "android-support-annotations",
+        "platform-test-annotations",
+        "flag-junit",
+        "StatsdTestUtils",
+        "statsdprotolite",
+    ],
+    libs: [
+        "android.net.ipsec.ike.stubs.system",
+        "auto_value_annotations",
+        "framework-annotations-lib",
+        "modules-utils-handlerexecutor",
+    ],
+    instrumentation_for: "Iwlan",
 }

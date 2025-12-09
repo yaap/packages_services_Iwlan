@@ -19,10 +19,14 @@ package com.google.android.iwlan.epdg;
 import static org.junit.Assert.assertEquals;
 
 import android.net.LinkAddress;
+import android.net.Network;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.NetworkSliceInfo;
 
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -38,7 +42,14 @@ public class TunnelLinkPropertiesTest {
     private static final NetworkSliceInfo SLICE_INFO =
             NetworkSliceSelectionAssistanceInformation.getSliceInfo(new byte[] {1});
 
-    public static TunnelLinkProperties createTestTunnelLinkProperties(
+    @Mock private Network mMockNetwork;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    public TunnelLinkProperties createTestTunnelLinkProperties(
             @ApnSetting.ProtocolType int protocolType) throws Exception {
         List<LinkAddress> mInternalAddressList = new ArrayList<>();
         List<InetAddress> mDNSAddressList = new ArrayList<>();
@@ -61,6 +72,7 @@ public class TunnelLinkPropertiesTest {
                 .setPcscfAddresses(mPCSFAddressList)
                 .setIfaceName(INTERFACE_NAME)
                 .setSliceInfo(SLICE_INFO)
+                .setUnderlyingNetwork(mMockNetwork)
                 .build();
     }
 
@@ -77,6 +89,7 @@ public class TunnelLinkPropertiesTest {
                         .setPcscfAddresses(mPCSFAddressList)
                         .setIfaceName(INTERFACE_NAME)
                         .setSliceInfo(SLICE_INFO)
+                        .setUnderlyingNetwork(mMockNetwork)
                         .build();
         assertEquals(ApnSetting.PROTOCOL_UNKNOWN, properties.getProtocolType());
     }

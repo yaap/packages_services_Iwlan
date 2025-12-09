@@ -23,12 +23,10 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSess
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -93,7 +91,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -106,24 +103,27 @@ public class EpdgSelectorTest {
 
     private static final byte[] TEST_PCO_NO_DATA = {0x00};
     private static final byte[] TEST_PCO_PLMN_DATA = {0x38, 0x01, 0x24, 0x00};
-    private static final byte[] TEST_PCO_IPV4_DATA = {0x38, 0x01, 0x24, 0x7F, 0x00, 0x00, 0x01};
+    private static final byte[] TEST_PCO_IPV4_DATA = {0x38, 0x01, 0x24, 0x6A, 0x00, 0x00, 0x01};
     private static final byte[] TEST_PCO_IPV6_DATA = {
         0x38, 0x01, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x01
+        0x00, 0x00, 0x00, 0x02
     };
 
     private static final String TEST_LOCAL_IPV4_ADDRESS = "192.168.1.100";
     private static final String TEST_LOCAL_IPV6_ADDRESS = "2001:db8::1";
 
-    private static final String TEST_IPV4_ADDRESS = "127.0.0.1";
-    private static final String TEST_IPV4_ADDRESS_1 = "127.0.0.2";
-    private static final String TEST_IPV4_ADDRESS_2 = "127.0.0.3";
-    private static final String TEST_IPV4_ADDRESS_3 = "127.0.0.4";
-    private static final String TEST_IPV4_ADDRESS_4 = "127.0.0.5";
-    private static final String TEST_IPV4_ADDRESS_5 = "127.0.0.6";
-    private static final String TEST_IPV4_ADDRESS_6 = "127.0.0.7";
-    private static final String TEST_IPV4_ADDRESS_7 = "127.0.0.8";
-    private static final String TEST_IPV6_ADDRESS = "0000:0000:0000:0000:0000:0000:0000:0001";
+    private static final String TEST_IPV4_LOOPBACK_ADDRESS = "127.0.0.1";
+    private static final String TEST_IPV6_LOOPBACK_ADDRESS =
+            "0000:0000:0000:0000:0000:0000:0000:0001";
+    private static final String TEST_IPV4_ADDRESS = "106.0.0.1";
+    private static final String TEST_IPV4_ADDRESS_1 = "106.0.0.2";
+    private static final String TEST_IPV4_ADDRESS_2 = "106.0.0.3";
+    private static final String TEST_IPV4_ADDRESS_3 = "106.0.0.4";
+    private static final String TEST_IPV4_ADDRESS_4 = "106.0.0.5";
+    private static final String TEST_IPV4_ADDRESS_5 = "106.0.0.6";
+    private static final String TEST_IPV4_ADDRESS_6 = "106.0.0.7";
+    private static final String TEST_IPV4_ADDRESS_7 = "106.0.0.8";
+    private static final String TEST_IPV6_ADDRESS = "0000:0000:0000:0000:0000:0000:0000:0002";
 
     private static final int TEST_PCO_ID_INVALID = 0xFF00;
     private static final int TEST_PCO_ID_IPV6 = 0xFF01;
@@ -697,7 +697,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testTemporaryExcludedIpAddressWhenDisabledExcludeFailedIp() throws Exception {
-        doReturn(false).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final IkeIOException mockIkeIOException = mock(IkeIOException.class);
@@ -743,7 +742,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testTemporaryExcludedIpAddressWhenEnabledExcludeFailedIp() throws Exception {
-        doReturn(true).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final String fqdnFromRplmn = "epdg.epc.mnc122.mcc300.pub.3gppnetwork.org";
@@ -876,7 +874,6 @@ public class EpdgSelectorTest {
 
     @Test
     public void testShouldNotTemporaryExcludedIpAddressWhenInternalError() throws Exception {
-        doReturn(true).when(mfakeFeatureFlags).epdgSelectionExcludeFailedIpAddress();
         when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
 
         final String fqdnFromRplmn = "epdg.epc.mnc122.mcc300.pub.3gppnetwork.org";
@@ -1209,10 +1206,8 @@ public class EpdgSelectorTest {
         }
     }
 
-    @SuppressWarnings("FutureReturnValueIgnored")
     @Test
     public void testMultipleBackToBackSetupDataCallRequest() {
-        when(mfakeFeatureFlags.preventEpdgSelectionThreadsExhausted()).thenReturn(true);
         EpdgSelector epdgSelector =
                 new EpdgSelector(mMockContext, DEFAULT_SLOT_INDEX, mfakeFeatureFlags);
         Runnable runnable = mock(Runnable.class);
@@ -1222,23 +1217,6 @@ public class EpdgSelectorTest {
         epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false);
         // Second set up data call
         epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false);
-    }
-
-    @SuppressWarnings("FutureReturnValueIgnored")
-    @Test
-    public void testBackToBackSetupDataCallRequest() {
-        when(mfakeFeatureFlags.preventEpdgSelectionThreadsExhausted()).thenReturn(false);
-        EpdgSelector epdgSelector =
-                new EpdgSelector(mMockContext, DEFAULT_SLOT_INDEX, mfakeFeatureFlags);
-        Runnable runnable = mock(Runnable.class);
-        // Prefetch
-        epdgSelector.trySubmitEpdgSelectionExecutor(runnable, true, false);
-        // First set up data call
-        epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false);
-        // Second set up data call request exhausts the thread pool
-        assertThrows(
-                RejectedExecutionException.class,
-                () -> epdgSelector.trySubmitEpdgSelectionExecutor(runnable, false, false));
     }
 
     private void sendCarrierSignalPcoValue(int apnType, int pcoId, byte[] pcoData) {
@@ -1373,6 +1351,30 @@ public class EpdgSelectorTest {
         assertEquals(expectedAddresses, actualAddresses);
     }
 
+    @Test
+    public void testRemoveLocalbackAddress() throws Exception {
+        when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
+
+        // Set DnsResolver query mock
+        final String addr1 = "epdg.epc.mnc120.mcc300.pub.3gppnetwork.org";
+        final String addr2 = "epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        final String testStaticAddress = addr1 + "," + addr2;
+        mFakeDns.setAnswer(
+                addr1, new String[] {TEST_IPV4_ADDRESS, TEST_IPV4_LOOPBACK_ADDRESS}, TYPE_A);
+        mFakeDns.setAnswer(addr2, new String[] {TEST_IPV6_LOOPBACK_ADDRESS}, TYPE_AAAA);
+
+        // Set carrier config mock
+        IwlanCarrierConfig.putTestConfigIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        IwlanCarrierConfig.putTestConfigString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+
+        var expectedAddresses = List.of(InetAddress.getAllByName(TEST_IPV4_ADDRESS));
+        var actualAddresses = getValidatedServerListWithDefaultParams(/* isEmergency= */ false);
+        assertEquals(expectedAddresses, actualAddresses);
+    }
+
     private void applyTestAddressToNetwork(Collection<LinkAddress> addresses) {
         mTestLinkProperties.setLinkAddresses(addresses);
     }
@@ -1391,5 +1393,51 @@ public class EpdgSelectorTest {
         }
 
         mTestLinkProperties.setLinkAddresses(addresses);
+    }
+
+    @Test
+    public void testRemoveLoopbackAddress_EmptyResult() throws Exception {
+        when(DnsResolver.getInstance()).thenReturn(mMockDnsResolver);
+
+        // Set DnsResolver query mock to return only loopback addresses
+        final String testStaticAddress = "epdg.epc.mnc088.mcc888.pub.3gppnetwork.org";
+        mFakeDns.setAnswer(
+                testStaticAddress,
+                new String[] {TEST_IPV4_LOOPBACK_ADDRESS, TEST_IPV6_LOOPBACK_ADDRESS},
+                TYPE_A);
+
+        IwlanCarrierConfig.putTestConfigIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        IwlanCarrierConfig.putTestConfigString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        final IwlanError[] error = new IwlanError[1];
+
+        mEpdgSelector.getValidatedServerList(
+                /* transactionId= */ 1234,
+                EpdgSelector.PROTO_FILTER_IPV4V6,
+                EpdgSelector.IPV4_PREFERRED,
+                /* isRoaming= */ false,
+                /* isEmergency= */ false,
+                mMockNetwork,
+                new EpdgSelector.EpdgSelectorCallback() {
+                    @Override
+                    public void onServerListChanged(
+                            int transactionId, List<InetAddress> validIPList) {
+                        // Should not be called
+                        latch.countDown();
+                    }
+
+                    @Override
+                    public void onError(int transactionId, IwlanError epdgSelectorError) {
+                        error[0] = epdgSelectorError;
+                        latch.countDown();
+                    }
+                });
+
+        latch.await(1, TimeUnit.SECONDS);
+        assertEquals(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED, error[0].getErrorType());
     }
 }

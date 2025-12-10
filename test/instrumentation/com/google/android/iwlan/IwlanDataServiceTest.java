@@ -200,6 +200,9 @@ public class IwlanDataServiceTest {
 
         @Override
         public void onDataProfileUnthrottled(DataProfile dataProfile) {}
+
+        @Override
+        public void onDataCallListUpdated(List<DataCallResponse> dataCallList) {}
     }
 
     @Before

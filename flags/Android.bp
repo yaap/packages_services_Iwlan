@@ -30,4 +30,5 @@ aconfig_declarations {
 java_aconfig_library {
     name: "iwlan_telephony_flags_lib",
     aconfig_declarations: "iwlan_telephony_flags",
+    preserve_legacy_impl_interface: true,
 }

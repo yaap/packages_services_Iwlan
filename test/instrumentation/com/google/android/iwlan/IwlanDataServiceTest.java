@@ -374,6 +374,18 @@ public class IwlanDataServiceTest {
     }
 
     @Test
+    public void testSystemDefaultNetworkLost_updatesEpdgManager() {
+        onSystemDefaultNetworkConnected(
+                mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
+        verify(mMockEpdgTunnelManager).updateNetwork(eq(mMockNetwork), eq(mLinkProperties));
+
+        clearInvocations(mMockEpdgTunnelManager);
+
+        onSystemDefaultNetworkLost();
+        verify(mMockEpdgTunnelManager).updateNetwork(eq(null), eq(null));
+    }
+
+    @Test
     public void testWifiOnReconnected() {
         Network newNetwork = createMockNetwork(mLinkProperties);
         onSystemDefaultNetworkConnected(

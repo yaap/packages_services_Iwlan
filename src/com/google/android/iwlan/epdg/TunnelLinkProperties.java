@@ -18,6 +18,7 @@ package com.google.android.iwlan.epdg;
 
 import android.net.LinkAddress;
 import android.net.Network;
+import android.support.annotation.Nullable;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.NetworkSliceInfo;
 import android.util.Log;
@@ -32,6 +33,7 @@ import java.util.Optional;
 public abstract class TunnelLinkProperties {
     private static final String TAG = TunnelLinkProperties.class.getSimpleName();
 
+    @Nullable
     public abstract Network underlyingNetwork();
 
     public abstract List<LinkAddress> internalAddresses();
@@ -75,7 +77,7 @@ public abstract class TunnelLinkProperties {
 
     @AutoValue.Builder
     public abstract static class Builder {
-        public abstract Builder setUnderlyingNetwork(Network network);
+        public abstract Builder setUnderlyingNetwork(@Nullable Network network);
 
         public abstract Builder setInternalAddresses(List<LinkAddress> internalAddresses);
 

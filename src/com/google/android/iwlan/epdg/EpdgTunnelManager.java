@@ -104,6 +104,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -271,9 +272,9 @@ public class EpdgTunnelManager {
     class TunnelConfig {
         @NonNull final EpdgTunnelCallback mEpdgTunnelCallback;
         // TODO: Change this to TunnelLinkProperties after removing autovalue
-        private List<InetAddress> mPcscfAddrList;
-        private List<InetAddress> mDnsAddrList;
-        private List<LinkAddress> mInternalAddrList;
+        private List<InetAddress> mPcscfAddrList = Collections.emptyList();
+        private List<InetAddress> mDnsAddrList = Collections.emptyList();
+        private List<LinkAddress> mInternalAddrList = Collections.emptyList();
 
         private final InetAddress mSrcIpv6Address;
         private final int mSrcIpv6AddressPrefixLen;
@@ -431,8 +432,7 @@ public class EpdgTunnelManager {
         }
 
         boolean hasTunnelOpened() {
-            return mInternalAddrList != null
-                    && !mInternalAddrList.isEmpty() /* The child session is opened */
+            return !mInternalAddrList.isEmpty() /* The child session is opened */
                     && mIface != null; /* The tunnel interface is bring up */
         }
 
@@ -1837,6 +1837,17 @@ public class EpdgTunnelManager {
                     if (mEpdgMonitor.hasEpdgConnected()) {
                         if (Objects.isNull(mDefaultNetwork)) {
                             Log.w(TAG, "The default network has been removed.");
+                            for (Map.Entry<String, TunnelConfig> entry :
+                                    mApnNameToTunnelConfig.entrySet()) {
+                                String apn = entry.getKey();
+                                TunnelConfig config = entry.getValue();
+                                config.setUnderlyingNetwork(null);
+                                if (config.hasTunnelOpened()) {
+                                    config.getEpdgTunnelCallback()
+                                            .onTunnelLinkPropertiesChanged(
+                                                    apn, buildTunnelLinkProperties(config));
+                                }
+                            }
                         } else if (Objects.isNull(defaultLinkProperties)) {
                             Log.w(
                                     TAG,
@@ -1849,7 +1860,8 @@ public class EpdgTunnelManager {
                                             + " network. "
                                             + paraString);
                         } else {
-                            for (var entry : mApnNameToTunnelConfig.entrySet()) {
+                            for (Map.Entry<String, TunnelConfig> entry :
+                                    mApnNameToTunnelConfig.entrySet()) {
                                 String apn = entry.getKey();
                                 TunnelConfig config = entry.getValue();
                                 if (!defaultLinkProperties.isReachable(config.getEpdgAddress())) {
@@ -1871,6 +1883,12 @@ public class EpdgTunnelManager {
                                     config.setIkeSessionState(
                                             IkeSessionState.IKE_MOBILITY_IN_PROGRESS);
                                     mIkeSessionNetwork = mDefaultNetwork;
+                                    config.setUnderlyingNetwork(null);
+                                    if (config.hasTunnelOpened()) {
+                                        config.getEpdgTunnelCallback()
+                                                .onTunnelLinkPropertiesChanged(
+                                                        apn, buildTunnelLinkProperties(config));
+                                    }
                                 }
                             }
                         }
@@ -2019,10 +2037,12 @@ public class EpdgTunnelManager {
                                         + e);
                     }
 
-                    tunnelConfig
-                            .getEpdgTunnelCallback()
-                            .onTunnelLinkPropertiesChanged(
-                                    apnName, buildTunnelLinkProperties(tunnelConfig));
+                    if (tunnelConfig.hasTunnelOpened()) {
+                        tunnelConfig
+                                .getEpdgTunnelCallback()
+                                .onTunnelLinkPropertiesChanged(
+                                        apnName, buildTunnelLinkProperties(tunnelConfig));
+                    }
                 }
                 case EVENT_IKE_3GPP_DATA_RECEIVED -> {
                     Ike3gppDataReceived ike3gppDataReceived = (Ike3gppDataReceived) msg.obj;

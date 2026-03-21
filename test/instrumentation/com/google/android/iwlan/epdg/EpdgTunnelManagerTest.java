@@ -3490,6 +3490,52 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
+    public void testUpdateNetworkMobility_triggersOnTunnelLinkPropertiesChanged() throws Exception {
+        String testApnName = "www.xyz.com";
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(testApnName, mMockDefaultNetwork, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        childSessionCallback.onOpened(mMockChildSessionConfiguration);
+        mTestLooper.dispatchAll();
+
+        Network newNetwork = mock(Network.class);
+        mEpdgTunnelManager.updateNetwork(newNetwork, mMockLinkProperties);
+        mTestLooper.dispatchAll();
+
+        ArgumentCaptor<TunnelLinkProperties> captor =
+                ArgumentCaptor.forClass(TunnelLinkProperties.class);
+        verify(mMockIwlanTunnelCallback)
+                .onTunnelLinkPropertiesChanged(eq(testApnName), captor.capture());
+        assertNull(captor.getValue().underlyingNetwork());
+        verify(mMockIkeSession).setNetwork(eq(newNetwork));
+    }
+
+    @Test
+    public void testUpdateNetworkNull_triggersOnTunnelLinkPropertiesChanged() throws Exception {
+        String testApnName = "www.xyz.com";
+        IkeSessionArgumentCaptors ikeSessionArgumentCaptors =
+                verifyBringUpTunnelWithDnsQuery(testApnName, mMockDefaultNetwork, mMockIkeSession);
+        ChildSessionCallback childSessionCallback =
+                ikeSessionArgumentCaptors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        childSessionCallback.onOpened(mMockChildSessionConfiguration);
+        mTestLooper.dispatchAll();
+
+        mEpdgTunnelManager.updateNetwork(null, null);
+        mTestLooper.dispatchAll();
+
+        ArgumentCaptor<TunnelLinkProperties> captor =
+                ArgumentCaptor.forClass(TunnelLinkProperties.class);
+        verify(mMockIwlanTunnelCallback)
+                .onTunnelLinkPropertiesChanged(eq(testApnName), captor.capture());
+        assertNull(captor.getValue().underlyingNetwork());
+    }
+
+    @Test
     public void testReportValidationMetricsAtom_networkLost() {
         mEpdgTunnelManager.updateNetwork(/* network= */ null, /* linkProperties= */ null);
         IwlanCarrierConfig.putTestConfigIntArray(

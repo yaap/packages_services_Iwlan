@@ -1,6 +1,5 @@
 package com.google.android.iwlan.epdg;
 
-import android.support.annotation.NonNull;
 import android.telephony.data.NetworkSliceInfo;
 import android.util.Log;
 
@@ -10,7 +9,23 @@ import java.util.List;
 public class NetworkSliceSelectionAssistanceInformation {
     private static final String TAG =
             NetworkSliceSelectionAssistanceInformation.class.getSimpleName();
-    static final List<Integer> VALID_LENGTHS = Arrays.asList(1, 2, 4, 5, 8);
+
+    // S-NSSAI value lengths as defined in TS 24.501 Section 9.11.2.8
+    private static final int LENGTH_SST_ONLY = 1;
+    private static final int LENGTH_SST_AND_MAPPED_SST = 2;
+    private static final int LENGTH_SST_AND_SD = 4;
+    private static final int LENGTH_SST_SD_AND_MAPPED_SST = 5;
+    private static final int LENGTH_SST_SD_MAPPED_SST_AND_MAPPED_SD = 8;
+
+    static final List<Integer> VALID_LENGTHS =
+            Arrays.asList(
+                    LENGTH_SST_ONLY,
+                    LENGTH_SST_AND_MAPPED_SST,
+                    LENGTH_SST_AND_SD,
+                    LENGTH_SST_SD_AND_MAPPED_SST,
+                    LENGTH_SST_SD_MAPPED_SST_AND_MAPPED_SD);
+
+    private static final int RESERVED_SD_VALUE = 0xFFFFFF;
 
     public static NetworkSliceInfo getSliceInfo(byte[] snssai) {
         if (snssai == null) {
@@ -34,7 +49,7 @@ public class NetworkSliceSelectionAssistanceInformation {
          * 0 0 0 0 1 0 0 0 SST, SD, mapped HPLMN SST and mapped HPLMN SD
          * All other values are reserved.
          */
-        NetworkSliceInfo.Builder siBuilder = new NetworkSliceInfo.Builder();
+        NetworkSliceInfo.Builder sliceInfoBuilder = new NetworkSliceInfo.Builder();
         int len = snssai.length;
         // validity checks. See TS 24.501 Section 9.11.2.8
         // length should be valid
@@ -43,34 +58,30 @@ public class NetworkSliceSelectionAssistanceInformation {
             return null;
         }
 
+        sliceInfoBuilder.setSliceServiceType(parseSliceServiceType(snssai, 0));
         switch (len) {
-            case 1 -> // get SST
-                    siBuilder.setSliceServiceType(getSST(snssai, 0));
-            case 2 -> { // get SST and mapped SST
-                siBuilder.setSliceServiceType(getSST(snssai, 0));
-                siBuilder.setMappedHplmnSliceServiceType(getSST(snssai, 1));
+            case LENGTH_SST_ONLY -> {}
+            case LENGTH_SST_AND_MAPPED_SST ->
+                    sliceInfoBuilder.setMappedHplmnSliceServiceType(
+                            parseSliceServiceType(snssai, 1));
+            case LENGTH_SST_AND_SD ->
+                    sliceInfoBuilder.setSliceDifferentiator(parseSliceDifferentiator(snssai, 1));
+            case LENGTH_SST_SD_AND_MAPPED_SST -> {
+                sliceInfoBuilder.setSliceDifferentiator(parseSliceDifferentiator(snssai, 1));
+                sliceInfoBuilder.setMappedHplmnSliceServiceType(parseSliceServiceType(snssai, 4));
             }
-            case 4 -> { // get SST and SD
-                siBuilder.setSliceServiceType(getSST(snssai, 0));
-                siBuilder.setSliceDifferentiator(getSD(snssai, 1));
-            }
-            case 5 -> { // get SST, SD and mapped SST
-                siBuilder.setSliceServiceType(getSST(snssai, 0));
-                siBuilder.setSliceDifferentiator(getSD(snssai, 1));
-                siBuilder.setMappedHplmnSliceServiceType(getSST(snssai, 4));
-            }
-            case 8 -> { // get SST, SD, mapped SST, mapped SD
-                siBuilder.setSliceServiceType(getSST(snssai, 0));
-                siBuilder.setSliceDifferentiator(getSD(snssai, 1));
-                siBuilder.setMappedHplmnSliceServiceType(getSST(snssai, 4));
-                siBuilder.setMappedHplmnSliceDifferentiator(getSD(snssai, 5));
+            case LENGTH_SST_SD_MAPPED_SST_AND_MAPPED_SD -> {
+                sliceInfoBuilder.setSliceDifferentiator(parseSliceDifferentiator(snssai, 1));
+                sliceInfoBuilder.setMappedHplmnSliceServiceType(parseSliceServiceType(snssai, 4));
+                sliceInfoBuilder.setMappedHplmnSliceDifferentiator(
+                        parseSliceDifferentiator(snssai, 5));
             }
         }
 
-        return siBuilder.build();
+        return sliceInfoBuilder.build();
     }
 
-    private static int getSST(@NonNull byte[] snssai, int offset) {
+    static int parseSliceServiceType(byte[] snssai, int offset) {
         if (offset < 0 || snssai.length < offset + 1) {
             return NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
         }
@@ -81,7 +92,7 @@ public class NetworkSliceSelectionAssistanceInformation {
         return Byte.toUnsignedInt(snssai[offset]);
     }
 
-    private static int getSD(byte[] snssai, int offset) {
+    static int parseSliceDifferentiator(byte[] snssai, int offset) {
         /*
          * Slice Descriptor is 3 bytes long
          * The SD field has a reserved value "no SD value associated with the SST"
@@ -89,10 +100,12 @@ public class NetworkSliceSelectionAssistanceInformation {
          */
         if (offset >= 0 && snssai.length >= offset + 3) {
             // Constructs the 24-bit integer from 3 bytes (Big-Endian/Network Order)
-            return ((snssai[offset] & 0xFF) << 16)
-                    | ((snssai[offset + 1] & 0xFF) << 8)
-                    | ((snssai[offset + 2] & 0xFF));
+            int sd =
+                    ((snssai[offset] & 0xFF) << 16)
+                            | ((snssai[offset + 1] & 0xFF) << 8)
+                            | ((snssai[offset + 2] & 0xFF));
+            return (sd == RESERVED_SD_VALUE) ? NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE : sd;
         }
-        return NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
+        return NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE;
     }
 }

@@ -324,8 +324,8 @@ public class EpdgTunnelManager {
             return mSliceInfo;
         }
 
-        void setSliceInfo(NetworkSliceInfo si) {
-            mSliceInfo = si;
+        void setSliceInfo(NetworkSliceInfo sliceInfo) {
+            mSliceInfo = sliceInfo;
         }
 
         boolean isBackoffTimeValid() {
@@ -577,7 +577,7 @@ public class EpdgTunnelManager {
         private final String mApnName;
         private final int mToken;
 
-        private TmIke3gppCallback(String apnName, int token) {
+        TmIke3gppCallback(String apnName, int token) {
             mApnName = apnName;
             mToken = token;
         }
@@ -2050,26 +2050,12 @@ public class EpdgTunnelManager {
                     List<Ike3gppData> ike3gppData = ike3gppDataReceived.mIke3gppData;
                     if (ike3gppData != null && !ike3gppData.isEmpty()) {
                         tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-                        for (Ike3gppData payload : ike3gppData) {
-                            if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
-                                Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
-                                NetworkSliceInfo si =
-                                        NetworkSliceSelectionAssistanceInformation.getSliceInfo(
-                                                ((Ike3gppN1ModeInformation) payload).getSnssai());
-                                if (si != null) {
-                                    tunnelConfig.setSliceInfo(si);
-                                    Log.d(TAG, "SliceInfo: " + si);
-                                }
-                            } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
-                                Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_BACKOFF_TIMER");
-                                long backoffTime =
-                                        decodeBackoffTime(
-                                                ((Ike3gppBackoffTimer) payload).getBackoffTimer());
-                                if (backoffTime > 0) {
-                                    tunnelConfig.setBackoffTime(backoffTime);
-                                    Log.d(TAG, "Backoff Timer: " + backoffTime);
-                                }
+                        if (tunnelConfig != null) {
+                            for (Ike3gppData payload : ike3gppData) {
+                                processIke3gppData(tunnelConfig, payload);
                             }
+                        } else {
+                            Log.w(TAG, "No tunnelConfig found for APN: " + apnName);
                         }
                     } else {
                         Log.e(TAG, "Null or empty payloads received:");
@@ -2548,6 +2534,31 @@ public class EpdgTunnelManager {
                             CarrierConfigManager.Iwlan.KEY_DPD_TIMER_SEC_INT);
         }
         return dpdDelay;
+    }
+
+    private void processIke3gppData(TunnelConfig tunnelConfig, Ike3gppData payload) {
+        try {
+            if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
+                Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
+                NetworkSliceInfo sliceInfo =
+                        NetworkSliceSelectionAssistanceInformation.getSliceInfo(
+                                ((Ike3gppN1ModeInformation) payload).getSnssai());
+                if (sliceInfo != null) {
+                    tunnelConfig.setSliceInfo(sliceInfo);
+                    Log.d(TAG, "SliceInfo: " + sliceInfo);
+                }
+            } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
+                Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_BACKOFF_TIMER");
+                long backoffTime =
+                        decodeBackoffTime(((Ike3gppBackoffTimer) payload).getBackoffTimer());
+                if (backoffTime > 0) {
+                    tunnelConfig.setBackoffTime(backoffTime);
+                    Log.d(TAG, "Backoff Timer: " + backoffTime);
+                }
+            }
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Exception while processing 3GPP payload: ", e);
+        }
     }
 
     /**

@@ -74,6 +74,7 @@ import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
 import android.net.ipsec.ike.ike3gpp.Ike3gppData;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
+import android.net.ipsec.ike.ike3gpp.Ike3gppN1ModeInformation;
 import android.os.PersistableBundle;
 import android.os.test.TestLooper;
 import android.telephony.CarrierConfigManager;
@@ -3560,5 +3561,98 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.close();
         verify(mMockConnectivityDiagnosticsManager, times(1))
                 .unregisterConnectivityDiagnosticsCallback(eq(callback));
+    }
+    @Test
+    public void testProcessIke3gppData_N1ModeInformation_success() throws Exception {
+        String apnName = "ims";
+        IkeSessionArgumentCaptors captors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockDefaultNetwork);
+
+        // Prepare N1 Mode Info payload
+        Ike3gppN1ModeInformation mockN1Mode = mock(Ike3gppN1ModeInformation.class);
+        doReturn(Ike3gppData.DATA_TYPE_NOTIFY_N1_MODE_INFORMATION).when(mockN1Mode).getDataType();
+        byte[] snssai = {1, 2, 3, 4}; // SST=1, SD=0x020304
+        doReturn(snssai).when(mockN1Mode).getSnssai();
+
+        List<Ike3gppData> payloads = List.of(mockN1Mode);
+
+        // Trigger 3GPP data received
+        IkeSessionParams ikeSessionParams = captors.mIkeSessionParamsCaptor.getValue();
+        Ike3gppExtension.Ike3gppDataListener ike3gppCallback =
+                ikeSessionParams.getIke3gppExtension().getIke3gppDataListener();
+        ike3gppCallback.onIke3gppDataReceived(payloads);
+        mTestLooper.dispatchAll();
+
+        // Verify slice info is set in TunnelConfig by verifying it is passed to onOpened callback
+        clearInvocations(mMockIpSecManager);
+        doReturn(0L)
+                .when(mEpdgTunnelManager)
+                .reportIwlanError(eq(apnName), eq(new IwlanError(IwlanError.NO_ERROR)));
+
+        mEpdgTunnelManager
+                .getTmIkeSessionCallback(apnName, mEpdgTunnelManager.getCurrentTokenForApn(apnName))
+                .onOpened(mMockIkeSessionConfiguration);
+        mTestLooper.dispatchAll();
+
+        ChildSessionCallback childSessionCallback = captors.mChildSessionCallbackCaptor.getValue();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformOut, IpSecManager.DIRECTION_OUT);
+        mTestLooper.dispatchAll();
+
+        childSessionCallback.onOpened(mMockChildSessionConfiguration);
+        mTestLooper.dispatchAll();
+
+        ArgumentCaptor<TunnelLinkProperties> tlpCaptor =
+                ArgumentCaptor.forClass(TunnelLinkProperties.class);
+        verify(mMockIwlanTunnelCallback).onOpened(eq(apnName), tlpCaptor.capture(), any());
+
+        TunnelLinkProperties tlp = tlpCaptor.getValue();
+        assertTrue(tlp.sliceInfo().isPresent());
+        assertEquals(1, tlp.sliceInfo().get().getSliceServiceType());
+        assertEquals(0x020304, tlp.sliceInfo().get().getSliceDifferentiator());
+    }
+
+    @Test
+    public void testProcessIke3gppData_exception_handled() throws Exception {
+        String apnName = "ims";
+        IkeSessionArgumentCaptors captors =
+                verifyBringUpTunnelWithDnsQuery(apnName, mMockDefaultNetwork);
+
+        // Prepare invalid payload that triggers ClassCastException during processing
+        Ike3gppData badPayload = mock(Ike3gppData.class);
+        doReturn(Ike3gppData.DATA_TYPE_NOTIFY_N1_MODE_INFORMATION).when(badPayload).getDataType();
+        // It is NOT Ike3gppN1ModeInformation, so casting it will fail
+
+        List<Ike3gppData> payloads = List.of(badPayload);
+
+        // Trigger 3GPP data received - should not crash because of try-catch
+        IkeSessionParams ikeSessionParams = captors.mIkeSessionParamsCaptor.getValue();
+        Ike3gppExtension.Ike3gppDataListener ike3gppCallback =
+                ikeSessionParams.getIke3gppExtension().getIke3gppDataListener();
+        ike3gppCallback.onIke3gppDataReceived(payloads);
+        mTestLooper.dispatchAll();
+
+        // Verify tunnel can still open (meaning process didn't crash and state is still ok)
+        verifyTunnelOnOpened(apnName, captors.mChildSessionCallbackCaptor.getValue());
+    }
+
+    @Test
+    public void testProcessIke3gppData_nullTunnelConfig_ignored() throws Exception {
+        String apnName = "ims";
+        // Do NOT bring up tunnel, so tunnelConfig is null for this APN
+
+        Ike3gppN1ModeInformation mockN1Mode = mock(Ike3gppN1ModeInformation.class);
+        doReturn(Ike3gppData.DATA_TYPE_NOTIFY_N1_MODE_INFORMATION).when(mockN1Mode).getDataType();
+
+        List<Ike3gppData> payloads = List.of(mockN1Mode);
+
+        // Trigger 3GPP data received - should not crash because of null check
+        Ike3gppExtension.Ike3gppDataListener callback =
+                mEpdgTunnelManager.new TmIke3gppCallback(apnName, 1);
+        callback.onIke3gppDataReceived(payloads);
+        mTestLooper.dispatchAll();
     }
 }

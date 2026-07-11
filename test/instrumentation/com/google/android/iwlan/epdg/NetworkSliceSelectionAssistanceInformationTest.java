@@ -106,6 +106,54 @@ public class NetworkSliceSelectionAssistanceInformationTest {
                 /* expectedMappedSd= */ 0x0F0E0D);
     }
 
+    @Test
+    public void testGetSliceInfo_sstAndSd_withReservedSd_returnsNoSlice() {
+        byte[] nssai = {
+            3, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF
+        }; // SST = 3, SD = 0xFFFFFF (Reserved)
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                /* expectedMappedSst= */ NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+    }
+
+    @Test
+    public void testGetSliceInfo_allFields_withReservedSd_returnsNoSlice() {
+        byte[] nssai = {
+            3, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 2, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF
+        }; // SST=3, SD=0xFFFFFF, Mapped SST=2, Mapped SD=0xFFFFFF
+        parseAndAssertSliceInfo(
+                nssai,
+                /* expectedSst= */ 3,
+                /* expectedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                /* expectedMappedSst= */ 2,
+                /* expectedMappedSd= */ NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE);
+    }
+
+    @Test
+    public void testParseSliceServiceType_invalidOffset_returnsNone() {
+        byte[] snssai = {1, 2};
+        assertEquals(
+                NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE,
+                NetworkSliceSelectionAssistanceInformation.parseSliceServiceType(snssai, -1));
+        assertEquals(
+                NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE,
+                NetworkSliceSelectionAssistanceInformation.parseSliceServiceType(snssai, 2));
+    }
+
+    @Test
+    public void testParseSliceDifferentiator_invalidOffset_returnsNoSlice() {
+        byte[] snssai = {1, 2, 3};
+        assertEquals(
+                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                NetworkSliceSelectionAssistanceInformation.parseSliceDifferentiator(snssai, -1));
+        assertEquals(
+                NetworkSliceInfo.SLICE_DIFFERENTIATOR_NO_SLICE,
+                NetworkSliceSelectionAssistanceInformation.parseSliceDifferentiator(snssai, 1));
+    }
+
     /** Helper method to parse NSSAI and assert the state of the resulting NetworkSliceInfo. */
     private void parseAndAssertSliceInfo(
             byte[] nssai,

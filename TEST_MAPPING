@@ -2,6 +2,9 @@
   "presubmit": [
     {
       "name": "IwlanTests"
+    },
+    {
+      "name" : "IwlanRobolectricTests"
     }
   ]
 }

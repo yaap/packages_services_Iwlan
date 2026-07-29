@@ -200,6 +200,9 @@ public class IwlanDataServiceTest {
 
         @Override
         public void onDataProfileUnthrottled(DataProfile dataProfile) {}
+
+        @Override
+        public void onDataCallListUpdated(List<DataCallResponse> dataCallList) {}
     }
 
     @Before
@@ -368,6 +371,18 @@ public class IwlanDataServiceTest {
                         false /* isActiveDataOnOtherSub */, false /* isCstEnabled */));
         verify(mMockEpdgTunnelManager, atLeastOnce())
                 .closeTunnel(any(), eq(true) /* forceClose */, any(), anyInt());
+    }
+
+    @Test
+    public void testSystemDefaultNetworkLost_updatesEpdgManager() {
+        onSystemDefaultNetworkConnected(
+                mMockNetwork, mLinkProperties, TRANSPORT_WIFI, INVALID_SUB_INDEX);
+        verify(mMockEpdgTunnelManager).updateNetwork(eq(mMockNetwork), eq(mLinkProperties));
+
+        clearInvocations(mMockEpdgTunnelManager);
+
+        onSystemDefaultNetworkLost();
+        verify(mMockEpdgTunnelManager).updateNetwork(eq(null), eq(null));
     }
 
     @Test
